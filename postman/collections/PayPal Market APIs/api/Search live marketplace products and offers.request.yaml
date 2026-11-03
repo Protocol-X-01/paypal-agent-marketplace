@@ -1,0 +1,17 @@
+$kind: http-request
+description: Searches Channel3 after an explicit user action. The Channel3 key stays on the server; this endpoint returns catalog products and retailer links without creating a checkout or payment.
+url: "{{baseUrl}}/api/marketplace/search"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "string",
+      "limit": 6
+    }
+settings: {}
+examples: ./.resources/Search live marketplace products and offers.resources/examples
+order: 2000

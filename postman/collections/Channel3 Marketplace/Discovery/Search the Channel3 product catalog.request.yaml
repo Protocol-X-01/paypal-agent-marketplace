@@ -1,0 +1,22 @@
+$kind: http-request
+description: Search by text, image URL, base64 image, or page token. At least one search field is required. This read-only operation returns products and merchant offers; it does not charge a customer.
+url: "{{baseUrl}}/v1/search"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "noise-cancelling headphones",
+      "limit": 5,
+      "config": {
+        "mode": "default",
+        "country": "US",
+        "currency": "USD"
+      }
+    }
+settings: {}
+examples: ./.resources/Search the Channel3 product catalog.resources/examples
+order: 1000

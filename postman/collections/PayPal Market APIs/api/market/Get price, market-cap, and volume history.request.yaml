@@ -1,0 +1,19 @@
+$kind: http-request
+description: ""
+url: "{{baseUrl}}/api/market/chart/:coinId?days=7"
+method: GET
+headers:
+  Accept: application/json
+queryParams:
+  - key: days
+    value: "7"
+    disabled: false
+    description: Number of days of history to return
+pathVariables:
+  - key: coinId
+    value: solana
+    disabled: false
+    description: (Required) CoinGecko identifier from the tracked watchlist
+settings: {}
+examples: ./.resources/Get price, market-cap, and volume history.resources/examples
+order: 2000

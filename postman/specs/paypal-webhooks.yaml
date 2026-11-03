@@ -1,0 +1,137 @@
+openapi: 3.1.0
+info:
+  title: PayPal Market Webhook Receiver
+  version: 0.1.0
+  description: >-
+    Receives signed PayPal webhook events and acknowledges verified deliveries
+    without applying credits, payouts, or marketplace ledger changes. The
+    receiver accepts bodies up to 1 MiB and forwards the original event JSON
+    bytes unchanged to PayPal's signature verification endpoint.
+servers:
+  - url: /
+paths:
+  /api/webhooks/paypal:
+    post:
+      operationId: receivePayPalWebhook
+      summary: Verify and acknowledge a PayPal webhook
+      description: >-
+        Requires the five PayPal transmission headers and a server-configured
+        webhook ID and API credentials. Certificate URLs are accepted only for
+        PayPal API certificate hosts. Verified events are acknowledged with
+        `processed: false`; this endpoint performs no financial side effects.
+        The body read is capped at 1 MiB and 3 seconds. Input size should be
+        re-evaluated before subscribing to event types with larger payloads.
+      parameters:
+        - name: paypal-transmission-id
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+            pattern: '^(?!\d+$)\w+\S+$'
+        - name: paypal-transmission-time
+          in: header
+          required: true
+          schema:
+            type: string
+            format: date-time
+            minLength: 1
+            maxLength: 100
+        - name: paypal-cert-url
+          in: header
+          required: true
+          description: HTTPS PayPal API certificate URL.
+          schema:
+            type: string
+            format: uri
+            minLength: 1
+            maxLength: 500
+            pattern: '^[Hh][Tt][Tt][Pp][Ss]://[Aa][Pp][Ii](-[Mm])?([.][Ss][Aa][Nn][Dd][Bb][Oo][Xx])?[.][Pp][Aa][Yy][Pp][Aa][Ll][.][Cc][Oo][Mm](:443)?/v1/notifications/certs/[A-Za-z0-9-]+$'
+        - name: paypal-auth-algo
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+            pattern: '^[A-Za-z0-9]+$'
+        - name: paypal-transmission-sig
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 500
+            pattern: '^\S+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_type]
+              properties:
+                event_type:
+                  type: string
+                  minLength: 1
+                  pattern: '[\s\S]*\S[\s\S]*'
+              additionalProperties: true
+      responses:
+        "200":
+          description: Signature verified and event acknowledged without processing.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [received, processed]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+                  processed:
+                    type: boolean
+                    const: false
+        "400":
+          description: Malformed webhook or signature verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Request body was not received within the read deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body exceeds 1 MiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Request content type is not application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: PayPal verification is not configured or is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+externalDocs:
+  description: PayPal webhook signature verification and delivery behavior
+  url: https://developer.paypal.com/api/rest/webhooks/rest/

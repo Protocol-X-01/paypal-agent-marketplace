@@ -1,0 +1,58 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/v1/lookup"
+  method: POST
+  headers:
+    - key: x-api-key
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "url": "https://www.example.com/products/sample-item",
+        "max_staleness_hours": 3
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "product": {
+          "id": "string",
+          "title": "string",
+          "description": "string",
+          "offers": [
+            {
+              "url": "https://cUBFazXkcunbbLNNFyhLO.kpneMObFazsJ7K0nE-q,LJawM1kO4x,Gtohk4IVGELPXAtz3",
+              "domain": "string",
+              "availability": "OutOfStock",
+              "price": {
+                "price": 5151.85885829851,
+                "currency": "string",
+                "compare_at_price": 2604.2646914720535,
+                "key_0": 3435
+              }
+            },
+            {
+              "url": "http://Ms.ihunZYtzUyhn",
+              "domain": "string",
+              "availability": "InStock",
+              "price": {
+                "price": 9848.666870966554,
+                "currency": "string",
+                "compare_at_price": 9620.866952463984,
+                "key_0": 5380,
+                "key_1": "string"
+              }
+            }
+          ]
+        }
+      }
+order: 1000

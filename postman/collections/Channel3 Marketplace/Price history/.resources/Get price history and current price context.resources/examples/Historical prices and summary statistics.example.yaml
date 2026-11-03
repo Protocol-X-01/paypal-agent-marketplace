@@ -1,0 +1,58 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/v0/price-tracking/history/:canonical_product_id?days=90"
+  method: GET
+  headers:
+    - key: x-api-key
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  queryParams:
+    days: "90"
+  pathVariables:
+    - key: canonical_product_id
+      value: string
+      disabled: false
+      description: "(Required) "
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "canonical_product_id": "string",
+        "product_title": "string",
+        "history": [
+          {
+            "price": 4624.007306993008,
+            "currency": "string",
+            "timestamp": "1991-10-05T17:43:08.373Z"
+          },
+          {
+            "price": 6700.680365320295,
+            "currency": "string",
+            "timestamp": "1995-08-28T06:51:05.520Z"
+          }
+        ],
+        "statistics": {
+          "current_price": 4946.631621569395,
+          "min_price": 6121.179212350398,
+          "max_price": 2439.051491674036,
+          "mean": 367.24887089803815,
+          "std_dev": 8180.869265925139,
+          "currency": "string",
+          "current_status": "high"
+        },
+        "key_0": 8588.119437918067,
+        "key_1": false,
+        "key_2": "string",
+        "key_3": true
+      }
+order: 1000

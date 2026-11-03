@@ -1,0 +1,62 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/market/chart/:coinId?days=7"
+  method: GET
+  headers:
+    Accept: application/json
+  queryParams:
+    days: "7"
+  pathVariables:
+    - key: coinId
+      value: solana
+      disabled: false
+      description: (Required) CoinGecko identifier from the tracked watchlist
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "coinId": "solana",
+        "currency": "string",
+        "days": 7,
+        "provider": "string",
+        "retrievedAt": "1961-12-19T07:37:53.538Z",
+        "prices": [
+          {
+            "timestamp": 3517,
+            "value": 2788.056710269302
+          },
+          {
+            "timestamp": 4486,
+            "value": 567.134590819478
+          }
+        ],
+        "marketCaps": [
+          {
+            "timestamp": 7103,
+            "value": 5845.3571307472885
+          },
+          {
+            "timestamp": 1325,
+            "value": 7740.080289077014
+          }
+        ],
+        "volumes": [
+          {
+            "timestamp": 5127,
+            "value": 9012.247056234628
+          },
+          {
+            "timestamp": 3182,
+            "value": 8835.79853689298
+          }
+        ]
+      }
+order: 1000

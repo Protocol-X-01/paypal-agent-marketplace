@@ -1,0 +1,8 @@
+$kind: http-request
+description: Checks whether the application process is responding. This liveness endpoint does not validate provider credentials or data freshness.
+url: "{{baseUrl}}/api/health"
+method: GET
+headers:
+  Accept: application/json
+settings: {}
+order: 100

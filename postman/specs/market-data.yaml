@@ -1,0 +1,369 @@
+openapi: 3.1.0
+info:
+  title: PayPal Agent Marketplace Market Data API
+  version: 0.2.0
+  description: >-
+    Public crypto market metrics and chart data for the mobile marketplace
+    experience. Provider credentials remain on the server. These endpoints do
+    not expose wallet balances or execute transactions.
+servers:
+  - url: /
+paths:
+  /api/health:
+    get:
+      operationId: getServiceHealth
+      summary: Check application availability
+      description: >-
+        Returns liveness for the web process only. It does not verify provider
+        credentials, market data freshness, PayPal webhook readiness, or storage.
+      responses:
+        "200":
+          description: Application process is responding
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /api/market/coins:
+    get:
+      operationId: listMarketCoins
+      summary: List tracked crypto market metrics
+      description: >-
+        Returns the configured market watchlist with provider timestamps. The
+        current contract permits the tracked Bitcoin, Ethereum, Solana,
+        Chainlink, Litecoin, Bitcoin Cash, and PayPal USD assets and reports
+        USD market values. PayPal USD (PYUSD) is a separate USD-pegged
+        stablecoin asset; it is not the USD quote currency.
+      responses:
+        "200":
+          description: Market metrics for tracked coins
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketOverview"
+        "503":
+          description: Market data is not configured or temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The upstream market provider returned an invalid response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/market/chart/{coinId}:
+    get:
+      operationId: getMarketChart
+      summary: Get price, market-cap, and volume history
+      parameters:
+        - name: coinId
+          in: path
+          required: true
+          description: CoinGecko identifier from the tracked watchlist
+          schema:
+            type: string
+            enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        - name: days
+          in: query
+          required: false
+          description: Number of days of history to return
+          schema:
+            type: integer
+            enum: [1, 7, 30, 90, 365]
+            default: 7
+      responses:
+        "200":
+          description: Historical market series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketChart"
+        "400":
+          description: Unsupported coin or time range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Market data is not configured or temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The upstream market provider returned an invalid response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/marketplace/search:
+    post:
+      operationId: searchMarketplaceProducts
+      summary: Search live marketplace products and offers
+      description: >-
+        Searches Channel3 after an explicit user action. The Channel3 key stays
+        on the server; this endpoint returns catalog products and retailer links
+        without creating a checkout or payment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  minLength: 2
+                  maxLength: 120
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 8
+                  default: 6
+      responses:
+        "200":
+          description: Live Channel3 search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceSearchResponse"
+        "400":
+          description: Search query is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "429":
+          description: Search request limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "503":
+          description: Channel3 search is not configured or temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+components:
+  schemas:
+    MarketOverview:
+      type: object
+      additionalProperties: false
+      required: [currency, provider, retrievedAt, coins]
+      properties:
+        currency:
+          type: string
+          const: USD
+        provider:
+          type: string
+          const: CoinGecko
+        retrievedAt:
+          type: string
+          format: date-time
+        coins:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketCoin"
+    MarketCoin:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - symbol
+        - name
+        - rank
+        - priceUsd
+        - marketCapUsd
+        - volume24hUsd
+        - change24hPct
+        - change7dPct
+        - high24hUsd
+        - low24hUsd
+        - sparkline7d
+        - lastUpdated
+      properties:
+        id:
+          type: string
+          enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        symbol:
+          type: string
+        name:
+          type: string
+        rank:
+          type: [integer, "null"]
+          minimum: 1
+        priceUsd:
+          type: [number, "null"]
+          minimum: 0
+        marketCapUsd:
+          type: [number, "null"]
+          minimum: 0
+        volume24hUsd:
+          type: [number, "null"]
+          minimum: 0
+        change24hPct:
+          type: [number, "null"]
+        change7dPct:
+          type: [number, "null"]
+        high24hUsd:
+          type: [number, "null"]
+          minimum: 0
+        low24hUsd:
+          type: [number, "null"]
+          minimum: 0
+        sparkline7d:
+          type: array
+          items:
+            type: number
+            minimum: 0
+        lastUpdated:
+          type: [string, "null"]
+          format: date-time
+    MarketChart:
+      type: object
+      additionalProperties: false
+      required: [coinId, currency, days, provider, retrievedAt, prices, marketCaps, volumes]
+      properties:
+        coinId:
+          type: string
+          enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        currency:
+          type: string
+          const: USD
+        days:
+          type: integer
+          enum: [1, 7, 30, 90, 365]
+        provider:
+          type: string
+          const: CoinGecko
+        retrievedAt:
+          type: string
+          format: date-time
+        prices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartPoint"
+        marketCaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartPoint"
+        volumes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartPoint"
+    ChartPoint:
+      type: object
+      additionalProperties: false
+      required: [timestamp, value]
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+        value:
+          type: number
+          minimum: 0
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [market_data_unavailable, upstream_invalid_response, unsupported_coin, unsupported_days]
+            message:
+              type: string
+    MarketplaceSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, query, retrievedAt, products, nextPageToken]
+      properties:
+        provider:
+          type: string
+          const: Channel3
+        query:
+          type: string
+        retrievedAt:
+          type: string
+          format: date-time
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketplaceProduct"
+        nextPageToken:
+          type: [string, "null"]
+    MarketplaceProduct:
+      type: object
+      additionalProperties: true
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                format: uri
+              cleaned_url:
+                type: [string, "null"]
+                format: uri
+              is_main_image:
+                type: boolean
+        offers:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+                format: uri
+              domain:
+                type: string
+              availability:
+                type: string
+                enum: [InStock, OutOfStock]
+              price:
+                type: object
+                properties:
+                  price:
+                    type: number
+                    minimum: 0
+                  currency:
+                    type: string
+                  compare_at_price:
+                    type: [number, "null"]
+                    minimum: 0
+    MarketplaceErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string

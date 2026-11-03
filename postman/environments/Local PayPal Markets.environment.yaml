@@ -1,0 +1,7 @@
+name: Local PayPal Markets
+values:
+  - key: baseUrl
+    value: 'http://localhost:3000'
+    enabled: true
+    type: default
+    description: Local Next.js app URL

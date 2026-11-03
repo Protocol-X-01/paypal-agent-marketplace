@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Channel3 Product Marketplace API
+  version: 1.0.0
+  description: >-
+    Product discovery, retailer/category browsing, offer details, and price
+    history for the PayPal mobile-first marketplace. The Channel3 API key is
+    supplied in the x-api-key header and must remain server-side in the app.
+servers:
+  - url: https://api.trychannel3.com
+security:
+  - Channel3ApiKey: []
+tags:
+  - name: Discovery
+  - name: Product details
+  - name: Price history
+paths:
+  /v1/search:
+    post:
+      tags: [Discovery]
+      operationId: searchProducts
+      summary: Search the Channel3 product catalog
+      description: >-
+        Search by text, image URL, base64 image, or page token. At least one
+        search field is required. This read-only operation returns products
+        and merchant offers; it does not charge a customer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            example:
+              query: noise-cancelling headphones
+              limit: 5
+              config:
+                mode: default
+                country: US
+                currency: USD
+      responses:
+        '200':
+          description: Ranked product results and an optional next-page token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '422':
+          description: Search input is invalid or missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/browse:
+    post:
+      tags: [Discovery]
+      operationId: browseProductCollection
+      summary: Browse a retailer, brand, or category collection
+      description: >-
+        Filter-only listing. Include at least one of brand_ids, category_ids,
+        or website_ids in filters. For a retailer, website_ids may contain its
+        domain. Channel3 does not accept a generic collection identifier here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrowseRequest'
+            example:
+              filters:
+                website_ids: [nike.com]
+              limit: 5
+              config:
+                country: US
+                currency: USD
+      responses:
+        '200':
+          description: Product results and an optional next-page token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '422':
+          description: Browse filters are invalid or missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/similar:
+    post:
+      tags: [Discovery]
+      operationId: findSimilarProducts
+      summary: Find products similar to a Channel3 product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilarRequest'
+            example:
+              product_id: '{{channel3_product_id}}'
+              limit: 5
+              config:
+                country: US
+                currency: USD
+      responses:
+        '200':
+          description: Similar products and an optional next-page token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '404':
+          description: Product is not yet available in the catalog
+        '422':
+          description: Product or filter input is invalid
+  /v1/products/{product_id}:
+    get:
+      tags: [Product details]
+      operationId: getProduct
+      summary: Get a product and current merchant offers
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          description: Channel3 product ID returned by search or browse
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Product data, variants, and available offers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product is not available for the requested locale
+  /v1/lookup:
+    post:
+      tags: [Product details]
+      operationId: lookupProductUrl
+      summary: Resolve a retailer product URL to Channel3 product data
+      description: Uncached retailer URLs may take several seconds to resolve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupRequest'
+            example:
+              url: https://www.example.com/products/sample-item
+              max_staleness_hours: 3
+      responses:
+        '200':
+          description: Resolved product data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [product]
+                properties:
+                  product:
+                    $ref: '#/components/schemas/Product'
+        '422':
+          description: URL does not identify a product page
+        '504':
+          description: Product lookup timed out
+  /v0/price-tracking/history/{canonical_product_id}:
+    get:
+      tags: [Price history]
+      operationId: getProductPriceHistory
+      summary: Get price history and current price context
+      parameters:
+        - name: canonical_product_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          required: false
+          description: History window; the API default and maximum is 90 days
+          schema:
+            type: integer
+            default: 90
+            maximum: 90
+      responses:
+        '200':
+          description: Historical prices and summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceHistory'
+components:
+  securitySchemes:
+    Channel3ApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        query: {type: string}
+        image_url: {type: string, format: uri}
+        base64_image: {type: string}
+        page_token: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 30}
+        filters:
+          $ref: '#/components/schemas/SearchFilters'
+        config:
+          $ref: '#/components/schemas/SearchConfig'
+      anyOf:
+        - required: [query]
+        - required: [image_url]
+        - required: [base64_image]
+        - required: [page_token]
+    BrowseRequest:
+      type: object
+      additionalProperties: false
+      required: [filters]
+      properties:
+        filters:
+          allOf:
+            - $ref: '#/components/schemas/SearchFilters'
+            - anyOf:
+                - required: [brand_ids]
+                - required: [category_ids]
+                - required: [website_ids]
+        page_token: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 30}
+        config:
+          $ref: '#/components/schemas/LocaleConfig'
+    SimilarRequest:
+      type: object
+      additionalProperties: false
+      required: [product_id]
+      properties:
+        product_id: {type: string}
+        page_token: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 30}
+        filters:
+          $ref: '#/components/schemas/SearchFilters'
+        config:
+          $ref: '#/components/schemas/LocaleConfig'
+    LookupRequest:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url: {type: string, format: uri}
+        max_staleness_hours: {type: number, minimum: 0}
+    SearchFilters:
+      type: object
+      additionalProperties: true
+      properties:
+        brand_ids:
+          type: array
+          items: {type: string}
+        category_ids:
+          type: array
+          items: {type: string}
+        website_ids:
+          type: array
+          items: {type: string}
+        price:
+          type: object
+          properties:
+            min_price: {type: number, minimum: 0}
+            max_price: {type: number, minimum: 0}
+        conditions:
+          type: array
+          items: {type: string, enum: [new, used]}
+        availability:
+          type: array
+          items: {type: string, enum: [InStock, OutOfStock]}
+    SearchConfig:
+      allOf:
+        - $ref: '#/components/schemas/LocaleConfig'
+        - type: object
+          properties:
+            mode: {type: string, enum: [default, keyword, agentic]}
+    LocaleConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        language: {type: string}
+        country: {type: string}
+        currency: {type: string}
+    SearchResponse:
+      type: object
+      required: [products]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        next_page_token:
+          type: [string, 'null']
+    Product:
+      type: object
+      required: [id, title]
+      additionalProperties: true
+      properties:
+        id: {type: string}
+        title: {type: string}
+        description: {type: [string, 'null']}
+        offers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              url: {type: string, format: uri}
+              domain: {type: string}
+              availability: {type: string, enum: [InStock, OutOfStock]}
+              price:
+                type: object
+                additionalProperties: true
+                properties:
+                  price: {type: number, minimum: 0}
+                  currency: {type: string}
+                  compare_at_price: {type: [number, 'null'], minimum: 0}
+    PriceHistory:
+      type: object
+      additionalProperties: true
+      properties:
+        canonical_product_id: {type: string}
+        product_title: {type: [string, 'null']}
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              price: {type: number, minimum: 0}
+              currency: {type: string}
+              timestamp: {type: string, format: date-time}
+        statistics:
+          type: [object, 'null']
+          properties:
+            current_price: {type: number, minimum: 0}
+            min_price: {type: number, minimum: 0}
+            max_price: {type: number, minimum: 0}
+            mean: {type: number, minimum: 0}
+            std_dev: {type: number, minimum: 0}
+            currency: {type: string}
+            current_status: {type: string, enum: [low, typical, high]}
+    ErrorResponse:
+      type: object
+      additionalProperties: true

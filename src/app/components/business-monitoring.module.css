@@ -1,0 +1,426 @@
+.panel {
+  --business-ink: #193456;
+  --business-muted: #71819a;
+  --business-line: #e4eaf2;
+  display: grid;
+  gap: 22px;
+  padding: clamp(18px, 3.2vw, 30px);
+  color: var(--business-ink);
+  background:
+    radial-gradient(circle at 100% 0, rgba(48, 106, 205, .09), transparent 31%),
+    #fff;
+  border: 1px solid var(--business-line);
+  border-radius: 22px;
+  box-shadow: 0 16px 40px rgba(25, 52, 86, .055);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: #5b78a3;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: .12em;
+  line-height: 1.3;
+}
+
+.header h2 {
+  max-width: 720px;
+  margin: 0;
+  color: #152f50;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 660;
+  letter-spacing: -.045em;
+  line-height: 1.12;
+}
+
+.introText {
+  max-width: 720px;
+  margin: 9px 0 0;
+  color: var(--business-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.connectionBadge,
+.aggregateBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  color: #7b5b19;
+  background: #fff7e5;
+  border: 1px solid #f0dfb8;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d79b31;
+  box-shadow: 0 0 0 3px rgba(215, 155, 49, .15);
+}
+
+.connectionNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 17px;
+  background: #f5f8fd;
+  border: 1px solid #dfe8f5;
+  border-radius: 14px;
+}
+
+.noticeIcon {
+  display: flex;
+  flex: 0 0 23px;
+  width: 23px;
+  height: 23px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  color: #3769b6;
+  background: #e3edfc;
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.noticeCopy strong {
+  display: block;
+  color: #24436b;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.noticeCopy p {
+  max-width: 900px;
+  margin: 4px 0 0;
+  color: #657995;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.viewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.perspectiveControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  background: #f3f6fa;
+  border: 1px solid #e7ecf3;
+  border-radius: 11px;
+}
+
+.controlLabel {
+  padding: 0 8px;
+  color: #8693a6;
+  font-size: 10px;
+  font-weight: 690;
+}
+
+.perspectiveControl button {
+  min-height: 36px;
+  padding: 7px 12px;
+  color: #6f7e93;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 660;
+  cursor: pointer;
+}
+
+.perspectiveControl button:hover {
+  color: #1e4f91;
+}
+
+.perspectiveControl button:focus-visible {
+  outline: 3px solid rgba(37, 111, 215, .35);
+  outline-offset: 2px;
+}
+
+.perspectiveControl .selectedPerspective {
+  color: #1c4e91;
+  background: #fff;
+  border-color: #dfe7f2;
+  box-shadow: 0 1px 3px rgba(30, 57, 92, .08);
+}
+
+.previewNote {
+  margin: 0;
+  color: #8794a6;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricCard {
+  min-width: 0;
+  padding: 15px 16px 14px;
+  background: rgba(255, 255, 255, .9);
+  border: 1px solid var(--business-line);
+  border-radius: 13px;
+}
+
+.metricType {
+  display: inline-block;
+  margin-bottom: 7px;
+  color: #7286a5;
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.metricCard p {
+  overflow: hidden;
+  margin: 0;
+  color: #48607f;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricCard strong {
+  display: block;
+  margin-top: 9px;
+  color: #344d6f;
+  font-size: 26px;
+  font-weight: 630;
+  letter-spacing: -.04em;
+  line-height: 1;
+}
+
+.metricCard small {
+  display: block;
+  min-height: 28px;
+  margin-top: 8px;
+  color: #8794a6;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.activitySection {
+  min-width: 0;
+}
+
+.activityHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.activityHeading h3 {
+  margin: 0;
+  color: #1b3557;
+  font-size: 16px;
+  font-weight: 680;
+  letter-spacing: -.025em;
+}
+
+.activityHeading p:not(.eyebrow) {
+  margin: 5px 0 0;
+  color: var(--business-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.aggregateBadge {
+  padding: 7px 10px;
+  color: #587363;
+  background: #f0f8f3;
+  border-color: #dcebe1;
+  font-size: 10px;
+}
+
+.gridFrame {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--business-line);
+  border-radius: 13px;
+}
+
+.grid {
+  width: 100%;
+  height: 264px;
+}
+
+.gridEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 330px;
+  padding: 14px;
+  color: #516985;
+  text-align: center;
+}
+
+.gridEmpty strong {
+  color: #38506f;
+  font-size: 12px;
+  font-weight: 670;
+}
+
+.gridEmpty span {
+  color: #8190a4;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.moreFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.moreFields span {
+  padding: 5px 8px;
+  color: #62738b;
+  background: #f5f7fa;
+  border: 1px solid #e8edf4;
+  border-radius: 999px;
+  font-size: 9px;
+}
+
+.moreFields span:first-child {
+  padding-left: 0;
+  color: #8995a5;
+  background: transparent;
+  border-color: transparent;
+}
+
+.privacyNote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 15px;
+  color: #76869c;
+  border-top: 1px solid #e9edf3;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.privacyNote strong {
+  color: #4f6786;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .panel {
+    gap: 18px;
+    padding: 17px 14px;
+    border-radius: 17px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header h2 {
+    font-size: 23px;
+  }
+
+  .introText {
+    margin-top: 7px;
+    font-size: 12px;
+  }
+
+  .connectionNotice {
+    padding: 13px 12px;
+  }
+
+  .noticeCopy p {
+    font-size: 11px;
+  }
+
+  .viewHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .perspectiveControl {
+    width: 100%;
+  }
+
+  .controlLabel {
+    margin-right: auto;
+  }
+
+  .perspectiveControl button {
+    min-height: 40px;
+    padding: 7px 9px;
+  }
+
+  .previewNote {
+    padding-left: 2px;
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metricCard {
+    padding: 12px;
+  }
+
+  .metricCard strong {
+    font-size: 24px;
+  }
+
+  .metricCard small {
+    min-height: 0;
+    font-size: 9px;
+  }
+
+  .activityHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .grid {
+    height: 238px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panel * {
+    scroll-behavior: auto;
+  }
+}

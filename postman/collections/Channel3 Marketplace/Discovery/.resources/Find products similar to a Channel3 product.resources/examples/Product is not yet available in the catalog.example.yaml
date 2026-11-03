@@ -1,0 +1,28 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/v1/similar"
+  method: POST
+  headers:
+    - key: x-api-key
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+  body:
+    type: json
+    content: |-
+      {
+        "product_id": "{{channel3_product_id}}",
+        "limit": 5,
+        "config": {
+          "country": "US",
+          "currency": "USD"
+        }
+      }
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    Content-Type: text/plain
+  body:
+    type: text
+    content: ""
+order: 2000

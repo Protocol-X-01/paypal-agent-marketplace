@@ -1,0 +1,61 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/market/coins"
+  method: GET
+  headers:
+    Accept: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "currency": "string",
+        "provider": "string",
+        "retrievedAt": "1970-10-14T16:25:19.463Z",
+        "coins": [
+          {
+            "id": "bitcoin",
+            "symbol": "string",
+            "name": "string",
+            "rank": 4547,
+            "priceUsd": 8202.846532221884,
+            "marketCapUsd": 3925.3012859262526,
+            "volume24hUsd": 1539.7358895279467,
+            "change24hPct": 5470.087551511824,
+            "change7dPct": 9636.845896020532,
+            "high24hUsd": 8271.007570438087,
+            "low24hUsd": 1037.6523388549685,
+            "sparkline7d": [
+              9601.036461535841,
+              2331.534498371184
+            ],
+            "lastUpdated": "1998-02-11T02:23:43.969Z"
+          },
+          {
+            "id": "bitcoin",
+            "symbol": "string",
+            "name": "string",
+            "rank": 2874,
+            "priceUsd": 3759.1663445346057,
+            "marketCapUsd": 9828.498491551727,
+            "volume24hUsd": 7813.225742429495,
+            "change24hPct": 5104.790062177926,
+            "change7dPct": 7442.9098586551845,
+            "high24hUsd": 9648.139686323702,
+            "low24hUsd": 482.96084627509117,
+            "sparkline7d": [
+              348.88967871665955,
+              6485.027282033116
+            ],
+            "lastUpdated": "2025-12-14T07:25:23.955Z"
+          }
+        ]
+      }
+order: 1000

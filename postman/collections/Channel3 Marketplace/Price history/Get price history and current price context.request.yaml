@@ -1,0 +1,19 @@
+$kind: http-request
+description: ""
+url: "{{baseUrl}}/v0/price-tracking/history/:canonical_product_id?days=90"
+method: GET
+headers:
+  Accept: application/json
+queryParams:
+  - key: days
+    value: "90"
+    disabled: false
+    description: History window; the API default and maximum is 90 days
+pathVariables:
+  - key: canonical_product_id
+    value: string
+    disabled: false
+    description: "(Required) "
+settings: {}
+examples: ./.resources/Get price history and current price context.resources/examples
+order: 1000

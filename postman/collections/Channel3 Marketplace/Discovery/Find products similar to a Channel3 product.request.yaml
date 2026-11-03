@@ -1,0 +1,21 @@
+$kind: http-request
+description: ""
+url: "{{baseUrl}}/v1/similar"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "product_id": "{{channel3_product_id}}",
+      "limit": 5,
+      "config": {
+        "country": "US",
+        "currency": "USD"
+      }
+    }
+settings: {}
+examples: ./.resources/Find products similar to a Channel3 product.resources/examples
+order: 3000

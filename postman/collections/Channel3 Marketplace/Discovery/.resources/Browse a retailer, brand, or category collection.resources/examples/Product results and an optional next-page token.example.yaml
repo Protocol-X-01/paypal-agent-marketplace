@@ -1,0 +1,106 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/v1/browse"
+  method: POST
+  headers:
+    - key: x-api-key
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "filters": {
+          "website_ids": [
+            "nike.com"
+          ]
+        },
+        "limit": 5,
+        "config": {
+          "country": "US",
+          "currency": "USD"
+        }
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "products": [
+          {
+            "id": "string",
+            "title": "string",
+            "description": "string",
+            "offers": [
+              {
+                "url": "https://HzjR.bajOQSn1e2.DIBivJSCwRSVjg.PkJ",
+                "domain": "string",
+                "availability": "InStock",
+                "price": {
+                  "price": 9100.35545937717,
+                  "currency": "string",
+                  "compare_at_price": 7476.876557338983
+                },
+                "key_0": 9531,
+                "key_1": 6031.995520461351
+              },
+              {
+                "url": "http://WNziaFIpJzikCpRONpMRIeVKHhcLXjg.aglkk-R3Iaskj6xBdqB8WDy4Nfjcq1CRU8sg5jr7RF",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 9054.519403725863,
+                  "currency": "string",
+                  "compare_at_price": 8866.768507286906,
+                  "key_0": 9652.940107043833,
+                  "key_1": 5120,
+                  "key_2": false,
+                  "key_3": "string"
+                },
+                "key_0": 4778,
+                "key_1": "string",
+                "key_2": false,
+                "key_3": "string"
+              }
+            ]
+          },
+          {
+            "id": "string",
+            "title": "string",
+            "description": "string",
+            "offers": [
+              {
+                "url": "http://rI.hbMTpUbws9cQRm0+pkZgQzrHba6kW29",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 8624.908882193267,
+                  "currency": "string",
+                  "compare_at_price": 8449.538690038025
+                },
+                "key_0": "string",
+                "key_1": true
+              },
+              {
+                "url": "http://BnFXEIOFNHsQoKOs.ppgf-g3lt",
+                "domain": "string",
+                "availability": "InStock",
+                "price": {
+                  "price": 6041.355920024216,
+                  "currency": "string",
+                  "compare_at_price": 2568.3807325549424,
+                  "key_0": true
+                }
+              }
+            ]
+          }
+        ],
+        "next_page_token": "string"
+      }
+order: 1000

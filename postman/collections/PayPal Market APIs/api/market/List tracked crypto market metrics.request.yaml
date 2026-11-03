@@ -1,0 +1,9 @@
+$kind: http-request
+description: Returns tracked Bitcoin, Ethereum, Solana, Chainlink, Litecoin, Bitcoin Cash, and PayPal USD market metrics with provider timestamps. Values are quoted in USD; PYUSD is a separate stablecoin asset.
+url: "{{baseUrl}}/api/market/coins"
+method: GET
+headers:
+  Accept: application/json
+settings: {}
+examples: ./.resources/List tracked crypto market metrics.resources/examples
+order: 1000

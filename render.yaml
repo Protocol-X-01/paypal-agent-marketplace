@@ -1,0 +1,35 @@
+# Render Blueprint for the PayPal Markets companion.
+# Free tier is suitable for a preview; it sleeps when idle and has no persistent disk.
+services:
+  - type: web
+    name: paypal-markets-companion
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: CHANNEL3_BASE_URL
+        value: https://api.trychannel3.com
+      - key: CHANNEL3_COUNTRY
+        value: US
+      - key: CHANNEL3_CURRENCY
+        value: USD
+      - key: CHANNEL3_LANGUAGE
+        value: en
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: NEXT_PUBLIC_AG_GRID_LICENSE
+        sync: false

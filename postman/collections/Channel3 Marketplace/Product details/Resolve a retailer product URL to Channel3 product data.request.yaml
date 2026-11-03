@@ -1,0 +1,17 @@
+$kind: http-request
+description: Uncached retailer URLs may take several seconds to resolve.
+url: "{{baseUrl}}/v1/lookup"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "url": "https://www.example.com/products/sample-item",
+      "max_staleness_hours": 3
+    }
+settings: {}
+examples: ./.resources/Resolve a retailer product URL to Channel3 product data.resources/examples
+order: 2000

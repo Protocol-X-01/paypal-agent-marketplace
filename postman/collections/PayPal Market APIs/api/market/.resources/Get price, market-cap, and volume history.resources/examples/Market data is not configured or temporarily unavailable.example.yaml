@@ -1,0 +1,31 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/market/chart/:coinId?days=7"
+  method: GET
+  headers:
+    Accept: application/json
+  queryParams:
+    days: "7"
+  pathVariables:
+    - key: coinId
+      value: solana
+      disabled: false
+      description: (Required) CoinGecko identifier from the tracked watchlist
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": {
+          "code": "upstream_invalid_response",
+          "message": "string"
+        }
+      }
+order: 4000

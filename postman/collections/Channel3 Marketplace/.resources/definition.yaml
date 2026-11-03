@@ -1,0 +1,13 @@
+$kind: collection
+description: Product discovery, retailer/category browsing, offer details, and price history for the PayPal mobile-first marketplace. The Channel3 API key is supplied in the x-api-key header and must remain server-side in the app.
+variables:
+  baseUrl: https://api.trychannel3.com
+  apiKey: ""
+auth:
+  - id: c3514f0b-9381-4257-8772-7ebfae4c736f
+    type: apikey
+    name: apikey auth
+    credentials:
+      key: x-api-key
+      value: "{{apiKey}}"
+      in: header

@@ -1,0 +1,108 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/marketplace/search"
+  method: POST
+  headers:
+    Accept: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "query": "string",
+        "limit": 6
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "provider": "string",
+        "query": "string",
+        "retrievedAt": "2016-01-06T18:44:13.506Z",
+        "products": [
+          {
+            "id": "string",
+            "title": "string",
+            "description": "string",
+            "images": [
+              {
+                "url": "http://IeDieOmRECKSbXXLZpOD.xlsnIsaIZUeyOHTFLToR+q78EKd5uGkISQcaE0Pbngq1OsEe",
+                "cleaned_url": "https://WZPGCbSwfpFDYOMm.jhrzG.n-hrLlDWJEzRn,h",
+                "is_main_image": false
+              },
+              {
+                "url": "http://slZaYIQEeLZnMrWAdtoBDAFPRaFkSr.nnpJ7lNckbKHKZG",
+                "cleaned_url": "http://ijiMgmmoGtFtnBZxnVtlulMQauprryZX.opdgZCM4mfqa3xD",
+                "is_main_image": true
+              }
+            ],
+            "offers": [
+              {
+                "url": "https://QXDkxjfDMiyaJTABiNOYQyd.vrasdrj,fM8ZeZd-FbNBXZbHx1,CmwNemfxhtMrnPSuPGfIFf",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 2055.364544503391,
+                  "currency": "string",
+                  "compare_at_price": 5345.940790139139
+                }
+              },
+              {
+                "url": "http://wdwgPqXjroCoJnnC.hkHLYQSri4iEjgovVx6ftWbRxK0mZrmCU2bO",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 3914.3170812167227,
+                  "currency": "string",
+                  "compare_at_price": 448.38344445452094
+                }
+              }
+            ]
+          },
+          {
+            "id": "string",
+            "title": "string",
+            "description": "string",
+            "images": [
+              {
+                "url": "http://NJXvjQWQxXHXQlwciGNiWYYZjS.ymrcXayRd5E+Ten0,c.VKnfy",
+                "cleaned_url": "http://XargQeWuMBwfpDXvlLsRSsTwoktcPV.iawmfK2J3B",
+                "is_main_image": false
+              },
+              {
+                "url": "https://qmDsaFNfPwQUPObhmBH.jtpgqFAZQmS9nJB24Yyv2QNi3OY.Ag",
+                "cleaned_url": "http://ezPXfCwspuIOiZCoDIrgb.bhi,odkJF1KlftnuX9dM.oHpq12HTQPoZlJ",
+                "is_main_image": false
+              }
+            ],
+            "offers": [
+              {
+                "url": "http://sBvLKG.gcjh2L,vAbeR2gKtF54bpxr0AwYfR6wAbKV-1Vzn3I395b0wCpbFht-qU3YAz.q-YJtvfIB-NN",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 1616.3296345621347,
+                  "currency": "string",
+                  "compare_at_price": 5829.153098165989
+                }
+              },
+              {
+                "url": "https://GqoKICQ.gmRr0cCjo9b8CHd9CynXi9NgG0OBYDSCasao7lp9TcsXifzyjETfgNG2BHS5Y9GG",
+                "domain": "string",
+                "availability": "OutOfStock",
+                "price": {
+                  "price": 6518.612697254866,
+                  "currency": "string",
+                  "compare_at_price": 4444.17376536876
+                }
+              }
+            ]
+          }
+        ],
+        "nextPageToken": "string"
+      }
+order: 1000

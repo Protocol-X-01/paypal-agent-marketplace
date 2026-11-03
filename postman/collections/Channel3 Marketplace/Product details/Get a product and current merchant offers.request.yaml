@@ -1,0 +1,14 @@
+$kind: http-request
+description: ""
+url: "{{baseUrl}}/v1/products/:product_id"
+method: GET
+headers:
+  Accept: application/json
+pathVariables:
+  - key: product_id
+    value: string
+    disabled: false
+    description: (Required) Channel3 product ID returned by search or browse
+settings: {}
+examples: ./.resources/Get a product and current merchant offers.resources/examples
+order: 1000

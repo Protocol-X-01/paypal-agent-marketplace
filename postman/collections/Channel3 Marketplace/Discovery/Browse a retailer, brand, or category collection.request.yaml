@@ -1,0 +1,25 @@
+$kind: http-request
+description: Filter-only listing. Include at least one of brand_ids, category_ids, or website_ids in filters. For a retailer, website_ids may contain its domain. Channel3 does not accept a generic collection identifier here.
+url: "{{baseUrl}}/v1/browse"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "filters": {
+        "website_ids": [
+          "nike.com"
+        ]
+      },
+      "limit": 5,
+      "config": {
+        "country": "US",
+        "currency": "USD"
+      }
+    }
+settings: {}
+examples: ./.resources/Browse a retailer, brand, or category collection.resources/examples
+order: 2000

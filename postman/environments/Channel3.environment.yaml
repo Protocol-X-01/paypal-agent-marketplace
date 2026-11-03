@@ -1,0 +1,22 @@
+name: Channel3
+values:
+  - key: baseUrl
+    value: 'https://api.trychannel3.com'
+    enabled: true
+    type: default
+    description: Channel3 API base URL
+  - key: apiKey
+    value: ''
+    enabled: false
+    type: secret
+    description: Paste the Channel3 API key into Postman locally; do not commit it
+  - key: channel3_product_id
+    value: ''
+    enabled: false
+    type: default
+    description: A product ID returned by Search or Browse
+  - key: canonical_product_id
+    value: ''
+    enabled: false
+    type: default
+    description: A canonical product ID for the price-history request

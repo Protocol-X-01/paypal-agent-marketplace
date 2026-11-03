@@ -1,0 +1,58 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/v1/products/:product_id"
+  method: GET
+  headers:
+    - key: x-api-key
+      value: <API Key>
+      description: "Added as a part of security scheme: apikey"
+    - key: Accept
+      value: application/json
+  pathVariables:
+    - key: product_id
+      value: string
+      disabled: false
+      description: (Required) Channel3 product ID returned by search or browse
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "id": "string",
+        "title": "string",
+        "description": "string",
+        "offers": [
+          {
+            "url": "http://XGKQxxyV.flkfpk0BTo8EbvYIMGRZKCuUdJAfarNl8u02.m2cQG9gGFz",
+            "domain": "string",
+            "availability": "InStock",
+            "price": {
+              "price": 6864.514916669577,
+              "currency": "string",
+              "compare_at_price": 3350.556227378547
+            }
+          },
+          {
+            "url": "https://qlABydPvGaqvvIE.zzdOMtTCglHqY+Uo6Y4.CdNrvKX5lV",
+            "domain": "string",
+            "availability": "InStock",
+            "price": {
+              "price": 6077.065442223102,
+              "currency": "string",
+              "compare_at_price": 218.69393065571785,
+              "key_0": 3401.3162832707167,
+              "key_1": 7202,
+              "key_2": "string"
+            },
+            "key_0": "string"
+          }
+        ]
+      }
+order: 1000
