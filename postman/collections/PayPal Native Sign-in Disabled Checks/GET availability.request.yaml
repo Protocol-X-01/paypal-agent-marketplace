@@ -1,0 +1,21 @@
+$kind: http-request
+name: GET availability
+order: 1000
+url: "{{baseUrl}}/api/auth/native/availability"
+method: GET
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Disabled native route has expected status", () => { pm.response.to.have.status(200); });
+      pm.test("Native response privacy headers", () => {
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+        pm.expect(pm.response.headers.get("Content-Security-Policy")).to.include("default-src 'none'");
+      });
+      pm.test("Native login is unavailable", () => { pm.expect(pm.response.json()).to.eql({loginAvailable:false}); });
+
+# Enabled readiness additionally requires existing cached PayPal discovery after store readiness.
+# This disabled check must remain provider-free; it does not exercise enabled discovery.

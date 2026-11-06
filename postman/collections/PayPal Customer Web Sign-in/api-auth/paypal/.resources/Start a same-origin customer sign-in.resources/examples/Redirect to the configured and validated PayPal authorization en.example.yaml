@@ -1,0 +1,39 @@
+$kind: http-example
+name: Redirect to the configured and validated PayPal authorization endpoint.
+request:
+  url: "{{baseUrl}}/api/auth/paypal/start"
+  method: POST
+  headers:
+    - key: Origin
+      value: https://app.example.test
+      disabled: false
+      description: (Required) Must exactly match the configured public HTTPS origin.
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 303
+  statusText: See Other
+  headers:
+    - key: Referrer-Policy
+      value: no-referrer
+      disabled: false
+      description: "(Required) "
+    - key: Location
+      value: "https://www.sandbox.paypal.com/signin/authorize"
+      disabled: false
+      description: "(Required) "
+    - key: Set-Cookie
+      value: "__Host-paypal-markets-login=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Secure; HttpOnly; Path=/; SameSite=Lax; Max-Age=300"
+      disabled: false
+      description: "(Required) "
+    - key: Cache-Control
+      value: no-store
+      disabled: false
+      description: "(Required) "
+    - key: Content-Type
+      value: text/plain
+  body:
+    type: text
+    content: ""
+order: 1000

@@ -1,0 +1,21 @@
+$kind: http-request
+description: Disabled or incomplete configuration returns303 with fixed relative Location /dashboard?auth=failed#account, without request-host interpolation or backend/provider access. Web-only edge and callback-redaction acknowledgements gate new issuance; missing flags block start503 and sanitize callbacks303 before consumption, while session validation and logout remain available and loginAvailable is false. These are operator acknowledgements, not verified controls. Enabled callback budget/concurrency failures redirect303 to the fixed generic failure URL without query echo or cookie clearing; exhausted budgets carry Retry-After1-60. Disabled behavior is unchanged. PayPal redirects the browser here with a single-use authorization response. The server validates state, PKCE, nonce, the ID token and userinfo subject. Success rotates the application session; errors redirect to a fixed account page. The callback does not clear the short-lived transaction cookie because a delayed response could erase a newer sign-in. No provider tokens or identifiers are returned to the page.
+name: Reject an unbound authorization callback
+url: "{{baseUrl}}/api/auth/paypal/callback"
+method: GET
+headers:
+  Accept: application/json
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("An unbound callback never creates a session", function () {
+        pm.expect([303, 503]).to.include(pm.response.code);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+        if (pm.response.code === 303) pm.expect(pm.response.headers.get("Location")).to.include("auth=failed");
+      });
+examples: ./.resources/Complete a PayPal authorization response.resources/examples
+order: 2000

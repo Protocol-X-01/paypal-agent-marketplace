@@ -45,6 +45,8 @@ async function dashboard() {
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], (next) => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }]; },
     useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
+    createContext(defaultValue) { return { defaultValue }; },
+    useContext(context) { return context.defaultValue; },
     useMemo: (calculate) => calculate(), useCallback: (callback) => callback,
     useEffect() {}, // No lifecycle, storage, HTTP or browser effects are run in this render check.
   };

@@ -1,0 +1,7 @@
+$kind: collection
+name: PayPal Native Sign-in Disabled Checks
+description: Local default-disabled route checks only. No credentials, valid handoff, or login is supplied. No provider authentication or device flow is established.
+variables:
+  - key: baseUrl
+    value: http://127.0.0.1:9
+    description: Deliberately unreachable; explicitly override with the local disabled preview.

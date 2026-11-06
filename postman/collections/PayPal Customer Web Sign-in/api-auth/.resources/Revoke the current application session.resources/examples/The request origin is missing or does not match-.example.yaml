@@ -1,0 +1,36 @@
+$kind: http-example
+name: The request origin is missing or does not match.
+request:
+  url: "{{baseUrl}}/api/auth/logout"
+  method: POST
+  headers:
+    - key: Origin
+      value: https://app.example.test
+      disabled: false
+      description: (Required) Must exactly match the configured public HTTPS origin.
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Referrer-Policy
+      value: no-referrer
+      disabled: false
+      description: "(Required) "
+    - key: Cache-Control
+      value: no-store
+      disabled: false
+      description: "(Required) "
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "origin_not_allowed"
+      }
+order: 2000

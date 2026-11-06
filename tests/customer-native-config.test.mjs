@@ -41,3 +41,12 @@ test('native context binds provider configuration and exact fixed return policy'
     assert.equal(native.readNativeAuthConfig({ ...valid, AUTH_NATIVE_ANDROID_RETURN_URL: url }), null);
   }
 });
+
+test('web-only admission flags never gate native configuration or alter authentication contexts',()=>{
+ const baseline=native.readNativeAuthConfig(valid);const webContext=web.authContextFingerprint(web.readAuthConfig(valid));
+ for(const value of [undefined,'false','true']){
+  const env={...valid,PAYPAL_WEB_EDGE_CONTROLS_VERIFIED:value,PAYPAL_WEB_CALLBACK_REDACTION_VERIFIED:value};
+  assert.equal(native.readNativeAuthConfig(env).contextHash,baseline.contextHash);
+  assert.equal(web.authContextFingerprint(web.readAuthConfig(env)),webContext);
+ }
+});

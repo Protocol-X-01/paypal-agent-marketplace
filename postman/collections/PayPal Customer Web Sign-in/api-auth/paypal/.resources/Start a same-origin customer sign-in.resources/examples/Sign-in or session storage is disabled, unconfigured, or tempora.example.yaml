@@ -1,0 +1,36 @@
+$kind: http-example
+name: Sign-in or session storage is disabled, unconfigured, or temporarily unavailable.
+request:
+  url: "{{baseUrl}}/api/auth/paypal/start"
+  method: POST
+  headers:
+    - key: Origin
+      value: https://app.example.test
+      disabled: false
+      description: (Required) Must exactly match the configured public HTTPS origin.
+    - key: Accept
+      value: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    - key: Referrer-Policy
+      value: no-referrer
+      disabled: false
+      description: "(Required) "
+    - key: Cache-Control
+      value: no-store
+      disabled: false
+      description: "(Required) "
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "sign_in_unavailable"
+      }
+order: 3000

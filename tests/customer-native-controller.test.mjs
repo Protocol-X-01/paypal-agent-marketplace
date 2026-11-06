@@ -6,7 +6,7 @@ const protocol = load("src/lib/customer-auth/native-protocol.ts");
 const storeModule = load("src/lib/customer-auth/native-store.ts");
 const authConfig = load("src/lib/customer-auth/config.ts");
 const provider = load("src/lib/customer-auth/provider.ts", { "./config": authConfig });
-const { createNativeAuthController } = load("src/lib/customer-auth/native-controller.ts", { "./provider": provider, "./native-store": storeModule, "./native-protocol": protocol });
+const { createNativeAuthController } = load("src/lib/customer-auth/native-controller.ts", { "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) }, "./provider": provider, "./native-store": storeModule, "./native-protocol": protocol });
 const token = n => Buffer.alloc(32, n).toString("base64url");
 const config = { ...webConfig, links: { origin: webConfig.origin, android: `${webConfig.origin}/native/android`, ios: `${webConfig.origin}/native/ios` }, callback: `${webConfig.origin}/api/auth/native/paypal/callback`, contextHash: "f".repeat(64) };
 const state = token(1), verifier = token(2), challenge = protocol.nativeS256Challenge(verifier);
@@ -71,7 +71,7 @@ test("disabled routes fail closed without store/provider calls", async () => {
   const c = createNativeAuthController({ config: () => null, store: fail, provider: fail });
   const available = await c.availability(request("/availability")); assert.deepEqual(await available.json(), { loginAvailable: false }); checks(available);
   for (const method of ["handoffs", "authorizeGet", "authorizePost", "callback", "exchange", "cancel", "session", "logout", "failure"]) {
-    const r = await c[method](request("/unused")); assert.equal(r.status, 503); checks(r); assert.equal(r.headers.get("set-cookie"), null);
+    const r = await c[method](request("/unused")); assert.equal(r.status, method === "callback" ? 303 : 503); checks(r); assert.equal(r.headers.get("set-cookie"), null);
   }
 });
 
@@ -196,4 +196,58 @@ test("authoritative absent credentials are terminal without granting session acc
     assert.equal(cancel.status, 204); checks(cancel);
   }
   assert.equal(f.discovers(), 0);
+});
+
+test("global operation exhaustion preserves credentials and reserves recovery routes", async()=>{
+ let outage=false;const operations=[];
+ const h=setup({budget:async(_c,op)=>{operations.push(op);if(outage)throw Error('synthetic outage');return {allowed:op==='native.cancel'||op==='native.logout',retryAfter:23}}});
+ for(const [name,path,method] of [['availability','/availability','GET'],['handoffs','/handoffs','POST'],['callback','/paypal/callback','GET'],['exchange','/exchange','POST'],['session','/session','GET']]){
+  const r=await h.controller[name](request(path,method));assert.equal(r.status,name==='callback'?303:429);assert.equal(r.headers.get('retry-after'),'23');assert.equal(r.headers.get('set-cookie'),null);checks(r);
+ }
+ assert.equal(h.store.calls.length,0);
+ const cancel=await h.controller.cancel(jsonRequest('/cancel',{handoff:token(12),codeVerifier:verifier}));assert.equal(cancel.status,204);
+ outage=true;const r=await h.controller.session(request('/session','GET',undefined,{Authorization:'Bearer '+token(6)}));assert.equal(r.status,503);assert.equal(r.headers.get('set-cookie'),null);
+ const disabled=createNativeAuthController({config:()=>null,store(){throw Error()},provider(){throw Error()},budget(){throw Error('must not run')}});
+ assert.deepEqual(await (await disabled.availability(request('/availability'))).json(),{loginAvailable:false});
+ assert.ok(!operations.includes('native.cancel'));assert.ok(!operations.includes('native.logout'));
+});
+
+test('callback budget outage and busy wrapper never retain provider code in destination',async()=>{
+ let release;const held=new Promise(r=>{release=r});let calls=0;
+ const h=setup({budget:async()=>{calls++;await held;throw Error('outage')}});
+ const req=()=>request('/paypal/callback?code=secret-code&state=secret-state');
+ const pending=Array.from({length:8},()=>h.controller.callback(req()));
+ const busy=await h.controller.callback(req());assert.equal(calls,8);assert.equal(busy.status,303);assert.equal(busy.headers.get('location'),failureUrl);assert.equal(busy.headers.get('set-cookie'),null);
+ release();for(const r of await Promise.all(pending)){assert.equal(r.status,303);assert.equal(r.headers.get('location'),failureUrl);assert.equal(r.headers.get('set-cookie'),null);checks(r)}
+ assert.equal(h.store.calls.length,0);
+});
+
+test('enabled availability requires cached provider readiness without disrupting existing session or recovery',async()=>{
+ let providerDown=true,providerCalls=0,storeReady=true;
+ const store=fakeStore();store.ready=async()=>storeReady;
+ const h=setup({store,provider:async()=>{providerCalls++;if(providerDown)throw Error('synthetic discovery outage');return {};}});
+ assert.deepEqual(await (await h.controller.availability(request('/availability'))).json(),{loginAvailable:false});
+ providerDown=false;assert.deepEqual(await (await h.controller.availability(request('/availability'))).json(),{loginAvailable:true});assert.equal(providerCalls,2);
+ storeReady=false;assert.deepEqual(await (await h.controller.availability(request('/availability'))).json(),{loginAvailable:false});assert.equal(providerCalls,2);
+ storeReady=true;providerDown=true;
+ const sessionToken=token(33);store.sessions.set(protocol.hashNativeHandle(sessionToken),{accountType:'personal',dataScope:'v1_'+token(34),expiresAt:new Date(Date.now()+60000).toISOString()});
+ const session=await h.controller.session(request('/session','GET',undefined,{Authorization:'Bearer '+sessionToken}));assert.equal(session.status,200);assert.equal((await session.json()).authenticated,true);
+ assert.equal((await h.controller.cancel(jsonRequest('/cancel',{handoff:token(35),codeVerifier:verifier}))).status,204);
+ assert.equal((await h.controller.logout(request('/logout','POST',undefined,{Authorization:'Bearer '+sessionToken}))).status,204);
+ assert.equal(providerCalls,2,'session/recovery must not discover');
+ const fail=()=>{throw Error('must not run')};const disabled=createNativeAuthController({config:()=>null,store:fail,provider:fail,budget:fail});
+ assert.deepEqual(await (await disabled.availability(request('/availability'))).json(),{loginAvailable:false});
+ for(const mode of ['limited','database-outage']){
+  const gated=setup({provider:fail,budget:async()=>{if(mode==='database-outage')throw Error('database unavailable');return{allowed:false,retryAfter:9}}});
+  const r=await gated.controller.availability(request('/availability'));assert.equal(r.status,mode==='limited'?429:503);assert.equal(gated.store.calls.length,0);
+ }
+});
+
+test('disabled/incomplete native callback uses fixed relative redirect despite spoofed host',async()=>{
+ let calls=0;const fail=()=>{calls++;throw Error('must not run')};
+ const c=createNativeAuthController({config:()=>null,budget:fail,store:fail,provider:fail});
+ const r=await c.callback(new Request('https://spoofed.example/api/auth/native/paypal/callback?code=secret-code&state=secret-state',{headers:{Host:'another-attacker.example'}}));
+ assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/api/auth/native/failure');assert.equal(r.headers.get('set-cookie'),null);checks(r);assert.equal(await r.text(),'');assert.equal(calls,0);
+ assert.deepEqual(await (await c.availability(request('/availability'))).json(),{loginAvailable:false});
+ assert.equal((await c.session(request('/session'))).status,503);assert.equal((await c.failure(request('/failure'))).status,503);
 });

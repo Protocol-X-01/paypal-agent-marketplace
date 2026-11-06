@@ -8,6 +8,8 @@ import { authContextFingerprint, readAuthConfig, type AuthConfig } from "./confi
 import { beginAuthorization, completeAuthorization, discoverProvider } from "./provider";
 import { createPostgresStore, type AuthStore } from "./store";
 
+import { consumeAuthRequestBudget, type AuthBudgetConsumer, type AuthBudgetOperation } from "./request-budget";
+
 const SESSION_COOKIE = "__Host-paypal-markets-session";
 const TRANSACTION_COOKIE = "__Host-paypal-markets-login";
 const SESSION_SECONDS = 30 * 60;
@@ -15,6 +17,8 @@ const TRANSACTION_SECONDS = 5 * 60;
 const COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "lax", path: "/" } as const;
 
 type Dependencies = {
+  webAdmission?: () => boolean;
+  budget?: AuthBudgetConsumer;
   config(): AuthConfig | null;
   store(config: AuthConfig): AuthStore;
   provider(config: AuthConfig): Promise<oidc.Configuration>;
@@ -61,18 +65,52 @@ function limited(handler: (request: NextRequest) => Promise<NextResponse>, maxim
   };
 }
 
+/** Operator acknowledgement only; does not verify deployed edge/logging behavior. */
+export function webSignInAdmissionVerified(env: NodeJS.ProcessEnv): boolean {
+  return env.PAYPAL_WEB_EDGE_CONTROLS_VERIFIED === "true" && env.PAYPAL_WEB_CALLBACK_REDACTION_VERIFIED === "true";
+}
+
 /** Dependency injection is used for isolated local tests; routes use only runtime dependencies. */
 export function createAuthController(dependencies: Dependencies) {
+  const admissionOpen = () => { try { return dependencies.webAdmission?.() === true; } catch { return false; } };
+  const admit = async (config: AuthConfig, operation: AuthBudgetOperation): Promise<NextResponse | null> => {
+    try {
+      const result = await (dependencies.budget ?? consumeAuthRequestBudget)(config, operation);
+      if (result.allowed) return null;
+      const response = protect(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
+      response.headers.set("Retry-After", String(result.retryAfter)); return response;
+    } catch { return unavailable(); }
+  };
+  const budgeted = (operation: AuthBudgetOperation, handler: (request: NextRequest) => Promise<NextResponse>) => async (request: NextRequest) => {
+    const config = dependencies.config();
+    if (config && (operation === "web.start" || operation === "web.callback") && !admissionOpen()) {
+      if (operation === "web.start" && request.headers.get("origin") !== config.origin) return forbidden();
+      return operation === "web.callback" ? callbackRedirect(config, false) : unavailable();
+    }
+    if (config && !(operation === "web.start" && request.headers.get("origin") !== config.origin)) {
+      const denied = await admit(config, operation);
+      if (denied) {
+        if (operation !== "web.callback") return denied;
+        // Never strand provider codes/state in the browser address bar on budget failure.
+        const response = callbackRedirect(config, false);
+        const retry = denied.headers.get("Retry-After"); if (retry) response.headers.set("Retry-After", retry);
+        return response;
+      }
+    }
+    return handler(request);
+  };
   const handlers = {
     async start(request: NextRequest): Promise<NextResponse> {
       const config = dependencies.config();
       if (!config) return unavailable();
       if (request.headers.get("origin") !== config.origin) return forbidden();
+      if (!admissionOpen()) return unavailable();
       try {
         const store = dependencies.store(config);
         if (!(await store.ready())) return unavailable();
         const provider = await dependencies.provider(config);
         const { location, transaction } = await beginAuthorization(provider, config);
+        if (!admissionOpen()) return unavailable();
         const handle = randomHandle();
         const session = cookieValue(request, SESSION_COOKIE);
         const previousTransaction = cookieValue(request, TRANSACTION_COOKIE);
@@ -89,6 +127,7 @@ export function createAuthController(dependencies: Dependencies) {
     async callback(request: NextRequest): Promise<NextResponse> {
       const config = dependencies.config();
       if (!config) return unavailable();
+      if (!admissionOpen()) return callbackRedirect(config, false);
       const handle = cookieValue(request, TRANSACTION_COOKIE);
       if (!handle || request.nextUrl.search.length > 4096) return callbackRedirect(config, false);
       try {
@@ -98,6 +137,7 @@ export function createAuthController(dependencies: Dependencies) {
         const provider = await dependencies.provider(config);
         const callbackUrl = new URL(`/api/auth/paypal/callback${request.nextUrl.search}`, config.origin);
         const identity = await completeAuthorization(provider, callbackUrl, transaction, config);
+        if (!admissionOpen()) return callbackRedirect(config, false);
         const nextHandle = randomHandle();
         const previous = cookieValue(request, SESSION_COOKIE);
         await store.createSession(hashHandle(nextHandle), authContextFingerprint(config), identity,
@@ -119,7 +159,9 @@ export function createAuthController(dependencies: Dependencies) {
         if (!(await store.ready())) return handle ? unavailable() : protect(NextResponse.json({ authenticated: false, loginAvailable: false }));
         const identity = handle ? await store.readSession(hashHandle(handle), authContextFingerprint(config)) : null;
         let loginAvailable = false;
-        try { await dependencies.provider(config); loginAvailable = true; } catch { /* provider unavailable */ }
+        if (admissionOpen()) {
+          try { await dependencies.provider(config); loginAvailable = admissionOpen(); } catch { /* provider unavailable */ }
+        }
         return protect(NextResponse.json(identity ? { authenticated: true, loginAvailable, ...identity } : { authenticated: false, loginAvailable }));
       } catch {
         return handle ? unavailable() : protect(NextResponse.json({ authenticated: false, loginAvailable: false }));
@@ -144,11 +186,19 @@ export function createAuthController(dependencies: Dependencies) {
       }
     },
   };
+  const cleanCallback = (handler: (request: NextRequest) => Promise<NextResponse>) => async (request: NextRequest) => {
+    const config = dependencies.config();
+    if (!config) return protect(new NextResponse(null, { status: 303, headers: { Location: "/dashboard?auth=failed#account" } }));
+    const response = await handler(request);
+    if (response.status < 400) return response;
+    const clean = callbackRedirect(config, false), retry = response.headers.get("Retry-After");
+    if (retry) clean.headers.set("Retry-After", retry); return clean;
+  };
   // Separate limits keep public session polling from consuming logout capacity.
   return {
-    start: limited(handlers.start, 8),
-    callback: limited(handlers.callback, 8),
-    session: limited(handlers.session, 16),
+    start: limited(budgeted("web.start", handlers.start), 8),
+    callback: cleanCallback(limited(budgeted("web.callback", handlers.callback), 8)),
+    session: limited(budgeted("web.session", handlers.session), 16),
     logout: limited(handlers.logout, 4),
   };
 }
@@ -176,6 +226,7 @@ function runtimeProvider(config: AuthConfig): Promise<oidc.Configuration> {
 }
 
 export const customerAuth = createAuthController({
+  webAdmission: () => webSignInAdmissionVerified(process.env),
   config: () => readAuthConfig(process.env),
   store: runtimeStore,
   provider: runtimeProvider,

@@ -9,8 +9,8 @@ const { selectMarketHeadline } = await import(`data:text/javascript;base64,${Buf
 
 test("a valid market quote, including zero, keeps its own retrieval time", () => {
   const sample = { timestamp: 100, value: 12 };
-  assert.deepEqual(selectMarketHeadline(0, "quote-time", sample, "chart-time"), { source: "quote", value: 0, retrievedAt: "quote-time" });
-  assert.deepEqual(selectMarketHeadline(42, "quote-time", sample, "chart-time"), { source: "quote", value: 42, retrievedAt: "quote-time" });
+  assert.deepEqual(selectMarketHeadline(0, "quote-time", sample, "chart-time"), { source: "quote", value: 0, updatedAt: null, retrievedAt: "quote-time" });
+  assert.deepEqual(selectMarketHeadline(42, "quote-time", sample, "chart-time", "asset-update-time"), { source: "quote", value: 42, updatedAt: "asset-update-time", retrievedAt: "quote-time" });
 });
 
 test("a chart fallback carries its own retrieval and sample times", () => {

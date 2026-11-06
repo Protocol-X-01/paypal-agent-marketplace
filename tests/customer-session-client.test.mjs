@@ -299,3 +299,10 @@ test("unknown-account presentation controls neither expose scope identifiers nor
   nodes(tree).find((node) => node.type === "button" && text(node) === "Business presentation").props.onClick();
   assert.equal(choice, "business");
 });
+
+test("429 session polling holds private access and can recover without a signed-out transition",async()=>{
+ let response=reply(account());const states=[];
+ const controller=client.createCustomerSessionController({fetcher:async()=>response});
+ const unsubscribe=controller.subscribe(()=>states.push(controller.getSnapshot().session?.authenticated));
+ try{await controller.check();response=reply({error:'rate_limited'},429);await controller.check();assert.equal(controller.getSnapshot().status,'uncertain');assert.ok(!states.includes(false));response=reply(account());await controller.check();assert.equal(controller.getSnapshot().status,'ready');assert.equal(controller.getSnapshot().session.authenticated,true);}finally{unsubscribe();controller.dispose()}
+});

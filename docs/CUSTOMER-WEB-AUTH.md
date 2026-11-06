@@ -120,3 +120,17 @@ flow with fictional personal and business test accounts, verify the exact
 provider metadata and returned claims, and check browser cookies, sign-out,
 expiry, account switching and the guest-data boundary. The native app requires
 a separately reviewed, verified-link and one-use handoff design.
+
+## Web-only new sign-in admission — local defense in depth
+
+Both PAYPAL_WEB_EDGE_CONTROLS_VERIFIED and PAYPAL_WEB_CALLBACK_REDACTION_VERIFIED must be exactlytrue to admit new web start/callback operations. They defaultfalse in .env.example. They are operator acknowledgements, not automatic verification of edge protection, callback/access-log redaction, provider eligibility or consent. PAYPAL_LOGIN_ENABLED still controls the shared configured feature; these additional flags are intentionally outside readAuthConfig and the auth-context fingerprint. Native admission retains its independent existing gates.
+
+When the web admission gate is closed, same-origin start returns503 before budget/store/provider work (foreign origin still403). Configured callbacks return the existing fixed clean303failure URL before budget or transaction consumption, without clearing cookies. Session reads still validate existing sessions but report loginAvailable:false and skip discovery. Logout remains unchanged. Closed admission does not revoke or invalidate existing sessions/families. Callback outer-concurrency redirection remains clean.
+
+This is not an instantaneous distributed revocation switch: environment changes require deployment, older instances and already-running operations can finish, and checks around awaits are not atomic with database commits. It is defense in depth for new admission. Proxy/edge logging occurs before application redirects, so actual callback redaction must be independently verified. Existing frozen release candidates and hosted settings remain untouched by this local patch.
+
+Local gate validation passed34tests across web controller/provider/native config, full root TypeScript and scoped zero-warning ESLint. Evidence: /home/protocol-x/Downloads/paypal-web-admission-check-jaz3i6ks. Web OpenAPI and four local collection request files linted clean; requests were not executed. Tests include pending callback rejection before consumption, exact missing/false flags, origin handling, existing session/logout continuity, no discovery while closed, and unchanged native/context behavior. No real provider/database/configuration/deployment action occurred.
+
+Disabled/incomplete web callbacks now use303with fixed relative Location /dashboard?auth=failed#account, without request Host/origin interpolation, cookie clearing or backend/provider access. The configured case retains its existing trusted-origin redirect. This removes callback query data from subsequent navigation even without complete configuration; it cannot redact upstream logs. Disabled session responses are unchanged.
+
+Disabled callback follow-on passed31web/native controller tests, root TypeScript and scoped zero-warning ESLint under resource guard. Both OpenAPI contracts and14local collection files linted clean; requests were not executed. Evidence: /home/protocol-x/Downloads/paypal-disabled-callback-check-2z5gjttt. Spoofed-host/secret-query tests confirm fixed relative destinations, empty bodies, privacy headers, no cookie clearing/backend calls and unchanged disabled session behavior. Existing frozen candidates remain untouched.

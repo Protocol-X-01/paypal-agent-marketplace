@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AgCharts } from "ag-charts-react";
 import {
   AreaSeriesModule,
@@ -304,11 +304,14 @@ async function requestOverview(currency: MarketCurrency, signal: AbortSignal): P
   return data;
 }
 
-export default function MarketDashboard() {
-  return <CustomerSessionProvider><CustomerWorkspaceBoundary Workspace={MarketDashboardBody} /></CustomerSessionProvider>;
+const MarketInsightAvailability = createContext(false);
+
+export default function MarketDashboard({ aiInsightsAvailable = false }: { aiInsightsAvailable?: boolean }) {
+  return <MarketInsightAvailability.Provider value={aiInsightsAvailable}><CustomerSessionProvider><CustomerWorkspaceBoundary Workspace={MarketDashboardBody} /></CustomerSessionProvider></MarketInsightAvailability.Provider>;
 }
 
 function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorkspaceProps) {
+  const aiInsightsAvailable = useContext(MarketInsightAvailability);
   const session = useCustomerSession();
   const privateData = usePrivateDataScope();
   const localStorage = privateData.storage;
@@ -801,10 +804,11 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
     currentOverview?.retrievedAt,
     chartSeries.at(-1),
     chartMatches ? chart?.retrievedAt : null,
+    selectedCoin?.lastUpdated,
   );
   const selectedMetricValue = headline.value;
   const headlineProvenance = headline.source === "quote"
-    ? `Snapshot retrieved ${fullTimestamp(headline.retrievedAt)}`
+    ? `${headline.updatedAt ? `CoinGecko data as of ${fullTimestamp(headline.updatedAt)}` : "CoinGecko asset update time unavailable"} · snapshot retrieved ${fullTimestamp(headline.retrievedAt)}`
     : headline.source === "chart"
       ? `${chartSeriesSource === "market_overview_sparkline" ? "Estimated chart sample" : "Chart sample"} ${fullTimestamp(headline.sampleAt)} · chart retrieved ${fullTimestamp(headline.retrievedAt)}`
       : "Market value unavailable";
@@ -1125,7 +1129,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
             </section>
 
             {minuteCandles && <p className="chart-data-note">Overview and portfolio: CoinGecko · {currency}. AI context: CoinGecko history · {days}-day range · {currency}, independently preserved from the USDT candle window.</p>}
-            <InsightPanel kind="market" selection={{ coinId: selectedId, currency, days }} />
+            <InsightPanel kind="market" enabled={aiInsightsAvailable} selection={{ coinId: selectedId, currency, days }} />
 
             <section className="metrics-row" aria-label="Selected asset metrics">
               <Metric label="Market cap" value={compactMoney(selectedCoin?.marketCap, currency)} detail={selectedCoin?.rank ? `Rank #${selectedCoin.rank}` : "Market value"} />

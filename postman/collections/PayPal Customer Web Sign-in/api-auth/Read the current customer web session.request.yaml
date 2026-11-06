@@ -1,0 +1,23 @@
+$kind: http-request
+description: Web-only edge and callback-redaction acknowledgements gate new issuance; missing flags block start503 and sanitize callbacks303 before consumption, while session validation and logout remain available and loginAvailable is false. These are operator acknowledgements, not verified controls. Shared global per-operation request limits may return 429 with Retry-After (1-60 seconds); unavailable budget storage returns 503. Neither confirms signed-out state or clears cookies. Disabled behavior is unchanged. An absent, expired, or revoked cookie returns authenticated false. The optional provider account type only chooses an initial presentation; it is never proof of permission to perform a business action. An authenticated session also returns a stable, pseudonymous application dataScope derived from the validated issuer and subject. It is not an authentication credential, an anonymous identifier, or a sync feature. Existing shared guest data is not automatically assigned to it. An unavailable session store cannot confirm an existing cookie. The loginAvailable flag means that the enabled feature passed current store and provider-metadata preflight; it does not prove the client credentials, customer consent, or PayPal scope eligibility. Disabled or incomplete configuration with no session returns false for both.
+url: "{{baseUrl}}/api/auth/session"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("A fresh session is signed out and exposes readiness as a boolean", function () {
+        pm.response.to.have.status(200);
+        const result = pm.response.json();
+        pm.expect(result.authenticated).to.eql(false);
+        pm.expect(result.loginAvailable).to.be.a("boolean");
+      });
+      pm.test("Session response is not cached", function () {
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+      });
+settings: {}
+examples: ./.resources/Read the current customer web session.resources/examples
+order: 2000

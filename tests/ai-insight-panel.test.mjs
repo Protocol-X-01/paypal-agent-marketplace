@@ -229,3 +229,20 @@ test("deterministic source context identifies the independent OHLC snapshot and 
     assert.match(text, /7 days · Business · UK/);
   } finally { screen.unmount(); }
 });
+
+
+test("server-unavailable market view disables generation and cancels prior work", async () => {
+  const screen = mount({ kind: "market", selection, enabled: true });
+  try {
+    button(screen.render()).props.onClick();
+    const request = screen.requests[0];
+    const tree = screen.render({ kind: "market", selection, enabled: false });
+    assert.equal(request.signal.aborted, true);
+    assert.equal(button(tree).props.disabled, true);
+    assert.match(textOf(tree), /AI assistance is unavailable for this view/);
+    button(tree).props.onClick();
+    assert.equal(screen.requests.length, 1);
+    request.resolve(market()); await settle();
+    assert.doesNotMatch(textOf(screen.render()), /An observed change/);
+  } finally { screen.unmount(); }
+});

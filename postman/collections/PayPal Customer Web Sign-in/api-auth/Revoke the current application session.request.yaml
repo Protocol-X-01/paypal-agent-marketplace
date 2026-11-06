@@ -1,0 +1,24 @@
+$kind: http-request
+name: Reject a cross-origin sign-out
+description: Web-only edge and callback-redaction acknowledgements gate new issuance; missing flags block start503 and sanitize callbacks303 before consumption, while session validation and logout remain available and loginAvailable is false. These are operator acknowledgements, not verified controls. Recovery is exempt from shared request budgets; existing concurrency, ownership and storage checks remain. A deliberately foreign origin cannot revoke a session; a disabled service may instead report unavailable.
+url: "{{baseUrl}}/api/auth/logout"
+method: POST
+headers:
+  - key: Origin
+    value: https://foreign.example.test
+    disabled: false
+    description: (Required) Must exactly match the configured public HTTPS origin.
+  - key: Accept
+    value: application/json
+settings: {}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Foreign-origin logout is blocked or unavailable", function () {
+        pm.expect([403, 503]).to.include(pm.response.code);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+      });
+examples: ./.resources/Revoke the current application session.resources/examples
+order: 3000

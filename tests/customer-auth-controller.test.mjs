@@ -8,7 +8,8 @@ const { NextRequest } = require("next/server");
 const configModule = load("src/lib/customer-auth/config.ts");
 const providerModule = load("src/lib/customer-auth/provider.ts", { "./config": configModule });
 const storeModule = load("src/lib/customer-auth/store.ts");
-const { createAuthController } = load("src/lib/customer-auth/controller.ts", {
+const { createAuthController, webSignInAdmissionVerified } = load("src/lib/customer-auth/controller.ts", {
+  "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) },
   "./config": configModule, "./provider": providerModule, "./store": storeModule,
 });
 const SESSION = "__Host-paypal-markets-session";
@@ -28,12 +29,13 @@ async function harness(options = {}) {
   const client = await providerModule.discoverProvider(config, fixture.transport);
   let providerAvailable = true;
   let activeConfig = config;
-  const controller = createAuthController({
+  let admission = true;
+  const controller = createAuthController({ webAdmission:()=>admission,
     config: () => activeConfig,
     store: () => store,
     provider: async () => { if (!providerAvailable) throw new Error("synthetic provider unavailable"); return client; },
   });
-  return { controller, store, fixture, setProviderAvailable(value) { providerAvailable = value; }, setConfig(value) { activeConfig = value; } };
+  return { controller, store, fixture, setAdmission(value) { admission=value; }, setProviderAvailable(value) { providerAvailable = value; }, setConfig(value) { activeConfig = value; } };
 }
 
 async function signIn(h, previousSession) {
@@ -52,7 +54,7 @@ async function signIn(h, previousSession) {
 }
 
 test("disabled configuration reports no login availability without touching a provider", async () => {
-  const controller = createAuthController({ config: () => null, store() { throw Error("must not run"); }, provider() { throw Error("must not run"); } });
+  const controller = createAuthController({ webAdmission:()=>true, config: () => null, store() { throw Error("must not run"); }, provider() { throw Error("must not run"); } });
   const result = await controller.session(request("/api/auth/session"));
   assert.deepEqual(await result.json(), { authenticated: false, loginAvailable: false });
   assert.equal(result.headers.get("cache-control"), "no-store");
@@ -221,4 +223,70 @@ test("invalid signed identity and an unbound callback never establish a session"
   const unbound = await h.controller.callback(request("/api/auth/paypal/callback?code=fixture-code&state=unbound"));
   assert.equal(unbound.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
   assert.equal(h.fixture.requests.length, before);
+});
+
+test("shared budget denies before provider/store work, preserves cookies and recovery capacity", async () => {
+  const calls=[]; let unavailable=false;
+  const controller=createAuthController({ webAdmission:()=>true, config:()=>config, store:()=>{calls.push('store');return fakeStore()}, provider:async()=>{throw Error('must not discover')},
+    budget:async(_config,op)=>{calls.push(op);if(unavailable)throw Error('synthetic outage');return {allowed:op==='web.logout',retryAfter:17}} });
+  for(const [op,path,method] of [['start','/api/auth/paypal/start','POST'],['callback','/api/auth/paypal/callback','GET'],['session','/api/auth/session','GET']]){
+    const r=await controller[op](request(path,{method,origin:config.origin,cookies:{[SESSION]:Buffer.alloc(32,7).toString('base64url')}}));
+    assert.equal(r.status,op==='callback'?303:429);assert.equal(r.headers.get('retry-after'),'17');assert.equal(r.headers.get('set-cookie'),null);assert.equal(r.headers.get('cache-control'),'no-store');
+  }
+  assert.ok(!calls.includes('store'));
+  assert.equal((await controller.logout(request('/api/auth/logout',{method:'POST',origin:config.origin}))).status,204);
+  unavailable=true;
+  const r=await controller.session(request('/api/auth/session',{cookies:{[SESSION]:Buffer.alloc(32,7).toString('base64url')}}));
+  assert.equal(r.status,503);assert.equal(r.headers.get('set-cookie'),null);
+  const disabled=createAuthController({ webAdmission:()=>true,config:()=>null,store(){throw Error('disabled')},provider(){throw Error('disabled')},budget(){throw Error('disabled budget must not run')}});
+  assert.deepEqual(await (await disabled.session(request('/api/auth/session'))).json(),{authenticated:false,loginAvailable:false});
+});
+
+test('callback budget outage and outer concurrency always clean provider URL',async()=>{
+ let release;const held=new Promise(r=>{release=r});let calls=0;
+ const c=createAuthController({ webAdmission:()=>true,config:()=>config,store(){throw Error('store must not run')},provider(){throw Error('provider must not run')},budget:async()=>{calls++;await held;throw Error('outage')}});
+ const req=()=>request('/api/auth/paypal/callback?code=secret-code&state=secret-state');
+ const pending=Array.from({length:8},()=>c.callback(req()));
+ const busy=await c.callback(req());assert.equal(calls,8);assert.equal(busy.status,303);assert.equal(busy.headers.get('location'),config.origin+'/dashboard?auth=failed#account');assert.equal(busy.headers.get('set-cookie'),null);
+ release();for(const r of await Promise.all(pending)){assert.equal(r.status,303);assert.equal(r.headers.get('location'),config.origin+'/dashboard?auth=failed#account');assert.equal(r.headers.get('set-cookie'),null);assert.ok(!(await r.text()).includes('secret-'))}
+});
+
+test('web admission defaults closed and exact acknowledgements block before budget/provider',async()=>{
+ const enabled={PAYPAL_WEB_EDGE_CONTROLS_VERIFIED:'true',PAYPAL_WEB_CALLBACK_REDACTION_VERIFIED:'true'};
+ assert.equal(webSignInAdmissionVerified(enabled),true);assert.equal(webSignInAdmissionVerified({}),false);
+ for(const key of Object.keys(enabled))for(const value of [undefined,'false','TRUE','1'])assert.equal(webSignInAdmissionVerified({...enabled,[key]:value}),false);
+ for(const webAdmission of [undefined,()=>false,()=>{throw Error('unavailable acknowledgement')}]){
+  let calls=0;const no=()=>{calls++;throw Error('must not run')};
+  const c=createAuthController({webAdmission,config:()=>config,store:no,provider:no,budget:no});
+  const start=await c.start(request('/api/auth/paypal/start',{method:'POST',origin:config.origin}));assert.equal(start.status,503);
+  assert.equal((await c.start(request('/api/auth/paypal/start',{method:'POST',origin:'https://foreign.example'}))).status,403);
+  const callback=await c.callback(request('/api/auth/paypal/callback?code=secret-code&state=secret-state',{cookies:{[TRANSACTION]:Buffer.alloc(32,8).toString('base64url')}}));
+  assert.equal(callback.status,303);assert.equal(callback.headers.get('location'),config.origin+'/dashboard?auth=failed#account');assert.equal(callback.headers.get('set-cookie'),null);assert.ok(!(await callback.text()).includes('secret-'));assert.equal(calls,0);
+ }
+});
+
+test('closing web admission preserves pending transaction and existing session/logout continuity',async()=>{
+ const h=await harness();const signed=await signIn(h);const session=signed.callback.cookies.get(SESSION).value;
+ const start=await h.controller.start(request('/api/auth/paypal/start',{method:'POST',origin:config.origin,cookies:{[SESSION]:session}}));
+ const transaction=start.cookies.get(TRANSACTION).value;const state=h.fixture.acceptAuthorization(start.headers.get('location'));
+ const before=h.store.transactions.size;h.setAdmission(false);h.setProviderAvailable(false);
+ const callback=await h.controller.callback(request(`/api/auth/paypal/callback?code=fixture-code&state=${state}`,{cookies:{[TRANSACTION]:transaction,[SESSION]:session}}));
+ assert.equal(callback.status,303);assert.equal(callback.headers.get('set-cookie'),null);assert.equal(h.store.transactions.size,before);
+ assert.ok([...h.store.transactions.values()].some(t=>t.status==='pending'),'blocked callback must not consume pending transaction');
+ const current=await h.controller.session(request('/api/auth/session',{cookies:{[SESSION]:session}}));const body=await current.json();assert.equal(body.authenticated,true);assert.equal(body.loginAvailable,false);
+ assert.equal((await h.controller.logout(request('/api/auth/logout',{method:'POST',origin:config.origin,cookies:{[SESSION]:session,[TRANSACTION]:transaction}}))).status,204);
+ assert.equal((await (await h.controller.session(request('/api/auth/session',{cookies:{[SESSION]:session}}))).json()).authenticated,false);
+});
+
+test('closed web admission skips session discovery while preserving store validation',async()=>{
+ let providers=0,stores=0;const c=createAuthController({webAdmission:()=>false,config:()=>config,budget:async()=>({allowed:true,retryAfter:60}),store:()=>{stores++;return fakeStore()},provider:async()=>{providers++;throw Error('must not run')}});
+ assert.deepEqual(await (await c.session(request('/api/auth/session'))).json(),{authenticated:false,loginAvailable:false});assert.equal(stores,1);assert.equal(providers,0);
+});
+
+test('disabled/incomplete web callback drops sensitive query with fixed relative redirect and no backend',async()=>{
+ let calls=0;const fail=()=>{calls++;throw Error('must not run')};
+ const c=createAuthController({config:()=>null,webAdmission:fail,budget:fail,store:fail,provider:fail});
+ const r=await c.callback(new NextRequest('https://spoofed.example/api/auth/paypal/callback?code=secret-code&state=secret-state',{headers:{Host:'another-attacker.example'}}));
+ assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/dashboard?auth=failed#account');assert.equal(r.headers.get('set-cookie'),null);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('referrer-policy'),'no-referrer');assert.equal(await r.text(),'');assert.equal(calls,0);
+ assert.deepEqual(await (await c.session(request('/api/auth/session'))).json(),{authenticated:false,loginAvailable:false});
 });

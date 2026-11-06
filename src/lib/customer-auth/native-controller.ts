@@ -7,12 +7,15 @@ import type { NativeAuthStore } from "./native-store";
 import { NativeStoreError } from "./native-store";
 import { buildNativeReturnUrl, equalNativeHandles, hashNativeHandle, isCanonicalNativeHandle, newNativeHandle, NativeProtocolError, parseNativeAuthorizeForm, parseNativeCancelBody, parseNativeExchangeBody, parseNativeHandoffBody } from "./native-protocol";
 
+import { consumeAuthRequestBudget, type AuthBudgetConsumer, type AuthBudgetOperation } from "./request-budget";
+
 const BASE = "/api/auth/native";
 const BROWSER = "__Host-paypal-markets-native-browser";
 const HANDOFF = "__Host-paypal-markets-native-handoff";
 const COOKIE = "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=300";
 const CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://www.paypal.com https://www.sandbox.paypal.com";
 type Dependencies = {
+  budget?: AuthBudgetConsumer;
   config(): NativeAuthConfig | null;
   store(config: NativeAuthConfig): NativeAuthStore;
   provider(config: NativeAuthConfig): Promise<oidc.Configuration>;
@@ -103,11 +106,35 @@ export function createNativeAuthController(deps: Dependencies) {
   const now = deps.now ?? Date.now;
   const enabled = () => { const c = deps.config(); if (!c) throw new HttpError(503, "sign_in_unavailable"); return c; };
   const ready = async (c: NativeAuthConfig) => { const s = deps.store(c); if (!await s.ready()) throw new HttpError(503, "sign_in_unavailable"); return s; };
+  const admit = async (config: NativeAuthConfig, operation: AuthBudgetOperation): Promise<Response | null> => {
+    try {
+      const result = await (deps.budget ?? consumeAuthRequestBudget)(config, operation);
+      if (result.allowed) return null;
+      const response = error(429, "rate_limited"); response.headers.set("Retry-After", String(result.retryAfter)); return response;
+    } catch { return error(503, "sign_in_unavailable"); }
+  };
+  const budgeted = (operation: AuthBudgetOperation, handler: (request: Request) => Promise<Response>) => async (request: Request) => {
+    const config = deps.config();
+    if (config) {
+      const denied = await admit(config, operation);
+      if (denied) {
+        if (operation !== "native.callback") return denied;
+        const response = redirect(`${config.origin}${BASE}/failure`);
+        const retry = denied.headers.get("Retry-After"); if (retry) response.headers.set("Retry-After", retry);
+        return response;
+      }
+    }
+    return handler(request);
+  };
   const handlers = {
     async availability(request: Request) {
       const c = deps.config(); if (!c) return json({ loginAvailable: false });
       checkedUrl(request, c, "/availability");
-      try { return json({ loginAvailable: await deps.store(c).ready() }); } catch { return json({ loginAvailable: false }); }
+      try {
+        if (!await deps.store(c).ready()) return json({ loginAvailable: false });
+        await deps.provider(c);
+        return json({ loginAvailable: true });
+      } catch { return json({ loginAvailable: false }); }
     },
     async handoffs(request: Request) {
       const c = enabled(); checkedUrl(request, c, "/handoffs"); const previous = bearer(request, false);
@@ -185,5 +212,13 @@ export function createNativeAuthController(deps: Dependencies) {
       return html("<h1>Sign-in was not completed</h1><p>Return to PayPal Markets to cancel this attempt and try again. No payment was authorized.</p>");
     },
   };
-  return { availability: limited(handlers.availability, 16), handoffs: limited(handlers.handoffs, 8), authorizeGet: limited(handlers.authorizeGet, 8), authorizePost: limited(handlers.authorizePost, 8), callback: limited(handlers.callback, 8), exchange: limited(handlers.exchange, 8), cancel: limited(handlers.cancel, 4), session: limited(handlers.session, 16), logout: limited(handlers.logout, 4), failure: limited(handlers.failure, 8) };
+  const cleanCallback = (handler: (request: Request) => Promise<Response>) => async (request: Request) => {
+    const config = deps.config();
+    if (!config) return redirect(`${BASE}/failure`);
+    const response = await handler(request);
+    if (response.status < 400) return response;
+    const clean = redirect(`${config.origin}${BASE}/failure`), retry = response.headers.get("Retry-After");
+    if (retry) clean.headers.set("Retry-After", retry); return clean;
+  };
+  return { availability: limited(budgeted("native.availability", handlers.availability), 16), handoffs: limited(budgeted("native.handoffs", handlers.handoffs), 8), authorizeGet: limited(budgeted("native.authorizeGet", handlers.authorizeGet), 8), authorizePost: limited(budgeted("native.authorizePost", handlers.authorizePost), 8), callback: cleanCallback(limited(budgeted("native.callback", handlers.callback), 8)), exchange: limited(budgeted("native.exchange", handlers.exchange), 8), cancel: limited(handlers.cancel, 4), session: limited(budgeted("native.session", handlers.session), 16), logout: limited(handlers.logout, 4), failure: limited(handlers.failure, 8) };
 }

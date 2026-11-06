@@ -9,6 +9,12 @@ info:
     permissions. Account type is optional and is not an authorization role.
     All responses are no-store and use Referrer-Policy no-referrer. Sandbox and live provider configuration and
     eligibility must be independently verified before enabling this feature.
+    New web sign-in additionally requires separate explicit operator acknowledgements
+    for web edge controls and callback redaction. Missing acknowledgements block start503
+    and redirect configured callbacks to a fixed clean303failure without transaction
+    consumption. Existing session validation and logout remain available; loginAvailable
+    is false and discovery is skipped. These flags do not establish verified enforcement
+    and do not gate native admission or change the session context fingerprint.
 servers:
   - url: /
 paths:
@@ -42,6 +48,8 @@ paths:
               $ref: '#/components/headers/NoReferrer'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/Unavailable'
   /api/auth/paypal/callback:
@@ -53,12 +61,14 @@ paths:
         response. The server consumes the browser-bound transaction, validates
         state, PKCE, nonce, ID-token signature and claims, and userinfo subject.
         Success rotates any prior application session and sets a new Secure,
-        HttpOnly, SameSite=Lax host-only session cookie. Errors redirect to a
-        fixed local account page with a generic failure marker. Callback
+        HttpOnly, SameSite=Lax host-only session cookie. Provider errors redirect to a
+        fixed local account page with a generic failure marker. Enabled callback budget/concurrency/storage failures redirect303 to that same fixed URL before consuming the transaction; exhaustion also carries Retry-After1..60. Callback
         responses do not clear the short-lived transaction cookie, avoiding
         deletion of a newer sign-in cookie by a delayed response. Provider
         credentials, tokens, account identifiers and authorization codes are
         never returned to the page or included in the redirect destination.
+        Disabled or incomplete configuration returns a fixed relative Location
+        /dashboard?auth=failed#account without backend access or request-host interpolation.
       parameters:
         - name: code
           in: query
@@ -72,6 +82,8 @@ paths:
           in: query
           required: false
           schema: { type: string }
+      # Disabled/incomplete configuration redirects303 using a fixed relative Location,
+      # without request Host/URL interpolation, cookie mutation or backend/provider work.
       responses:
         '303':
           description: Redirect to the fixed local account page after success or generic failure.
@@ -86,8 +98,6 @@ paths:
               schema: { type: string, const: no-store }
             Referrer-Policy:
               $ref: '#/components/headers/NoReferrer'
-        '503':
-          $ref: '#/components/responses/Unavailable'
   /api/auth/session:
     get:
       operationId: getCustomerSession
@@ -140,6 +150,8 @@ paths:
                       dataScope:
                         type: string
                         pattern: '^v1_[A-Za-z0-9_-]{43}$'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/Unavailable'
   /api/auth/logout:
@@ -185,6 +197,20 @@ components:
       description: Must exactly match the configured public HTTPS origin.
       schema: { type: string, format: uri }
   responses:
+    RateLimited:
+      description: Shared global operation budget exhausted. Existing session cookies remain unchanged. Not a per-client or verified edge limit.
+      headers:
+        Retry-After:
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 60 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Referrer-Policy:
+          $ref: '#/components/headers/NoReferrer'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
       description: The request origin is missing or does not match.
       headers:
@@ -197,7 +223,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unavailable:
-      description: Sign-in or session storage is disabled, unconfigured, temporarily unavailable, or at a retained-record capacity limit. Capacity failures use the same generic response as other unavailable states.
+      description: Sign-in, request-budget storage or session storage is disabled, unconfigured, temporarily unavailable, or at a retained-record capacity limit. Capacity failures use the same generic response as other unavailable states.
       headers:
         Cache-Control:
           required: true

@@ -1,0 +1,4 @@
+$kind: collection
+description: Customer website sign-in using an explicitly enabled PayPal authorization code flow and a separate durable server-side session store. Sign-in does not grant merchant, payment, wallet, internal management, or other provider permissions. Account type is optional and is not an authorization role. All responses are no-store. Sandbox and live provider configuration and eligibility must be independently verified before enabling this feature.
+variables:
+  baseUrl: http://127.0.0.1:9

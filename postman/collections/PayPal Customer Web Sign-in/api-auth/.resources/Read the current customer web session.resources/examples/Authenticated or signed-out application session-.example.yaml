@@ -1,0 +1,32 @@
+$kind: http-example
+name: Authenticated or signed-out application session.
+request:
+  url: "{{baseUrl}}/api/auth/session"
+  method: GET
+  headers:
+    Accept: application/json
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Referrer-Policy
+      value: no-referrer
+      disabled: false
+      description: "(Required) "
+    - key: Cache-Control
+      value: no-store
+      disabled: false
+      description: "(Required) "
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "authenticated": false,
+        "loginAvailable": false
+      }
+order: 1000

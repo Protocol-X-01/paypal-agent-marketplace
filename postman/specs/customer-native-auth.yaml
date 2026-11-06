@@ -15,11 +15,24 @@ servers:
     description: Deliberately unreachable placeholder; not a deployable service.
 x-implementation-status: local-server-prototype-default-disabled
 security: []
+# Enabled handlers use shared per-operation database budgets, except logout, cancellation and inert failure HTML.
+# Exhaustion:429 with Retry-After1..60; unavailable budget database/migration/clock:503.
+# Disabled availability remains200false without a database budget call; disabled callbacks use a fixed relative303; other disabled routes retain503.
+# Budgets are global demo defaults, not client fairness or verified edge protection.
 paths:
   /api/auth/native/availability:
     get:
       operationId: nativeSignInAvailability
-      summary: Proposed capability preflight, not proof of provider eligibility
+      summary: Store and cached provider-discovery preflight, not proof of provider eligibility
+      description: >-
+        Disabled mode returns loginAvailable false without store or provider access.
+        When enabled, admitted requests first require session-store readiness, then
+        existing cached PayPal discovery. Store or discovery failure returns200false;
+        recovery is visible on a subsequent successful cached-discovery check.
+        This does not validate client consent or provider entitlement and never
+        authenticates a session. Existing sessions, cancellation and logout do not
+        depend on provider discovery. Budget exhaustion returns429; unavailable
+        budget storage returns503 without probing the provider.
       responses:
         '200':
           description: False while disabled or prerequisites fail. No identity or cookies.
@@ -35,6 +48,7 @@ paths:
                 properties:
                   loginAvailable: { type: boolean }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/auth/native/handoffs:
     post:
       operationId: createNativeHandoff
@@ -161,6 +175,8 @@ paths:
         Redirects only to the configured verified HTTPS app link, with code and app
         state. Never returns provider tokens, session tokens, identity or dataScope.
         Errors use a fixed local failure page without reflecting provider error text.
+        Disabled or incomplete configuration returns a fixed relative Location
+        /api/auth/native/failure without backend access or request-host interpolation.
       parameters:
         - in: query
           name: code
@@ -171,15 +187,17 @@ paths:
         - in: query
           name: error
           schema: { type: string, maxLength: 128 }
+      # Enabled budget/outer concurrency failures redirect303 to the fixed failure URL,
+      # without echoing code/state or clearing cookies; exhausted budgets include Retry-After1..60.
+      # Disabled/incomplete configuration redirects303 using a fixed relative Location,
+      # without request Host/URL interpolation, cookie mutation or backend/provider work.
       responses:
         '303':
           description: Fixed verified app link on success, fixed local failure destination otherwise.
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
             Referrer-Policy: { schema: { type: string, const: no-referrer } }
-            Location: { schema: { type: string, format: uri, maxLength: 512 } }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Unavailable' }
+            Location: { schema: { type: string, format: uri-reference, maxLength: 512 } }
   /api/auth/native/failure:
     get:
       operationId: showNativeSignInFailure
@@ -390,11 +408,11 @@ components:
       headers: *privacyHeaders
       content: *errorContent
     RateLimited:
-      description: Shared edge or database quota reached; never automatically retry sign-in.
+      description: Shared global operation budget, per-process concurrency or retained-record quota reached. No per-client fairness or verified edge guarantee. Never automatically retry sign-in.
       headers:
         Cache-Control: { schema: { type: string, const: no-store } }
         Referrer-Policy: { schema: { type: string, const: no-referrer } }
-        Retry-After: { schema: { type: integer, minimum: 1, maximum: 86400 } }
+        Retry-After: { schema: { type: integer, minimum: 1, maximum: 60 } }
       content: *errorContent
     Unavailable:
       description: Disabled, unconfigured, store/provider unavailable or internal timeout; fail closed without provider detail.

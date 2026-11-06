@@ -1,0 +1,21 @@
+$kind: http-request
+name: GET paypal-callback
+order: 4000
+url: "{{baseUrl}}/api/auth/native/paypal/callback"
+method: GET
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Disabled native route has expected status", () => { pm.response.to.have.status(303); });
+      pm.test("Native response privacy headers", () => {
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+        pm.expect(pm.response.headers.get("Content-Security-Policy")).to.include("default-src 'none'");
+      });
+      pm.test("Disabled callback uses a fixed relative destination without cookies", () => {
+        pm.expect(pm.response.headers.get("Location")).to.eql("/api/auth/native/failure");
+        pm.expect(pm.response.headers.has("Set-Cookie")).to.eql(false);
+      });

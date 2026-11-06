@@ -1,0 +1,17 @@
+$kind: http-request
+name: GET authorize
+order: 2000
+url: "{{baseUrl}}/api/auth/native/authorize"
+method: GET
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Disabled native route has expected status", () => { pm.response.to.have.status(503); });
+      pm.test("Native response privacy headers", () => {
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+        pm.expect(pm.response.headers.get("Content-Security-Policy")).to.include("default-src 'none'");
+      });
