@@ -23,6 +23,14 @@ services:
         value: USD
       - key: CHANNEL3_LANGUAGE
         value: en
+      # Public catalog identifier; uses the separately created shared collection.
+      - key: CHANNEL3_COLLECTION_ID
+        value: 01M6RXV6KZC4ZPRAE6SNQ6EB96
+      # Sign-in awaits its separate database, provider and device acceptance.
+      - key: PAYPAL_LOGIN_ENABLED
+        value: "false"
+      - key: PAYPAL_NATIVE_LOGIN_ENABLED
+        value: "false"
       - key: CHANNEL3_API_KEY
         sync: false
       - key: PAYPAL_CLIENT_ID
@@ -32,4 +40,12 @@ services:
       - key: PAYPAL_WEBHOOK_ID
         sync: false
       - key: NEXT_PUBLIC_AG_GRID_LICENSE
+        sync: false
+      - key: COINGECKO_DEMO_API_KEY
+        sync: false
+      # Secret prompts apply only to new Blueprint creations. Add values
+      # manually to existing services because later syncs ignore sync:false.
+      - key: ELASTIC_OTLP_ENDPOINT
+        sync: false
+      - key: ELASTIC_API_KEY
         sync: false

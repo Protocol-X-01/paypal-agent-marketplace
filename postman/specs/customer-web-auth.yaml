@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: PayPal Markets Customer Web Sign-in
+  version: 0.1.0
+  description: >-
+    Customer website sign-in using an explicitly enabled PayPal authorization
+    code flow and a separate durable server-side session store. Sign-in does
+    not grant merchant, payment, wallet, internal management, or other provider
+    permissions. Account type is optional and is not an authorization role.
+    All responses are no-store and use Referrer-Policy no-referrer. Sandbox and live provider configuration and
+    eligibility must be independently verified before enabling this feature.
+servers:
+  - url: /
+paths:
+  /api/auth/paypal/start:
+    post:
+      operationId: startCustomerSignIn
+      summary: Start a same-origin customer sign-in
+      description: >-
+        A same-origin top-level form POST begins a short-lived, single-use
+        authorization transaction and redirects to PayPal. The browser receives
+        a Secure, HttpOnly, SameSite=Lax, host-only transaction cookie. No
+        client-provided return URL or account type is accepted. Transactions
+        are bound to the active login configuration and cannot complete after
+        that configuration changes.
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '303':
+          description: Redirect to the configured and validated PayPal authorization endpoint.
+          headers:
+            Location:
+              required: true
+              schema: { type: string, format: uri }
+            Set-Cookie:
+              required: true
+              schema: { type: string }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/auth/paypal/callback:
+    get:
+      operationId: completeCustomerSignIn
+      summary: Complete a PayPal authorization response
+      description: >-
+        PayPal redirects the browser here with a single-use authorization
+        response. The server consumes the browser-bound transaction, validates
+        state, PKCE, nonce, ID-token signature and claims, and userinfo subject.
+        Success rotates any prior application session and sets a new Secure,
+        HttpOnly, SameSite=Lax host-only session cookie. Errors redirect to a
+        fixed local account page with a generic failure marker. Callback
+        responses do not clear the short-lived transaction cookie, avoiding
+        deletion of a newer sign-in cookie by a delayed response. Provider
+        credentials, tokens, account identifiers and authorization codes are
+        never returned to the page or included in the redirect destination.
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '303':
+          description: Redirect to the fixed local account page after success or generic failure.
+          headers:
+            Location:
+              required: true
+              schema: { type: string }
+            Set-Cookie:
+              schema: { type: string }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/auth/session:
+    get:
+      operationId: getCustomerSession
+      summary: Read the current customer web session
+      description: >-
+        An absent, expired, or revoked cookie returns authenticated false.
+        The optional provider account type only chooses an initial presentation;
+        PREMIER and other unrecognized values remain unknown until their
+        semantics for this application are established.
+        it is never proof of permission to perform a business action. An
+        authenticated session also returns a stable, pseudonymous application
+        dataScope derived from the validated issuer and subject. It is not an
+        authentication credential, an anonymous identifier, or a sync feature.
+        Existing shared guest data is not automatically assigned to it. A
+        session is not valid after the login environment, issuer, client ID
+        or secret, origin, scope or signing-key configuration changes. An unavailable
+        session store cannot confirm an existing cookie. The
+        loginAvailable flag means that the enabled feature passed current
+        store and provider-metadata preflight; it does not prove the client
+        credentials, customer consent, or PayPal scope eligibility. Disabled
+        or incomplete configuration with no session returns false for both.
+      responses:
+        '200':
+          description: Authenticated or signed-out application session.
+          headers:
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    required: [authenticated, loginAvailable]
+                    properties:
+                      authenticated: { type: boolean, const: false }
+                      loginAvailable: { type: boolean }
+                  - type: object
+                    additionalProperties: false
+                    required: [authenticated, loginAvailable, accountType, dataScope]
+                    properties:
+                      authenticated: { type: boolean, const: true }
+                      loginAvailable: { type: boolean }
+                      accountType:
+                        type: string
+                        enum: [personal, business, unknown]
+                      dataScope:
+                        type: string
+                        pattern: '^v1_[A-Za-z0-9_-]{43}$'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/auth/logout:
+    post:
+      operationId: signOutCustomer
+      summary: Revoke the current application session
+      description: >-
+        A same-origin POST invalidates the current session family and any
+        pending sign-in attached to the supplied session or transaction cookie,
+        then clears both cookies. A callback that finishes later cannot restore
+        that family's session. Independently bootstrapped guest flows without
+        a common established session or transaction cookie are not linked.
+        This signs out of this app;
+        it does not make a PayPal consent-revocation request.
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: The application session is absent or revoked.
+          headers:
+            Set-Cookie:
+              required: true
+              schema: { type: string }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              $ref: '#/components/headers/NoReferrer'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  headers:
+    NoReferrer:
+      required: true
+      schema: { type: string, const: no-referrer }
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Must exactly match the configured public HTTPS origin.
+      schema: { type: string, format: uri }
+  responses:
+    Forbidden:
+      description: The request origin is missing or does not match.
+      headers:
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Referrer-Policy:
+          $ref: '#/components/headers/NoReferrer'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: Sign-in or session storage is disabled, unconfigured, temporarily unavailable, or at a retained-record capacity limit. Capacity failures use the same generic response as other unavailable states.
+      headers:
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Referrer-Policy:
+          $ref: '#/components/headers/NoReferrer'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { type: string }

@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: PayPal Markets Local AI Market Insight
+  version: 0.1.0
+  description: >-
+    Local demonstration only. Explains a fixed tracked asset's public
+    CoinGecko OHLC data. No prompt, account data, holdings, trades, or
+    customer-provided facts are accepted. OpenAI receives only the derived
+    public source context and is called with response storage disabled.
+servers:
+  - url: http://127.0.0.1:9
+paths:
+  /api/ai/market-insight:
+    post:
+      operationId: explainPublicMarket
+      summary: Explain a selected public-market series
+      description: >-
+        Requires an explicitly enabled local development service, exact
+        canonical loopback Origin and Host, and a shared local attempt budget.
+        The service must itself be bound to loopback without an external proxy;
+        these header checks are not authentication. Returned commentary is
+        model-generated, may be inaccurate, and is not a PayPal trading quote
+        or personalized investment advice. Candle closes later than provider
+        retrieval time are excluded. No automatic provider retries occur.
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [coinId, currency, days]
+              properties:
+                coinId: { type: string, enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd] }
+                currency: { type: string, enum: [USD, GBP, EUR, AED, AUD, BRL, CAD, CHF, CNY, CZK, DKK, HKD, HUF, ILS, INR, JPY, MXN, MYR, NOK, NZD, PHP, PLN, SEK, SGD, THB, TWD, ZAR] }
+                days: { type: integer, enum: [1, 7, 30, 90, 365] }
+      responses:
+        '200':
+          description: Generated explanation and the independently calculated public source context.
+          headers:
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [kind, generatedAt, model, insight, source, disclaimer]
+                properties:
+                  kind: { const: market }
+                  generatedAt: { type: string, format: date-time }
+                  model: { type: string }
+                  disclaimer: { type: string }
+                  insight: { $ref: '#/components/schemas/Insight' }
+                  source:
+                    type: object
+                    additionalProperties: false
+                    required: [provider, coinId, currency, days, retrievedAt, sampleCount, candleIntervalMinutes, timestampKind, priceBasis, rangeBasis, firstTimestamp, lastTimestamp, firstPrice, lastPrice, low, high, changePercent]
+                    properties:
+                      provider: { const: CoinGecko }
+                      coinId: { type: string }
+                      currency: { type: string }
+                      days: { type: integer }
+                      retrievedAt: { type: string, format: date-time }
+                      sampleCount: { type: integer, minimum: 2 }
+                      candleIntervalMinutes: { type: integer, enum: [30, 240, 5760] }
+                      timestampKind: { const: close }
+                      priceBasis: { const: candle_close }
+                      rangeBasis: { const: candle_high_low }
+                      firstTimestamp: { type: integer, description: First actual candle close as Unix milliseconds. }
+                      lastTimestamp: { type: integer, description: Last actual candle close as Unix milliseconds. }
+                      firstPrice: { type: number }
+                      lastPrice: { type: number }
+                      low: { type: number }
+                      high: { type: number }
+                      changePercent: { type: [number, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429':
+          description: Shared local attempt budget or concurrency limit reached.
+          headers:
+            Retry-After: { schema: { type: string } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+components:
+  schemas:
+    Insight:
+      type: object
+      additionalProperties: false
+      required: [headline, summary, observations, caution]
+      properties:
+        headline: { type: string, minLength: 1, maxLength: 120 }
+        summary: { type: string, minLength: 1, maxLength: 500 }
+        observations: { type: array, minItems: 1, maxItems: 3, items: { type: string, minLength: 1, maxLength: 300 } }
+        caution: { type: string, minLength: 1, maxLength: 300 }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    Error:
+      description: Request rejected, source or provider unavailable, invalid provider response, or deadline exceeded. Raw upstream details are never exposed.
+      headers:
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

@@ -1,0 +1,117 @@
+# PayPal business reporting and separate internal-app research
+
+Status: **2026-11-06**. The customer app's Business area is for **PayPal Business account holders**. It displays an optional fictional example or a self-provided aggregate CSV held in screen memory. A separate opt-in Activity Download preview reads a narrow subset of a single account's export locally. The app does not connect a business account, retrieve live account data, calculate customer retention, or send alerts. A displayed report total is not a PayPal balance.
+
+PayPal's internal customer operations and leadership experience is a **separate local application** under [`apps/management`](../apps/management/README.md), outside the customer app. Its first scaffold opens disconnected and offers an explicitly selected fictional cohort report, with source, population, period boundaries, denominators and completeness visible. It has no internal company feed or staff access. The research below describes the requirements for a future real connection; no internal company source, staff entitlement or organizational approval has been established here.
+
+## Separate internal reporting model and intended workflow
+
+In the internal app, operations should be able to understand permitted aggregate customer activity and investigate changes; leadership should be able to review trends and decision-ready summaries. The local scaffold demonstrates these presentations with invented, disjoint cohorts and reconciled event totals; it does not establish real customer growth, health or retention. In the customer app, the report selector only changes which example indicators or imported-report cards are emphasized. It is a local preference, **not** a staff role, a sign-in or an authorization boundary. Those sales-channel and transaction figures are fictional or self-provided payment aggregates and do not count unique customers.
+
+An initial internal integration needs a PayPal-authorized company data owner and an approved feed whose customer coverage, permitted purposes, provenance, refresh cadence, completeness, and metric definitions are agreed. It also needs company SSO or an equivalent approved staff identity, server-side permission checks on every report, data minimization, audited access, small-group and differencing controls, and approved retention/deletion rules. Specific source, identity, scope, cohort definitions, privacy thresholds, organizational approval, and operational owners remain open decisions; this prototype does not assume such access exists.
+
+When the company source is defined, keep the feed adapter server-side and return only authorized aggregates with their source, covered population, metric definition and version, period, unit/currency where relevant, provider update time where known, retrieval time, and completeness/staleness state. Source freshness and retrieval time are distinct. Fail closed when identity, permission, source, period or completeness cannot be established; unavailable data is not zero. Design role policy separately from presentation, and test both permitted and denied staff reads. No internal endpoint or adapter is implemented here.
+
+The existing parser accepts only a limited two-period sales-channel aggregate format; it does not validate the submitter's identity, authority, population coverage, source-timestamp authenticity, or privacy threshold. It cannot stand in for the future internal feed. Active-customer and retention metrics remain gated until an approved customer identity and cohort model exists. The local single-account preview remains an optional, separate tool and must not be presented as company-wide customer reporting.
+
+## Separate merchant reporting research
+
+The following PayPal public-API research concerns a merchant's own reporting or appropriately authorized partner access. It is retained as a separate exploratory track; it does **not** establish access to PayPal's internal customer population or identify the company feed needed above.
+
+### Verified provider behavior
+
+- [Transaction Search](https://developer.paypal.com/api/transaction-search/v1/search-get) exposes `GET /v1/reporting/transactions` with the OAuth scope `https://uri.paypal.com/services/reporting/search/read`. `start_date` and `end_date` are required RFC 3339 timestamps with seconds; each request covers at most 31 days. PayPal documents up to three years of history and says executed transactions can take up to three hours to appear.
+- The default response section is `transaction_info`, and the default is balance-affecting records only. Page size defaults to 100 and can be 1–500; the documented example uses page 1 for the first page. PayPal explicitly warns that a transaction ID may appear on two reporting rows, one balance-affecting and one not. Do not assume the ID uniquely identifies a reporting event.
+- Even `transaction_info` can contain account identifiers, transaction subject and note fields, amounts and other details. Requesting `payer_info`, `shipping_info` or `fields=all` would disclose additional customer information. The response may include `last_refreshed_datetime`, page counts and totals; treat absent or inconsistent fields as incomplete rather than inventing values. See the [transaction schema](https://developer.paypal.com/api/transaction-search/v1/schema.json).
+- PayPal describes first-party calls as calls for the business itself. Calls for other merchants are partner calls; its Transaction Search schema says third-party use requires the PayPal partner network. PayPal's [request guidance](https://developer.paypal.com/api/make-api-requests) describes merchant-specific `PayPal-Auth-Assertion`, platform attribution, and explicit consent from each represented merchant. An assertion identifies the merchant; it does not replace consent, eligibility or this app's authorization checks.
+- PayPal also documents a [daily summary endpoint](https://developer.paypal.com/api/transaction-search/v1/accounting-dailysummary-get) with a separate `https://uri.paypal.com/services/reporting/dataapiserv/daily/read` scope and required `from_date`, `to_date` and `locale`. Its documented array-shaped response does not establish the meanings needed for this dashboard's sales or refund metrics. Do not silently substitute it for Transaction Search without verified semantics and access.
+
+### Merchant-specific access and ownership model
+
+1. Authenticate each app user and resolve their organization and business role on the server. The app must check access on every read; a client-provided merchant ID, local preference or partner assertion is not proof of access. A business-team view and a leadership view may present different aggregates, but neither grants broader merchant access by itself.
+2. Bind a PayPal merchant to an organization only through a verified onboarding/ownership process. For a business's own first-party app, verify that the authenticated organization is authorized to use the linked merchant account and the granted reporting scope. For another business, verify partner eligibility, that merchant's explicit grant, the permitted reporting capability and the correct merchant-to-organization binding. A developer application's credentials alone do not authorize a general multi-merchant feed.
+3. Keep OAuth credentials, tokens and merchant assertions server-side. Use separate sandbox and live configuration, approved secret storage and rotation. Do not put tokens or merchant identifiers in URLs, browser storage, analytics, client bundles or client-generated assertions. Verify the granted scope and handle denied, expired and revoked access without falling back to a more privileged identity.
+4. Store only the minimum grant and audit metadata needed to enforce the connection and revocation policy. Define its owner, encryption, retention, deletion and access-review rules before implementing persistence. Disconnecting a merchant must prevent future reads and trigger the approved deletion process; previously cached aggregates must not remain visible as live data.
+
+The precise login provider, account-linking and consent flows, tenant-role model, retention periods, partner capabilities, access-review process and treatment of shared merchant views remain **decisions and implementation gates** for that separate use case. PayPal attribution headers or an app-level role name are not evidence those gates have passed. Neither a first-party merchant call nor a partner call is a substitute for PayPal's authorized internal customer feed and staff controls.
+
+### Merchant reporting pipeline and data boundaries
+
+If a separate merchant-reporting feature is approved in the future, start with one authorized merchant and produce aggregates server-side. A request must resolve the merchant from the verified server-side binding, then retrieve only the fields needed for an approved metric. Extract required event code, status, timestamp, currency and exact amount into a bounded internal representation; discard unrelated fields and release raw response references as soon as practical. Never log provider payloads, transaction IDs, account identifiers, free-text fields, tokens or unredacted errors. JavaScript memory release is not guaranteed immediate zeroization.
+
+Use two consecutive complete 7- or 30-day UTC reporting periods as the initial product contract. Two 30-day periods require at least two provider date ranges, plus every page; never add currencies together or use display-currency conversion as settlement data. Parse decimal money strings into exact integer minor units, with an explicitly versioned currency scale, and reject values that cannot be represented exactly. The current offline parser's pinned ISO list is a starting point, not proof that every PayPal-reported currency or scale is supported.
+
+The source adapter must fail closed on an incomplete range, missing page, provider error, unsupported money, unverifiable direction or unresolved event identity. `RESULTSET_TOO_LARGE` and other provider errors are not empty datasets. Bound page count, response size, execution time and concurrency; on overflow or inconsistent pagination, return an explicit incomplete state. Do not follow arbitrary provider-supplied URLs with credentials. The provider's inclusive/exclusive date behavior, ordering, page stability while data changes and row-identity rules must be verified in a controlled sandbox before building a range-splitting or deduplication algorithm. In particular, neither a bare transaction ID nor an invented composite key proves two API rows are duplicates.
+
+Each displayed result should identify the merchant-authorized PayPal source, UTC period boundaries, included event definitions, selected currency, provider refresh timestamp when supplied, retrieval time, exclusions and incomplete/stale status. Retrieval time is not provider freshness. A provider refresh timestamp does not prove every possible event has arrived. A missing or failed request must never display a zero or a successful/live badge. Three-hour reporting latency makes this a delayed reporting view, not a real-time transaction monitor.
+
+Elastic or other observability may collect coarse service health, request outcome and latency only under an approved telemetry policy. It must not receive report rows, customer or merchant identifiers, transaction amounts, search text, credentials or raw errors by default. Aggregate results still need tenant authorization and an approved small-group/differencing policy; aggregation alone is not an anonymity guarantee.
+
+### Experimental sandbox first-page inspection
+
+`src/lib/paypal-business-sample.ts` is an isolated server-only building block,
+not an app endpoint or a connected report. A caller must explicitly supply a
+transport and token; the module does not discover credentials, authenticate a
+user, establish a merchant grant, or select a live PayPal host. It requests
+only `transaction_info` and balance-affecting records for one 7- or 30-day UTC
+range, with page 1 and a page size of 100. The request disables caching and
+redirects, limits a response to 256 KiB, and times out after five seconds.
+
+On a parseable response it returns only the number of entries in the received
+`transaction_details` array, always tagged `complete: false` and
+`metrics: unavailable`. This is an observation about one response, not a
+sales, transaction, customer or refund count and not evidence the requested
+period is complete. Other response fields and provider errors are not returned
+or logged. Raw data may temporarily exist in process memory and JavaScript
+cannot guarantee zeroization. A timeout, denied request, malformed response or
+oversized body returns a generic unavailable state, never zero activity.
+
+The local subset contract is
+`postman/specs/paypal-transaction-search-subset.yaml`; the fixture collection
+defaults to an unusable loopback port and uses a fictional token. The simulation
+uses synthetic data in a loopback-only network namespace. Neither proves real
+PayPal behavior or merchant access. The provider documentation describes its
+page query as zero-relative while its example identifies page 1 as the first
+page, and describes the response page as zero-relative. The request boundary,
+response-page interpretation, page stability, event direction, row identity,
+merchant ownership and consent all remain unverified. No UI or financial
+metric should consume this inspection until those gates and the other access,
+privacy and reconciliation requirements in this document are satisfied.
+
+### Candidate metrics for a separate merchant report
+
+These definitions are **proposals**, not existing metrics or a claim of full PayPal activity. Their event allowlist, direction, status and source semantics need product/finance review and sandbox evidence before display.
+
+| Audience | Candidate | Definition and limits |
+| --- | --- | --- |
+| Teams | Included checkout events and gross amount | Count approved, successfully completed incoming checkout **events** and sum their gross amounts in one currency. Start by evaluating `T0006` Express Checkout and `T0007` standard web checkout. This is not all sales, net revenue, settled cash or a count of unique customers. Gross may include tax and shipping. |
+| Teams | Included refund amount | Sum approved outgoing payment-refund events during the period, such as `T1107` and `T1120`, in the same currency. Exclude fee reversal/refund events such as `T1108` and `T1109`, chargebacks and unknown event types from this candidate; show the exclusion count and criteria. |
+| Leadership | Checkout activity change | Compare the count of the same included events over consecutive complete, equal-length periods. Show unavailable when the earlier count is zero or either period is incomplete. Do not call this customer growth or retention. |
+| Leadership | Period refund-to-checkout ratio | Divide refund amount occurring in the period by included checkout gross in that period. Refunds may relate to older sales, so this is not a cohort refund rate and can exceed 100%; show unavailable if the denominator is zero. |
+
+[PayPal's T-code reference](https://developer.paypal.com/reports/reference/t-codes/) says a code can represent either credit or debit depending on the subject. A code or status alone is therefore insufficient to establish incoming sales or outgoing refunds. Require verified direction and event identity for the source; surface the coverage and all excluded/unknown classes. The API documents successful `S`, pending `P`, denied `D` and fully reversed `V` statuses, but which statuses belong in each proposed measure must be reviewed. Never count every `T11` event as a customer refund. Do not infer online/in-person segments from incomplete records or assign a refund to a sales channel without a verified link.
+
+Retention, repeat customers, customer health and cross-merchant rollups need a separately consented, reliable identity and cohort definition, appropriate data rights, ownership checks and privacy thresholds. The proposed minimized `transaction_info` path does not establish them. Keep those indicators unavailable until that work is complete.
+
+### Local single-account Activity Download preview and future converter
+
+The website's explicitly opted-in local preview reads one bounded Activity Download CSV and counts only rows with `T0006`/`T0007`, `Completed` and `Balance Impact` equal to `Credit` across two user-confirmed 7- or 30-day UTC periods. It requires an explicit UK/US date order, English status/impact values, UTC/GMT timezones, 17-character transaction IDs, no duplicate IDs and at least one row in each selected period. It reports other rows as excluded, withholds change when the prior included count is zero, and never calculates amounts or refunds. These are user-provided, unverified *report-row* counts, not unique customers or complete sales. The browser and OS may retain copies of the selected file; JavaScript cannot guarantee memory zeroization. Only synthetic data has been validated; actual merchant exports and sandbox reconciliation remain unverified.
+
+PayPal's [Activity Download documentation](https://developer.paypal.com/reports/activity-download/) says its mandatory columns include counterparty `Name`, `From Email Address` and `To Email Address`; dates, times and amounts are localized. `Transaction Event Code` is unselected by default, while `Type` is a non-unique description. The selected-by-default `Balance Impact` states `Credit`, `Debit` or `Memo`; [PayPal's T-code reference](https://developer.paypal.com/reports/reference/t-codes/) describes a `T0006` credit as seller-side. The existing aggregate-only CSV importer remains separate and is not a raw PayPal export importer.
+
+A broader future converter that interprets monetary amounts should:
+
+- Explain the personal-data content before selection; process a bounded CSV locally, without upload, persistence, analytics or row-level display. Parse by header, not position. Require `Date`, `Time`, `TimeZone`, `Status`, `Currency`, `Gross`, `Transaction ID` and the explicitly enabled `Transaction Event Code`; reject duplicate or missing headers. Reject unsupported formats, oversized or incomplete files and split/ZIP exports until intentionally supported.
+- Ask for the export's actual date order, number format and timezone; validate them against the data. Reject ambiguous numeric grouping, unsupported currencies, invalid dates, unknown timezone abbreviations and nonexistent or ambiguous daylight-saving instants rather than guessing. Derive UTC periods only after resolving those inputs. PayPal describes the export date/time as transaction **completion** time; do not assume it matches Transaction Search's initiation or update timestamps.
+- Consider only the candidate event codes and statuses above, provided the merchant-side credit/debit interpretation of that export's `Gross` is verified for the specific format. Positive-sale/negative-refund mapping is a design hypothesis, not a verified universal PayPal contract. Suppress ambiguous rows/results; separately show excluded counts. Do not infer channels or silently convert an unsupported subset into the existing `online`, `in_person` or `other` totals.
+- Treat repeated transaction IDs in one Activity Download as a reconciliation error requiring review, not a reason to silently drop a row. The export documentation calls its transaction ID unique, whereas Transaction Search explicitly permits repeated IDs; do not transfer this file-specific rule to API event identity. A refund can refer to an earlier sale and does not need an invented channel assignment for the period-level ratio.
+- Require the user to confirm that the export covers both entire requested periods; an empty selection is not evidence of zero activity. Label its provenance as a user-provided file and its download time as user-stated. Do not present the file's timestamp as PayPal API freshness. Release raw-file references as soon as practical; browsers, the operating system, clipboard or keyboard may retain their own copies.
+
+The converter must disclose that its metrics cover only the supported subset. It cannot prove merchant ownership or authorization, produce a complete account statement, or establish customer retention. Its output must retain a distinct source and coverage description rather than being passed into the existing report as if PayPal had verified it.
+
+## Decisions, tests and release gates
+
+1. Identify the internal feed owner and authorized use, staff identity and server-side permission model, permissible fields, customer/cohort definitions, coverage and provenance, privacy thresholds, retention and deletion policy. Confirm that the selected source and access are explicitly authorized by PayPal. These are not answered by public merchant Transaction Search documentation.
+2. Before implementing an internal API, define and lint its actual contract, then build local Postman examples and a mock/simulation. Test allowed and denied staff access, source coverage and freshness, incomplete/error states, supported metrics, mixed currencies, small groups, and sensitive-data exclusion from outputs and logs using synthetic data. Validate actual source semantics and permissions with authorized data before presenting figures as complete.
+3. For a future converter, use invented files to test required and reordered headers, quoted/multiline personal fields, both declared date orders, DST gaps/folds, ambiguous number formats, unsupported currencies, all included/excluded event codes, reversed/pending entries, duplicate IDs, earlier-sale refunds, incomplete export coverage, size limits and clearing on leave. Assert that no identifying text appears in output, errors or telemetry.
+4. For any separate merchant-reporting feature, implement authenticated ownership and consent with secure storage and revocation, and validate sandbox permissions and reconciliation against a merchant-authorized source. A reviewed deployment and applicable production controls are required before using real data. Publishing Postman artifacts, enabling customer alerts and aggregating across merchants are separate decisions.

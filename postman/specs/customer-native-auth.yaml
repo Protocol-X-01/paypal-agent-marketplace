@@ -1,0 +1,402 @@
+openapi: 3.1.0
+info:
+  title: PayPal Markets Native Sign-in — Local Server Prototype
+  version: 0.2.0-local
+  description: >-
+    Local server prototype, disabled by default. These routes have synthetic server tests and local disabled-state checks; no real native sign-in or device flow is established.
+    Native application sessions are separate from web cookies and from PayPal tokens.
+    Account type chooses presentation only, never payment or merchant authorization.
+    All responses must be no-store and no-referrer. Canonical HTTPS deployment,
+    verified app links, provider eligibility, durable storage and shared abuse
+    controls are prerequisites. See docs/CUSTOMER-NATIVE-AUTH.md for transaction
+    ordering, quotas, lifecycle and device-storage invariants.
+servers:
+  - url: https://native-auth.invalid
+    description: Deliberately unreachable placeholder; not a deployable service.
+x-implementation-status: local-server-prototype-default-disabled
+security: []
+paths:
+  /api/auth/native/availability:
+    get:
+      operationId: nativeSignInAvailability
+      summary: Proposed capability preflight, not proof of provider eligibility
+      responses:
+        '200':
+          description: False while disabled or prerequisites fail. No identity or cookies.
+          headers: &privacyHeaders
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [loginAvailable]
+                properties:
+                  loginAvailable: { type: boolean }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/auth/native/handoffs:
+    post:
+      operationId: createNativeHandoff
+      summary: Proposed challenge-bound five-minute sign-in attempt
+      description: >-
+        Explicit user action only. Accepts JSON up to 2 KiB. The app supplies
+        independent random state and an S256 challenge of a secret verifier.
+        With no Authorization header starts a new family. If a bearer is supplied,
+        it must be valid or return 401; never silently downgrade to guest.
+        Bind reauthentication to that existing native family and its generation.
+        Does not consume or change web sessions. No redirect URL, app identity,
+        account type, dataScope or provider credentials are accepted from the client.
+      security:
+        - {}
+        - NativeSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state, codeChallenge, codeChallengeMethod, platform]
+              properties:
+                state: { $ref: '#/components/schemas/RandomHandle' }
+                codeChallenge: { $ref: '#/components/schemas/RandomHandle' }
+                codeChallengeMethod: { type: string, const: S256 }
+                platform: { type: string, enum: [android, ios] }
+      responses:
+        '201':
+          description: >-
+            Opaque handoff and fixed-origin browser URL. URL contains only handoff;
+            it is not a session credential. App validates exact HTTPS origin/path.
+          headers: *privacyHeaders
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [handoff, authorizationUrl, expiresIn]
+                properties:
+                  handoff: { $ref: '#/components/schemas/RandomHandle' }
+                  authorizationUrl: { type: string, format: uri, maxLength: 512 }
+                  expiresIn: { type: integer, const: 300 }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/authorize:
+    get:
+      operationId: showNativeAuthorizationStart
+      summary: Proposed same-origin confirmation page in the system browser
+      description: >-
+        GET never starts provider authorization. Valid handoff creates an independent
+        short-lived browser-binding cookie and anti-CSRF form token. Page has no
+        third-party resources, displays the app identity and requires an explicit
+        Continue action. Do not authenticate an app solely from its platform field.
+      parameters:
+        - in: query
+          name: handoff
+          required: true
+          schema: { $ref: '#/components/schemas/RandomHandle' }
+      responses:
+        '200':
+          description: Minimal confirmation HTML with no account data; Secure HttpOnly host-only SameSite=Lax cookie.
+          headers: *privacyHeaders
+          content:
+            text/html:
+              schema: { type: string, maxLength: 16384 }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      operationId: startNativeProviderAuthorization
+      summary: Proposed browser-bound, one-use provider authorization start
+      description: >-
+        Exact canonical Origin and native browser-binding cookie plus form token
+        required. Maximum body 2 KiB. Atomically claims a pending handoff before
+        creating independent provider state, nonce and S256 verifier. A handoff
+        can start once only. Provider PKCE and app handoff PKCE are distinct.
+        Native-specific cookie names prevent collision with web sign-in.
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string, format: uri, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [handoff, formToken]
+              properties:
+                handoff: { $ref: '#/components/schemas/RandomHandle' }
+                formToken: { $ref: '#/components/schemas/RandomHandle' }
+      responses:
+        '303':
+          description: Exact environment-validated PayPal authorization endpoint; no arbitrary return target.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+            Location: { schema: { type: string, format: uri, maxLength: 4096 } }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/paypal/callback:
+    get:
+      operationId: completeNativeProviderAuthorization
+      summary: Proposed native-only registered PayPal callback
+      description: >-
+        Callback query at most 4 KiB. Requires the native browser transaction cookie,
+        matching provider state, one-use transaction, nonce, provider PKCE and validated
+        issuer/audience/expiry/signature/userinfo subject, as in the existing web flow.
+        Atomically checks family generation/cancellation and prepares a handoff code
+        valid for at most 60 seconds or remaining handoff lifetime, whichever is less.
+        Redirects only to the configured verified HTTPS app link, with code and app
+        state. Never returns provider tokens, session tokens, identity or dataScope.
+        Errors use a fixed local failure page without reflecting provider error text.
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string, maxLength: 2048 }
+        - in: query
+          name: state
+          schema: { type: string, maxLength: 128 }
+        - in: query
+          name: error
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '303':
+          description: Fixed verified app link on success, fixed local failure destination otherwise.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+            Location: { schema: { type: string, format: uri, maxLength: 512 } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/failure:
+    get:
+      operationId: showNativeSignInFailure
+      summary: Fixed inert native sign-in failure page
+      description: No query parameters or provider error text are accepted. No automatic retry or redirect.
+      responses:
+        '200':
+          description: Generic failure guidance only, no identity or credentials.
+          headers: *privacyHeaders
+          content:
+            text/html:
+              schema: { type: string, maxLength: 16384 }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/exchange:
+    post:
+      operationId: exchangeNativeHandoff
+      summary: Proposed atomic exchange for an opaque application session
+      description: >-
+        JSON up to 2 KiB. Validate canonical base64url, exact app state, one-use
+        code, S256(verifier), expiry, active configuration and family generation.
+        Constant-time comparisons; hash all random bearer handles at rest.
+        Atomically mark code consumed and create/rotate the native family session.
+        Exactly one concurrent exchange succeeds. Lost response is not replayable:
+        cancel with original verifier before a fresh sign-in. No cookie accepted
+        as substitute and no provider token or raw provider subject returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [handoff, code, state, codeVerifier]
+              properties:
+                handoff: { $ref: '#/components/schemas/RandomHandle' }
+                code: { $ref: '#/components/schemas/RandomHandle' }
+                state: { $ref: '#/components/schemas/RandomHandle' }
+                codeVerifier: { $ref: '#/components/schemas/RandomHandle' }
+      responses:
+        '200':
+          description: Opaque 30-minute app session; no refresh token and no automatic renewal.
+          headers: *privacyHeaders
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sessionToken, expiresIn, accountType, dataScope]
+                properties:
+                  sessionToken: { $ref: '#/components/schemas/RandomHandle' }
+                  expiresIn: { type: integer, const: 1800 }
+                  accountType: { $ref: '#/components/schemas/AccountType' }
+                  dataScope: { $ref: '#/components/schemas/DataScope' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/cancel:
+    post:
+      operationId: cancelNativeHandoff
+      summary: Proposed verifier-authorized cancellation, including a lost exchange response
+      description: >-
+        JSON up to 2 KiB. Handoff plus original verifier authorizes cancellation;
+        handoff URL alone cannot cancel. Under the same lock as callback/exchange,
+        mark cancellation and revoke any session issued by this handoff and its
+        descendants, without revoking unrelated browser or native families.
+        Retain challenge and issued-family linkage until the issued family expires,
+        or until original handoff expiry if never issued. Repeats return 204.
+        A canonical handoff absent from the authoritative store under the shared
+        lock also returns204: no live descendant can remain because cleanup retains
+        all handoffs until family expiry. Lookup precedes context filtering;
+        an existing foreign-context handoff or wrong verifier returns generic401. Store outage returns503,
+        never a false success. This endpoint cannot return identity or a token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [handoff, codeVerifier]
+              properties:
+                handoff: { $ref: '#/components/schemas/RandomHandle' }
+                codeVerifier: { $ref: '#/components/schemas/RandomHandle' }
+      responses:
+        '204':
+          description: Cancellation and applicable revocation committed, or authoritative absence confirms no live descendant.
+          headers: *privacyHeaders
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/session:
+    get:
+      operationId: readNativeSession
+      summary: Proposed native session validation without renewal
+      security: [{ NativeSession: [] }]
+      responses:
+        '200':
+          description: Server-verified presentation identity; no profile or merchant authorization.
+          headers: *privacyHeaders
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [authenticated, accountType, dataScope, expiresAt]
+                properties:
+                  authenticated: { type: boolean, const: true }
+                  accountType: { $ref: '#/components/schemas/AccountType' }
+                  dataScope: { $ref: '#/components/schemas/DataScope' }
+                  expiresAt: { type: string, format: date-time, maxLength: 32 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/auth/native/logout:
+    post:
+      operationId: revokeNativeSession
+      summary: Proposed native-family sign-out
+      description: >-
+        Requires opaque native bearer; no body. Revoke family and pending handoffs
+        atomically. Retained revoked or superseded aliases can revoke successors
+        until the family expires, even after the original session expires. Repeating
+        a recognized alias returns204, including expired families. A canonical
+        alias absent from the authoritative store under the shared lock also
+        returns204 because aliases are retained while any descendant may live.
+        Lookup precedes context filtering; an existing foreign-context alias
+        returns401. Handles are never intentionally reused. No client clock,
+        filtered lookup, missing schema, or store error can establish absence. These aliases do not authorize
+        session reads, new handoffs or other authenticated actions.
+        A503 is indeterminate, not successful revocation. Client hides private UI
+        immediately and keeps an owner-only revocation retry record until confirmed
+        or server-recorded family expiry. Does not sign out PayPal or web sessions.
+      security: [{ NativeSession: [] }]
+      responses:
+        '204':
+          description: Native family revoked or authoritative absence confirms no live descendant; no response body.
+          headers: *privacyHeaders
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    NativeSession:
+      type: http
+      scheme: bearer
+      bearerFormat: Opaque 32-byte canonical base64url app session, never a PayPal token
+  schemas:
+    RandomHandle:
+      type: string
+      minLength: 43
+      maxLength: 43
+      pattern: '^[A-Za-z0-9_-]{43}$'
+      description: Canonical unpadded base64url encoding of exactly 32 bytes; regex alone is insufficient.
+    AccountType:
+      type: string
+      enum: [personal, business, unknown]
+      description: Same web mapping; missing, unfamiliar and PREMIER remain unknown. Presentation only.
+    DataScope:
+      type: string
+      pattern: '^v1_[A-Za-z0-9_-]{43}$'
+      minLength: 46
+      maxLength: 46
+      description: Existing stable app/environment/client-bound pseudonymous HMAC scope, never an authorization credential.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string, maxLength: 40 }
+            message: { type: string, maxLength: 160 }
+  responses:
+    Invalid:
+      description: Malformed, noncanonical, duplicate, missing or unknown input; no reflection of supplied data.
+      headers: *privacyHeaders
+      content: &errorContent
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Generic invalid, expired, cancelled, revoked or replayed credential; no identity disclosure.
+      headers: *privacyHeaders
+      content: *errorContent
+    Forbidden:
+      description: Browser Origin, cookie or anti-CSRF binding rejected.
+      headers: *privacyHeaders
+      content: *errorContent
+    Conflict:
+      description: Handoff already claimed or superseded; start a new explicit attempt.
+      headers: *privacyHeaders
+      content: *errorContent
+    TooLarge:
+      description: Request body exceeds endpoint bound; no source/provider action.
+      headers: *privacyHeaders
+      content: *errorContent
+    UnsupportedMedia:
+      description: Content type is not supported; no source/provider action.
+      headers: *privacyHeaders
+      content: *errorContent
+    RateLimited:
+      description: Shared edge or database quota reached; never automatically retry sign-in.
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+        Referrer-Policy: { schema: { type: string, const: no-referrer } }
+        Retry-After: { schema: { type: integer, minimum: 1, maximum: 86400 } }
+      content: *errorContent
+    Unavailable:
+      description: Disabled, unconfigured, store/provider unavailable or internal timeout; fail closed without provider detail.
+      headers: *privacyHeaders
+      content: *errorContent

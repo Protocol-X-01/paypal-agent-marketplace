@@ -73,7 +73,7 @@
 .heroOthers > div > span { color: #93a9c7; }
 .heroOthers > div > strong { justify-self: end; color: #e2eaf5; font-size: 10px; font-weight: 570; font-variant-numeric: tabular-nums; }
 .heroOthers > div > small { grid-column: 2; justify-self: end; font-size: 8px; }
-.heroTimestamp { display: block; margin-top: 15px; color: #758daa; font-size: 8px; text-align: right; }
+.heroTimestamp { display: block; margin-top: 15px; color: #a9bdd5; font-size: 10px; line-height: 1.5; text-align: right; }
 .heroLoading { min-height: 240px; display: grid; place-items: center; color: #a8bad3; font-size: 12px; text-align: center; }
 
 .trustStrip { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 19px; min-height: 66px; padding: 12px 24px; border-block: 1px solid #e8edf4; background: #fff; color: #60718a; font-size: 10px; font-weight: 560; }
@@ -102,9 +102,9 @@
 .marketCardFoot { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #edf1f5; }
 .marketCardFoot span { display: flex; flex-direction: column; gap: 4px; color: #8593a7; font-size: 8px; }
 .marketCardFoot strong { color: #435873; font-size: 10px; font-weight: 610; font-variant-numeric: tabular-nums; }
-.gridTimestamp { grid-column: 1 / -1; justify-self: end; margin: 0; color: #8492a5; font-size: 9px; }
+.gridTimestamp { grid-column: 1 / -1; justify-self: end; margin: 0; color: #52677f; font-size: 11px; line-height: 1.5; }
 .marketState { grid-column: 1 / -1; min-height: 174px; display: grid; place-items: center; padding: 25px; border: 1px dashed #cfdae8; border-radius: 12px; color: #657891; font-size: 12px; text-align: center; }
-.dataFootnote { margin: 14px 0 0; color: #8390a3; font-size: 9px; line-height: 1.6; }
+.dataFootnote { margin: 14px 0 0; color: #52677f; font-size: 11px; line-height: 1.6; }
 
 .experienceSection { padding: 77px 0 85px; border-top: 1px solid #e9edf3; }
 .featureGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -224,6 +224,10 @@
   .textLink { font-size: 10px; }
   .heroVisual { min-height: 370px; padding: 20px 16px 15px; }
   .heroCoinPrice > strong { font-size: 31px; }
+  .marketCard { column-gap: 8px; }
+  .marketCardPrice { min-width: 0; flex-wrap: wrap; gap: 2px 8px; }
+  .marketCardPrice strong { font-size: 16px; overflow-wrap: anywhere; }
+  .marketCard .sparkline, .marketCard .sparkFallback { width: 80px; }
   .trustStrip { font-size: 8px; gap: 8px; }
   .trustStrip > span:first-child { width: 100%; }
   .searchForm { gap: 6px; padding-left: 9px; }

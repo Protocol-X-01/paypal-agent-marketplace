@@ -1,6 +1,12 @@
 import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { storefrontCurrency, type Storefront } from "@/lib/channel3-storefront";
 
 const DEFAULT_BASE = "https://api.trychannel3.com";
+// App-owned response ceiling, not a Channel3 provider limit. Fetch exposes
+// decoded bytes; transport and decompression can still buffer outside this cap.
+const MAX_CHANNEL3_RESPONSE_BYTES = 2 * 1024 * 1024;
+const CHANNEL3_REQUEST_TIMEOUT_MS = 8_000;
 
 interface C3Price {
   price: number;
@@ -9,6 +15,8 @@ interface C3Price {
 }
 
 export interface C3Offer {
+  /** Advertised maximum affiliate fraction, not customer cashback or guaranteed earnings. */
+  max_commission_rate?: number | null;
   url: string;
   domain: string;
   price: C3Price;
@@ -59,6 +67,98 @@ interface SearchOpts {
   includeUsed?: boolean;
   mode?: "default" | "keyword" | "agentic";
   pageToken?: string;
+  locale?: Channel3Locale;
+}
+
+export type Channel3Locale = { country: string; currency: string; language: string };
+
+const supportedCountries = new Set(["US", "GB", "EU", "AU", "CA", "IE", "DE", "AT", "FR", "BE", "IT", "ES", "NL", "SE", "FI", "PT", "CZ", "GR", "RO"]);
+const supportedCurrencies = new Set(["USD", "CAD", "AUD", "GBP", "EUR", "SEK", "CZK", "RON"]);
+const supportedLanguages = new Set(["en", "de", "fr", "it", "es", "nl", "sv", "fi", "pt", "cs", "el", "ro"]);
+
+/** Explicit storefronts are canonical. Omitted ones retain supported configured defaults. */
+export function getChannel3Locale(storefront?: Storefront): Channel3Locale {
+  if (storefront) return { country: storefront, currency: storefrontCurrency(storefront), language: "en" };
+  const locale = {
+    language: process.env.CHANNEL3_LANGUAGE || "en",
+    country: process.env.CHANNEL3_COUNTRY || "GB",
+    currency: process.env.CHANNEL3_CURRENCY || "GBP",
+  };
+  if (!supportedLanguages.has(locale.language) || !supportedCountries.has(locale.country) || !supportedCurrencies.has(locale.currency)) {
+    throw new Error("Channel3 default locale is not supported");
+  }
+  return locale;
+}
+
+/** Optional for older installations; a configured collection never falls back. */
+export function getChannel3CollectionId(): string | undefined {
+  const value = process.env.CHANNEL3_COLLECTION_ID;
+  if (value === undefined) return undefined;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new Error("Channel3 collection configuration is invalid");
+  return value;
+}
+function collectionConfig() {
+  const collection = getChannel3CollectionId();
+  return collection === undefined ? {} : { collection_id: collection };
+}
+
+async function readChannel3Json(response: Response, signal: AbortSignal): Promise<unknown> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    const length = Number(declaredLength);
+    if (!/^\d+$/.test(declaredLength) || !Number.isSafeInteger(length) || length > MAX_CHANNEL3_RESPONSE_BYTES) {
+      // Content-Length can describe compressed bytes, so this is deliberately
+      // conservative. The decoded stream is checked independently below.
+      try { void response.body?.cancel().catch(() => undefined); } catch { /* Already unavailable. */ }
+      throw new Error("Channel3 response exceeds the app limit or has an invalid length");
+    }
+  }
+  if (!response.body) throw new Error("Channel3 response has no body");
+
+  const reader = response.body.getReader();
+  let finished = false;
+  let onAbort = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error("Channel3 response timed out"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+
+  const read = async (): Promise<unknown> => {
+    let buffer = new Uint8Array(16 * 1024);
+    let used = 0;
+    while (true) {
+      if (signal.aborted) throw new Error("Channel3 response timed out");
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw new Error("Channel3 response timed out");
+      if (done) { finished = true; break; }
+      if (value.byteLength > MAX_CHANNEL3_RESPONSE_BYTES - used) {
+        throw new Error("Channel3 response exceeds the app limit");
+      }
+      const nextSize = used + value.byteLength;
+      if (nextSize > buffer.byteLength) {
+        const grown = new Uint8Array(Math.min(MAX_CHANNEL3_RESPONSE_BYTES, Math.max(nextSize, buffer.byteLength * 2)));
+        grown.set(buffer.subarray(0, used));
+        buffer = grown;
+      }
+      buffer.set(value, used);
+      used = nextSize;
+    }
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, used));
+    return JSON.parse(text) as unknown;
+  };
+
+  try {
+    // A single race covers the entire stream, including a stalled reader that
+    // does not resolve on cancellation. Do not add one handler per chunk.
+    return await Promise.race([read(), aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (!finished) {
+      try { void reader.cancel().catch(() => undefined); } catch { /* Already unavailable. */ }
+    }
+    try { reader.releaseLock(); } catch { /* The platform may still be cancelling a pending read. */ }
+  }
 }
 
 async function call(path: string, body: Record<string, unknown>): Promise<C3SearchResponse> {
@@ -75,6 +175,7 @@ async function call(path: string, body: Record<string, unknown>): Promise<C3Sear
   if (baseUrl.protocol !== "https:") throw new Error("Channel3 base URL must use HTTPS");
   const endpoint = new URL(path.replace(/^\/+/, ""), `${baseUrl.toString().replace(/\/+$/, "")}/`);
 
+  const deadline = AbortSignal.timeout(CHANNEL3_REQUEST_TIMEOUT_MS);
   const res = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -83,12 +184,35 @@ async function call(path: string, body: Record<string, unknown>): Promise<C3Sear
     },
     body: JSON.stringify(body),
     cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
+    redirect: "error",
+    signal: deadline,
   });
   if (!res.ok) {
     throw new Error(`Channel3 request failed (${res.status})`);
   }
-  return (await res.json()) as C3SearchResponse;
+  const payload = await readChannel3Json(res, deadline);
+  if (
+    !payload || typeof payload !== "object" ||
+    !("products" in payload) || !Array.isArray(payload.products) ||
+    !payload.products.every((product: unknown) => (
+      !!product && typeof product === "object" && !Array.isArray(product) &&
+      "id" in product && typeof product.id === "string" &&
+      "title" in product && typeof product.title === "string"
+    )) ||
+    ("next_page_token" in payload && payload.next_page_token != null && typeof payload.next_page_token !== "string")
+  ) {
+    throw new Error("Channel3 response is invalid");
+  }
+  // Preserve each retailer's advertised rate independently. Missing/invalid is
+  // unknown, never a fabricated zero or a percentage converted twice.
+  return { ...payload, products: payload.products.map((product) => ({ ...product,
+    ...(Array.isArray(product.offers) ? { offers: product.offers.map((offer: unknown) => {
+      if (!offer || typeof offer !== "object" || Array.isArray(offer)) return offer;
+      if (!("max_commission_rate" in offer)) return offer;
+      const rate = offer.max_commission_rate;
+      return { ...offer, max_commission_rate: typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : null };
+    }) } : {}),
+  })) } as C3SearchResponse;
 }
 
 function filters(includeUsed?: boolean) {
@@ -100,7 +224,7 @@ function filters(includeUsed?: boolean) {
 }
 
 export function search(opts: SearchOpts) {
-  const { imageUrl, base64Image, pageToken, ...rest } = opts;
+  const { imageUrl, base64Image, pageToken, locale = getChannel3Locale(), ...rest } = opts;
   return call("/v1/search", {
     query: rest.query,
     image_url: imageUrl,
@@ -109,10 +233,47 @@ export function search(opts: SearchOpts) {
     limit: rest.limit,
     config: {
       mode: rest.mode ?? "default",
-      language: process.env.CHANNEL3_LANGUAGE || undefined,
-      country: process.env.CHANNEL3_COUNTRY || undefined,
-      currency: process.env.CHANNEL3_CURRENCY || undefined,
+      ...locale,
+      ...collectionConfig(),
     },
     ...(rest.includeUsed ? { filters: filters(true) } : {}),
   });
+}
+
+export function browseCatalog(selection: { categoryId?: string; websiteId?: string }, limit = 24, locale = getChannel3Locale(), pageToken?: string) {
+  if ((!selection.categoryId && !selection.websiteId) || ![12, 24].includes(limit)) throw new Error("Invalid catalog selection");
+  return call("/v1/browse", {
+    filters: { ...(selection.categoryId ? { category_ids: [selection.categoryId] } : {}), ...(selection.websiteId ? { website_ids: [selection.websiteId] } : {}), conditions: ["new"], availability: ["InStock"] },
+    limit, config: { ...locale, ...collectionConfig() }, ...(pageToken ? { page_token: pageToken } : {}),
+  });
+}
+
+export function browseCategory(categoryId: string, limit = 8, locale = getChannel3Locale()) {
+  return call("/v1/browse", { filters: { category_ids: [categoryId], conditions: ["new"], availability: ["InStock"] }, limit, config: { ...locale, ...collectionConfig() } });
+}
+
+function catalogMac(payload: string): string {
+  const key = process.env.CHANNEL3_API_KEY;
+  if (!key) throw new Error("Channel3 is not configured");
+  return createHmac("sha256", key).update("paypal-markets:catalog-cursor:v1\0").update(payload).digest("base64url");
+}
+/** Signed app continuation, not a URL, page number or provider credential. */
+export function encodeCatalogPageToken(token: string, binding: string, now = Date.now()): string {
+  if (!token || Buffer.byteLength(token, "utf8") > 4096) throw new Error("Invalid provider continuation");
+  const payload = Buffer.from(JSON.stringify({ v: 1, binding, token, expiresAt: now + 900000 }), "utf8").toString("base64url");
+  const cursor = `${payload}.${catalogMac(payload)}`;
+  if (cursor.length > 6144) throw new Error("Provider continuation exceeds app limit");
+  return cursor;
+}
+export function decodeCatalogPageToken(cursor: string, binding: string, now = Date.now()): string | null {
+  if (cursor.length > 6144 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(cursor)) return null;
+  const [payload, signature] = cursor.split(".");
+  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(catalogMac(payload)))) return null;
+  try {
+    const bytes = Buffer.from(payload, "base64url");
+    if (bytes.toString("base64url") !== payload) return null;
+    const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!value || typeof value !== "object" || Object.keys(value).sort().join(",") !== "binding,expiresAt,token,v" || value.v !== 1 || value.binding !== binding || typeof value.token !== "string" || !value.token || Buffer.byteLength(value.token, "utf8") > 4096 || !Number.isSafeInteger(value.expiresAt) || value.expiresAt <= now || value.expiresAt > now + 900000) return null;
+    return value.token;
+  } catch { return null; }
 }

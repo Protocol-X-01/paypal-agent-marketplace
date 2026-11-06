@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "./fonts/Geist-Variable.woff2",
+  weight: "100 900",
+  display: "swap",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/GeistMono-Variable.woff2",
+  weight: "100 900",
+  display: "swap",
+  adjustFontFallback: false,
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
   variable: "--font-geist-mono",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "PayPal Markets | Clear crypto market context",
   description:
-    "A mobile-first crypto market dashboard with live prices, market metrics, charts, a manual portfolio view, and Channel3 product discovery.",
+    "A mobile-first crypto market dashboard with reference prices, market metrics, charts, a manual portfolio view, and Channel3 product discovery.",
   applicationName: "PayPal Markets",
   manifest: "/manifest.webmanifest",
 };

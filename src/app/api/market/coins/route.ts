@@ -1,24 +1,65 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getMarketOverview, MarketDataError } from "@/lib/market-data";
+import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from "@/lib/mobile-web-cors";
 
-export async function GET() {
+function json(request: NextRequest, body: unknown, init?: ResponseInit): NextResponse {
+  return withMobileWebCors(request, NextResponse.json(body, init));
+}
+
+export async function GET(request: NextRequest) {
+  if (!isAllowedApplicationOrigin(request)) {
+    return json(request, { error: { code: "origin_not_allowed", message: "Request origin is not allowed." } }, { status: 403 });
+  }
+
   try {
     const data = await getMarketOverview();
-    return NextResponse.json(data, {
+    return json(request, data, {
       headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=240" },
     });
   } catch (error) {
-    const unavailable = !(error instanceof MarketDataError) || error.kind === "unavailable";
-    return NextResponse.json(
+    const rateLimited = error instanceof MarketDataError && (error.kind === "rate_limited" || error.status === 429);
+    if (rateLimited) {
+      return json(
+        request,
+        {
+          error: {
+            code: "market_data_rate_limited",
+            message: "Market data requests are temporarily rate limited. Retry after the interval in the Retry-After header.",
+          },
+        },
+        {
+          status: 429,
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": String(error.retryAfterSeconds ?? 60),
+          },
+        },
+      );
+    }
+
+    const notConfigured = error instanceof MarketDataError && error.kind === "not_configured";
+    const invalidResponse = error instanceof MarketDataError && error.kind === "invalid_response";
+    return json(
+      request,
       {
         error: {
-          code: unavailable ? "market_data_unavailable" : "upstream_invalid_response",
-          message: unavailable
-            ? "Market data is temporarily unavailable. Please try again shortly."
-            : "The market data provider returned an unexpected response.",
+          code: notConfigured
+            ? "market_data_not_configured"
+            : invalidResponse
+              ? "upstream_invalid_response"
+              : "market_data_unavailable",
+          message: notConfigured
+            ? "Market data is not configured for this service."
+            : invalidResponse
+              ? "The market data provider returned an unexpected response."
+              : "Market data is temporarily unavailable. Please try again shortly.",
         },
       },
-      { status: unavailable ? 503 : 502 },
+      { status: invalidResponse ? 502 : 503 },
     );
   }
+}
+
+export function OPTIONS(request: NextRequest) {
+  return handleMobileWebPreflight(request, ["GET"]);
 }

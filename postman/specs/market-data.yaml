@@ -1,11 +1,13 @@
 openapi: 3.1.0
 info:
   title: PayPal Agent Marketplace Market Data API
-  version: 0.2.0
+  version: 0.4.0
   description: >-
     Public crypto market metrics and chart data for the mobile marketplace
     experience. Provider credentials remain on the server. These endpoints do
-    not expose wallet balances or execute transactions.
+    not expose wallet balances or execute transactions. Cross-origin browser
+    requests are restricted to exact origins in MOBILE_WEB_ORIGINS; local Expo
+    origins are allowed only outside production. Credentialed CORS is disabled.
 servers:
   - url: /
 paths:
@@ -43,7 +45,10 @@ paths:
         current contract permits the tracked Bitcoin, Ethereum, Solana,
         Chainlink, Litecoin, Bitcoin Cash, and PayPal USD assets and reports
         USD market values. PayPal USD (PYUSD) is a separate USD-pegged
-        stablecoin asset; it is not the USD quote currency.
+        stablecoin asset; it is not the USD quote currency. CoinGecko Demo
+        credentials are required. Provider calls are capped at 24 per rolling
+        60-second window per application process, below the 30-call/minute Demo
+        limit; this budget is not shared across service instances.
       responses:
         "200":
           description: Market metrics for tracked coins
@@ -51,8 +56,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketOverview"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: Market data is not configured or temporarily unavailable
+          description: The Demo credential is missing or the upstream provider is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: The per-process provider budget or upstream provider rate limit was reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
           content:
             application/json:
               schema:
@@ -63,10 +86,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    options:
+      operationId: preflightMarketCoins
+      summary: Check whether the mobile web client may read USD market data
+      responses:
+        "204":
+          $ref: "#/components/responses/MarketPreflightAllowed"
+        "403":
+          $ref: "#/components/responses/MarketPreflightDenied"
+  /api/market/quotes:
+    get:
+      operationId: listMarketQuotes
+      summary: List tracked crypto metrics in a display currency
+      description: >-
+        Returns CoinGecko market reference values in the requested fiat
+        currency. Currency preferences are held by the client; no account,
+        wallet, payment, or settlement currency is changed. The existing
+        USD-only /api/market/coins response remains available for older clients.
+        Provider calls share the same per-process Demo rate budget as the
+        other market endpoints.
+      parameters:
+        - name: currency
+          in: query
+          required: false
+          description: Uppercase display-currency code. Defaults to USD when omitted.
+          schema:
+            $ref: "#/components/schemas/MarketCurrency"
+            default: USD
+      responses:
+        "200":
+          description: Market reference values in the requested currency
+          headers:
+            Vary:
+              description: The response varies by request origin.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketQuotes"
+        "400":
+          description: Unsupported display currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: The per-process provider budget or upstream provider rate limit was reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The upstream market provider returned an invalid response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: The Demo credential is missing or the upstream provider is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    options:
+      operationId: preflightMarketQuotes
+      summary: Check whether the mobile web client may read currency quotes
+      responses:
+        "204":
+          $ref: "#/components/responses/MarketPreflightAllowed"
+        "403":
+          $ref: "#/components/responses/MarketPreflightDenied"
   /api/market/chart/{coinId}:
     get:
       operationId: getMarketChart
       summary: Get price, market-cap, and volume history
+      description: >-
+        Returns CoinGecko's historical price, market-cap, and volume series.
+        If the historical endpoint is rate-limited, 1-day and 7-day requests
+        can fall back to the cached 7-day market sparkline. In that response,
+        `seriesSource` and `availableMetrics` identify the price-only fallback.
+        CoinGecko does not provide timestamps with these sparkline values, so
+        fallback sample times are spread evenly across the 7-day window.
+        CoinGecko Demo credentials are required. Provider calls are capped at
+        24 per rolling 60-second window per application process, below the
+        30-call/minute Demo limit; this budget is not shared across instances.
       parameters:
         - name: coinId
           in: path
@@ -83,6 +199,13 @@ paths:
             type: integer
             enum: [1, 7, 30, 90, 365]
             default: 7
+        - name: currency
+          in: query
+          required: false
+          description: Uppercase display-currency code. Defaults to USD when omitted.
+          schema:
+            $ref: "#/components/schemas/MarketCurrency"
+            default: USD
       responses:
         "200":
           description: Historical market series
@@ -91,13 +214,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketChart"
         "400":
-          description: Unsupported coin or time range
+          description: Unsupported coin, time range, or display currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: Market data is not configured or temporarily unavailable
+          description: The Demo credential is missing or the upstream provider is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: The per-process provider budget or upstream provider rate limit was reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
           content:
             application/json:
               schema:
@@ -108,6 +249,112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    options:
+      operationId: preflightMarketChart
+      summary: Check whether the mobile web client may read chart data
+      parameters:
+        - name: coinId
+          in: path
+          required: true
+          description: CoinGecko identifier from the tracked watchlist
+          schema:
+            type: string
+            enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+      responses:
+        "204":
+          $ref: "#/components/responses/MarketPreflightAllowed"
+        "403":
+          $ref: "#/components/responses/MarketPreflightDenied"
+  /api/market/candles/{coinId}:
+    get:
+      operationId: getMarketCandles
+      summary: Get recorded OHLC candles
+      description: >-
+        Returns CoinGecko Demo OHLC candles without deriving candles from line
+        samples. Timestamps identify candle close times. Demo auto-granularity
+        is 30 minutes for 1 day, 240 minutes for 7 or 30 days, and 5760 minutes
+        for 90 or 365 days. Missing candles are not filled. Indicators must use
+        the returned closes and describe periods as candle counts. Only days
+        and currency are accepted as query parameters, once each. The shared
+        per-process provider budget is 24 calls per rolling 60 seconds.
+        Upstream JSON is limited to 1048576 decoded bytes, 1000 candles and an
+        eight-second request/body deadline. No prices or candles are invented
+        when credentials, provider access or validation fail.
+      parameters:
+        - name: coinId
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        - name: days
+          in: query
+          schema:
+            type: integer
+            enum: [1, 7, 30, 90, 365]
+            default: 7
+        - name: currency
+          in: query
+          schema:
+            $ref: "#/components/schemas/MarketCurrency"
+            default: USD
+      responses:
+        "200":
+          description: Recorded candles; an empty array means no candle history was returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketCandles"
+        "400":
+          description: Unsupported asset, range, currency, or unknown or repeated query parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Shared provider budget or provider rate limit reached
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Oversized, malformed or invalid upstream candle data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Demo credentials missing, provider unavailable, or request/body deadline reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    options:
+      operationId: preflightMarketCandles
+      summary: Check mobile web access to candle history
+      parameters:
+        - name: coinId
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+      responses:
+        "204":
+          $ref: "#/components/responses/MarketPreflightAllowed"
+        "403":
+          $ref: "#/components/responses/MarketPreflightDenied"
   /api/marketplace/search:
     post:
       operationId: searchMarketplaceProducts
@@ -115,9 +362,31 @@ paths:
       description: >-
         Searches Channel3 after an explicit user action. The Channel3 key stays
         on the server; this endpoint returns catalog products and retailer links
-        without creating a checkout or payment.
+        without creating a checkout or payment. Browser requests that include an
+        Origin header must match the service host or an exact configured
+        MOBILE_WEB_ORIGINS entry; local Expo origins are allowed only outside
+        production. Native clients may omit Origin. Credentialed CORS is disabled.
+        The request body is limited to 8192 bytes
+        (8 KiB) and must finish streaming within 3 seconds. Oversized and timed-out
+        bodies are rejected before JSON parsing and provider rate limiting. At most
+        eight search bodies per Node process can be read and validated at once;
+        requests beyond that capacity receive a retryable 503 before their body
+        is read. This capacity limit is per process, not shared across instances.
+        Valid searches are additionally rate-limited by the service.
+        An explicit GB or US storefront selects GBP or USD respectively.
+        Omitting it retains the configured Channel3 locale; the response reports
+        the country and currency actually requested from Channel3. Each offer's
+        own currency remains authoritative. Channel3's response is limited by
+        this application to 2097152 decoded bytes (2 MiB); a declared
+        Content-Length above that limit is also rejected, including when it
+        describes encoded bytes. Provider headers and body must arrive within
+        the existing eight-second request deadline. This is an app limit, not a
+        claim about Channel3's maximum response size.
       requestBody:
         required: true
+        description: JSON request body, limited to 8192 UTF-8 bytes (8 KiB); the body must finish reading within 3 seconds.
+        x-max-body-bytes: 8192
+        x-body-read-timeout-ms: 3000
         content:
           application/json:
             schema:
@@ -132,8 +401,10 @@ paths:
                 limit:
                   type: integer
                   minimum: 1
-                  maximum: 8
+                  maximum: 24
                   default: 6
+                storefront:
+                  $ref: "#/components/schemas/MarketplaceStorefront"
       responses:
         "200":
           description: Live Channel3 search results
@@ -142,25 +413,285 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceSearchResponse"
         "400":
-          description: Search query is invalid
+          description: Request JSON, the search query, or the storefront is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "403":
+          description: Origin and Host headers are both present but identify different hosts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "408":
+          description: The request body did not finish streaming within 3 seconds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "413":
+          description: The request body exceeds 8192 bytes (8 KiB)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "429":
           description: Search request limit reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
-          description: Channel3 search is not configured or temporarily unavailable
+          description: >-
+            Channel3 search or its default locale is not configured correctly,
+            the provider is temporarily unavailable, its response exceeds the
+            app's limit, times out, contains malformed UTF-8 or JSON, or has an
+            invalid product shape, or the request-body reading capacity is
+            temporarily full. The capacity
+            response includes Retry-After; provider failures may omit it.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying when body-reading capacity is full
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+            Cache-Control:
+              description: Capacity and provider failure responses are not cacheable
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
+    options:
+      operationId: preflightMarketplaceSearch
+      summary: Check whether the mobile web client may search
+      responses:
+        "204":
+          description: Preflight approved for an exact allowlisted origin
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+        "403":
+          description: Origin, method, or requested header is not allowed
+  /api/marketplace/catalog:
+    get:
+      operationId: browseCuratedCatalog
+      summary: Browse an app-wide curated Channel3 category
+      description: >-
+        Returns fresh Channel3 products for an allowlisted section, retailer, or both.
+        At least one of section or retailer is required. At most 24 products
+        are returned per request. Continuation uses only provider-issued opaque
+        tokens wrapped by the application, never invented numeric pages. Tokens
+        expire after 15 minutes and bind the exact filters, locale, and limit.
+        Changing any selection requires starting again without pageToken.
+        Duplicate or unknown query fields are rejected.
+        The section maps to a verified Channel3 category slug; callers cannot
+        supply arbitrary filters. Results are not saved to customer collections.
+        Retailer offer details can change, and this endpoint does not create a
+        checkout or payment. Requests share the marketplace rate limit. Explicit
+        GB and US storefronts select GBP and USD respectively. If omitted, the
+        configured Channel3 locale is retained and reported in the response.
+        Channel3's response is limited by this application to 2097152 decoded
+        bytes (2 MiB); a declared Content-Length above that limit is also
+        rejected, including when it describes encoded bytes. Provider headers
+        and body must arrive within the existing eight-second request deadline.
+        This is an app limit, not a Channel3 maximum.
+        When CHANNEL3_COLLECTION_ID is configured, provider search and browse
+        are scoped to that collection. Invalid configuration or an unavailable
+        provider collection returns 503; there is no unscoped fallback.
+        Catalog continuations bind the configured collection as well as selections.
+      parameters:
+        - name: section
+          in: query
+          required: false
+          description: App-wide editorial section, distinct from a customer's saved list
+          schema:
+            type: string
+            description: An ID from the shared curated section allowlist.
+        - name: storefront
+          in: query
+          required: false
+          description: Storefront for this request; omit to use the configured Channel3 locale
+          schema:
+            $ref: "#/components/schemas/MarketplaceStorefront"
+        - name: retailer
+          in: query
+          required: false
+          schema: { type: string }
+          description: An ID from the shared curated retailer allowlist. May be combined with section.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, enum: [12, 24], default: 24 }
+        - name: pageToken
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 6144 }
+          description: Opaque continuation from the previous response with identical selections.
+      responses:
+        "200":
+          description: Fresh products and offers for the curated section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceCatalogResponse"
+        "400":
+          description: The section is missing or unsupported, or the storefront is malformed, duplicated, or unsupported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "429":
+          description: Shared marketplace request limit reached
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "503":
+          description: >-
+            Channel3 browse or its default locale is not configured correctly,
+            the provider is temporarily unavailable, or its response exceeds
+            the app's limit, times out, contains malformed UTF-8 or JSON, or
+            has an invalid product shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+    options:
+      operationId: preflightCuratedCatalog
+      summary: Check whether the mobile web client may browse a curated section
+      responses:
+        "204":
+          description: Preflight approved for an exact allowlisted origin
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+        "403":
+          description: Origin, method, or requested header is not allowed
 components:
+  responses:
+    MarketPreflightAllowed:
+      description: Preflight approved for an exact allowlisted mobile-web origin
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+        Access-Control-Allow-Methods:
+          schema:
+            type: string
+        Access-Control-Allow-Headers:
+          schema:
+            type: string
+        Vary:
+          schema:
+            type: string
+    MarketPreflightDenied:
+      description: Origin, method, or requested header is not allowed
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+        Vary:
+          schema:
+            type: string
   schemas:
+    MarketCurrency:
+      type: string
+      enum: [USD, GBP, EUR, AED, AUD, BRL, CAD, CHF, CNY, CZK, DKK, HKD, HUF, ILS, INR, JPY, MXN, MYR, NOK, NZD, PHP, PLN, SEK, SGD, THB, TWD, ZAR]
+      description: Fiat display currency for the market reference values.
+    MarketQuotes:
+      type: object
+      additionalProperties: false
+      required: [currency, provider, retrievedAt, coins]
+      properties:
+        currency:
+          $ref: "#/components/schemas/MarketCurrency"
+        provider:
+          type: string
+          const: CoinGecko
+        retrievedAt:
+          type: string
+          format: date-time
+        coins:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/MarketQuote"
+    MarketQuote:
+      type: object
+      additionalProperties: false
+      required: [id, symbol, name, rank, price, marketCap, volume24h, change24hPct, change7dPct, high24h, low24h, sparkline7d, lastUpdated]
+      properties:
+        id:
+          type: string
+          enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        symbol:
+          type: string
+        name:
+          type: string
+        rank:
+          type: [integer, "null"]
+          minimum: 1
+        price:
+          type: [number, "null"]
+          minimum: 0
+        marketCap:
+          type: [number, "null"]
+          minimum: 0
+        volume24h:
+          type: [number, "null"]
+          minimum: 0
+        change24hPct:
+          type: [number, "null"]
+        change7dPct:
+          type: [number, "null"]
+        high24h:
+          type: [number, "null"]
+          minimum: 0
+        low24h:
+          type: [number, "null"]
+          minimum: 0
+        sparkline7d:
+          type: array
+          items:
+            type: number
+            minimum: 0
+        lastUpdated:
+          type: [string, "null"]
+          format: date-time
     MarketOverview:
       type: object
       additionalProperties: false
@@ -237,14 +768,13 @@ components:
     MarketChart:
       type: object
       additionalProperties: false
-      required: [coinId, currency, days, provider, retrievedAt, prices, marketCaps, volumes]
+      required: [coinId, currency, days, provider, retrievedAt, seriesSource, availableMetrics, prices, marketCaps, volumes]
       properties:
         coinId:
           type: string
           enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
         currency:
-          type: string
-          const: USD
+          $ref: "#/components/schemas/MarketCurrency"
         days:
           type: integer
           enum: [1, 7, 30, 90, 365]
@@ -254,6 +784,21 @@ components:
         retrievedAt:
           type: string
           format: date-time
+        seriesSource:
+          type: string
+          enum: [market_chart, market_overview_sparkline]
+          description: >-
+            market_chart indicates full historical data. market_overview_sparkline
+            indicates the cached price-only fallback; its sample timestamps are
+            evenly spaced across the 7-day window because the upstream values
+            do not include per-point timestamps.
+        availableMetrics:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [price, marketCap, volume]
         prices:
           type: array
           items:
@@ -266,6 +811,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChartPoint"
+    MarketCandles:
+      type: object
+      additionalProperties: false
+      required: [coinId, currency, days, source, retrievedAt, candleIntervalMinutes, timestampKind, candles]
+      properties:
+        coinId:
+          type: string
+          enum: [bitcoin, ethereum, solana, chainlink, litecoin, bitcoin-cash, paypal-usd]
+        currency:
+          $ref: "#/components/schemas/MarketCurrency"
+        days:
+          type: integer
+          enum: [1, 7, 30, 90, 365]
+        source:
+          type: string
+          const: CoinGecko
+        retrievedAt:
+          type: string
+          format: date-time
+        candleIntervalMinutes:
+          type: integer
+          enum: [30, 240, 5760]
+          description: Nominal Demo candle interval for the requested days; gaps may occur
+        timestampKind:
+          type: string
+          const: close
+        candles:
+          type: array
+          maxItems: 1000
+          description: Strictly increasing unique close timestamps; missing periods are not filled
+          items:
+            $ref: "#/components/schemas/Candle"
+    Candle:
+      type: object
+      additionalProperties: false
+      required: [timestamp, open, high, low, close]
+      description: Finite nonnegative OHLC values; low is at most open and close, high is at least open and close
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 8640000000000000
+          description: Candle close time as Unix milliseconds
+        open:
+          type: number
+          minimum: 0
+        high:
+          type: number
+          minimum: 0
+        low:
+          type: number
+          minimum: 0
+        close:
+          type: number
+          minimum: 0
     ChartPoint:
       type: object
       additionalProperties: false
@@ -290,17 +891,27 @@ components:
           properties:
             code:
               type: string
-              enum: [market_data_unavailable, upstream_invalid_response, unsupported_coin, unsupported_days]
+              enum: [market_data_unavailable, market_data_not_configured, market_data_rate_limited, upstream_invalid_response, unsupported_coin, unsupported_days, unsupported_currency, unsupported_parameters, origin_not_allowed]
             message:
               type: string
+    MarketplaceStorefront:
+      type: string
+      enum: [GB, US]
+      description: GB selects GBP; US selects USD. The country affects available offers.
     MarketplaceSearchResponse:
       type: object
       additionalProperties: false
-      required: [provider, query, retrievedAt, products, nextPageToken]
+      required: [provider, storefront, currency, query, retrievedAt, products, nextPageToken]
       properties:
         provider:
           type: string
           const: Channel3
+        storefront:
+          type: string
+          description: Effective Channel3 country; omitted request selection may use another supported configured country.
+        currency:
+          type: string
+          description: Effective requested currency; each offer's own currency remains authoritative.
         query:
           type: string
         retrievedAt:
@@ -312,6 +923,40 @@ components:
             $ref: "#/components/schemas/MarketplaceProduct"
         nextPageToken:
           type: [string, "null"]
+    MarketplaceCatalogResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, storefront, currency, section, title, retrievedAt, products, retailer, limit, nextPageToken]
+      properties:
+        provider:
+          type: string
+          const: Channel3
+        storefront:
+          type: string
+          description: Effective Channel3 country; omitted request selection may use another supported configured country.
+        currency:
+          type: string
+          description: Effective requested currency; each offer's own currency remains authoritative.
+        section:
+          type: [string, "null"]
+        retailer:
+          type: [string, "null"]
+        limit:
+          type: integer
+          enum: [12, 24]
+        nextPageToken:
+          type: [string, "null"]
+          maxLength: 6144
+        title:
+          type: string
+        retrievedAt:
+          type: string
+          format: date-time
+        products:
+          type: array
+          maxItems: 24
+          items:
+            $ref: "#/components/schemas/MarketplaceProduct"
     MarketplaceProduct:
       type: object
       additionalProperties: true
@@ -349,6 +994,11 @@ components:
               availability:
                 type: string
                 enum: [InStock, OutOfStock]
+              max_commission_rate:
+                type: [number, "null"]
+                minimum: 0
+                maximum: 1
+                description: Channel3-advertised maximum retailer affiliate commission as a decimal fraction (0.05 is 5%). Actual commission can be lower. Missing or null means unknown, not zero; this is not customer cashback.
               price:
                 type: object
                 properties:

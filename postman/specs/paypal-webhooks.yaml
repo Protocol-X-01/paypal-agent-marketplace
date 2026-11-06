@@ -6,7 +6,9 @@ info:
     Receives signed PayPal webhook events and acknowledges verified deliveries
     without applying credits, payouts, or marketplace ledger changes. The
     receiver accepts bodies up to 1 MiB and forwards the original event JSON
-    bytes unchanged to PayPal's signature verification endpoint.
+    bytes unchanged to PayPal's signature verification endpoint. Verification
+    requests are capped at eight in flight per server process; overload is
+    rejected temporarily so PayPal can retry delivery.
 servers:
   - url: /
 paths:
@@ -21,6 +23,8 @@ paths:
         `processed: false`; this endpoint performs no financial side effects.
         The body read is capped at 1 MiB and 3 seconds. Input size should be
         re-evaluated before subscribing to event types with larger payloads.
+        At most eight requests per process can read and verify at once; excess
+        requests receive a temporary non-2xx response with `Retry-After`.
       parameters:
         - name: paypal-transmission-id
           in: header
@@ -118,7 +122,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: PayPal verification is not configured or is unavailable.
+          description: >-
+            Verification is unconfigured or unavailable, or the per-process
+            verification capacity is full. When capacity is full, PayPal can
+            retry after the indicated delay.
+          headers:
+            Retry-After:
+              description: Present when temporary verification capacity is full.
+              schema:
+                type: string
+                pattern: '^[0-9]+$'
           content:
             application/json:
               schema:

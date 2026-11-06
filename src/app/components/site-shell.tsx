@@ -2,9 +2,12 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
+import { MARKET_CURRENCIES, MARKET_CURRENCY_LABELS, isMarketCurrency, type MarketCurrency } from "@/lib/market-currency";
+import { formatMarketRetrievalTime } from "@/lib/market-format";
 import styles from "./site-shell.module.css";
+import type { DashboardSection } from "@/lib/account-experience";
 
-export type SiteSection = "overview" | "markets" | "portfolio" | "business" | "shop" | "settings";
+export type SiteSection = DashboardSection;
 
 export type SiteShellProps = {
   children: ReactNode;
@@ -13,13 +16,17 @@ export type SiteShellProps = {
   refreshedAt?: string;
   refreshing?: boolean;
   onRefresh: () => void;
+  currency: MarketCurrency;
+  currencyReady: boolean;
+  onCurrencyChange: (currency: MarketCurrency) => void;
+  sessionControl?: ReactNode;
 };
 
 const sections: Array<{ id: SiteSection; label: string; mobileLabel: string; description?: string }> = [
   { id: "overview", label: "Overview", mobileLabel: "Home" },
   { id: "markets", label: "Markets", mobileLabel: "Markets" },
   { id: "portfolio", label: "Portfolio", mobileLabel: "Portfolio" },
-  { id: "business", label: "Business", mobileLabel: "Business", description: "Customer activity for teams and leaders" },
+  { id: "account", label: "Account", mobileLabel: "Account", description: "Personal and Business" },
   { id: "shop", label: "Discover", mobileLabel: "Discover", description: "Find and compare products" },
   { id: "settings", label: "Preferences", mobileLabel: "Settings" },
 ];
@@ -29,7 +36,7 @@ function NavigationIcon({ section }: { section: SiteSection }) {
     overview: <><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5" /><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5" /><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5" /><rect x="14" y="14" width="6.5" height="6.5" rx="1.5" /></>,
     markets: <><path d="M4 4v16h16" /><path d="m7 14 4-4 4 3 5-7" /><path d="M16 6h4v4" /></>,
     portfolio: <><path d="M10 3.5a8.5 8.5 0 1 0 10.5 10.5H10Z" /><path d="M14 3.5V10h6.5A8.5 8.5 0 0 0 14 3.5Z" /></>,
-    business: <><path d="m3 9 9-6 9 6" /><path d="M4 10h16M5 10v9m4-9v9m6-9v9m4-9v9M3 21h18" /></>,
+    account: <><circle cx="12" cy="8" r="3.5" /><path d="M5 21v-2a7 7 0 0 1 14 0v2" /></>,
     shop: <><path d="M5 8h14l1.5 12h-17Z" /><path d="M8 8V6a4 4 0 0 1 8 0v2" /><path d="M8 12h.01M16 12h.01" /></>,
     settings: <><path d="M4 7h8m5 0h3M4 17h3m5 0h8" /><circle cx="14.5" cy="7" r="2.5" /><circle cx="9.5" cy="17" r="2.5" /></>,
   };
@@ -45,16 +52,9 @@ function Brand({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-function displayTime(value?: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(date);
-}
-
-export default function SiteShell({ children, activeSection, onNavigate, refreshedAt, refreshing = false, onRefresh }: SiteShellProps) {
+export default function SiteShell({ children, activeSection, onNavigate, refreshedAt, refreshing = false, onRefresh, currency, currencyReady, onCurrencyChange, sessionControl }: SiteShellProps) {
   const activeLabel = sections.find((section) => section.id === activeSection)?.label ?? "Overview";
-  const refreshedTime = displayTime(refreshedAt);
+  const refreshedTime = formatMarketRetrievalTime(refreshedAt);
 
   function navigate(event: MouseEvent<HTMLAnchorElement>, section: SiteSection) {
     // The parent records ordinary navigation in history; modified clicks keep
@@ -94,9 +94,14 @@ export default function SiteShell({ children, activeSection, onNavigate, refresh
           <div className={styles.breadcrumb} aria-label="Current section"><span>Workspace</span><span aria-hidden="true">/</span><strong>{activeLabel}</strong></div>
           <div className={styles.mobileIdentity}><Brand mobile /></div>
           <div className={styles.headerActions}>
-            {refreshedTime && activeSection !== "business" && <span className={styles.updatedTime}>Prices updated <time dateTime={Number.isNaN(new Date(refreshedAt!).getTime()) ? undefined : refreshedAt}>{refreshedTime}</time></span>}
-            <span className={styles.currency} aria-label="Market currency: US dollars">USD</span>
-            <button className={styles.refreshButton} type="button" onClick={onRefresh} disabled={refreshing} aria-label="Refresh live market prices and chart">
+            {sessionControl}
+            {refreshedTime && activeSection !== "account" && <span className={styles.updatedTime}>Snapshot retrieved <time dateTime={refreshedAt}>{refreshedTime}</time></span>}
+            <select className={styles.currency} aria-label="Display currency" title={`Display currency: ${MARKET_CURRENCY_LABELS[currency]}`} value={currency} disabled={!currencyReady} onChange={(event) => {
+              if (isMarketCurrency(event.currentTarget.value)) onCurrencyChange(event.currentTarget.value);
+            }}>
+              {MARKET_CURRENCIES.map((code) => <option key={code} value={code} aria-label={`${code} — ${MARKET_CURRENCY_LABELS[code]}`}>{code}</option>)}
+            </select>
+            <button className={styles.refreshButton} type="button" onClick={onRefresh} disabled={refreshing} aria-label="Refresh market reference prices and chart">
               <svg className={refreshing ? styles.spinning : undefined} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.3 7.4A8 8 0 0 1 18.6 6L20 8M4 16l1.4 2A8 8 0 0 0 18.7 16.6" /></svg>
               <span>{refreshing ? "Refreshing" : "Refresh prices"}</span>
             </button>

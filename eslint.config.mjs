@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "bryntum-schedulerpro-trial/**",
+    "apps/mobile/**",
+    "apps/management/**",
   ]),
 ]);
 

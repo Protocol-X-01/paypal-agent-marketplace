@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import LiveMarkets from "./components/live-markets";
+import LiveMarkets, { MarketSnapshotProvider } from "./components/live-markets";
 import styles from "./home.module.css";
 
 export const metadata: Metadata = {
@@ -32,7 +32,7 @@ export default function Home() {
         <Link className={styles.navCta} href="/dashboard">Open dashboard <ArrowIcon /></Link>
       </header>
 
-      <main>
+      <MarketSnapshotProvider><main>
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.heroCopy}>
             <p className={styles.kicker}><span /> PAYPAL MARKETS <span className={styles.kickerDivider}>/</span> HACKATHON CONCEPT</p>
@@ -65,10 +65,10 @@ export default function Home() {
         <section id="markets" className={styles.marketSection} aria-labelledby="market-title">
           <div className={styles.sectionIntro}>
             <div><p className={styles.eyebrow}>THE MARKET, IN CONTEXT</p><h2 id="market-title">Know what moved.<br /><span>See the details behind it.</span></h2></div>
-            <div className={styles.sectionSide}><p>Live prices, useful market metrics, and chart history in a single, calm workspace. Follow the seven crypto assets listed in PayPal&apos;s published U.S. supported-assets help page, with the data source and update time in view.</p><Link href="/dashboard#markets" className={styles.inlineLink}>Explore all market views <ArrowIcon /></Link></div>
+            <div className={styles.sectionSide}><p>Market reference prices, useful metrics, and chart history in a single, calm workspace. Follow the seven crypto assets listed in PayPal&apos;s published U.S. supported-assets help page, with the data source and retrieval time in view.</p><Link href="/dashboard#markets" className={styles.inlineLink}>Explore all market views <ArrowIcon /></Link></div>
           </div>
           <LiveMarkets variant="grid" />
-          <p className={styles.dataFootnote}>PayPal asset availability varies by country and account type. Market prices are references and can differ from payment-provider prices. Data is supplied by CoinGecko and may be delayed or unavailable.</p>
+          <p className={styles.dataFootnote}>PayPal asset availability varies by country and account type. Prices are references and can differ from payment-provider prices. CoinGecko data may be delayed or unavailable; retrieval time is not the time of each underlying quote.</p>
         </section>
 
         <section id="experience" className={styles.experienceSection} aria-labelledby="experience-title">
@@ -83,7 +83,7 @@ export default function Home() {
             </article>
             <article className={styles.featureCard}>
               <span className={`${styles.featureIcon} ${styles.iconViolet}`}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 7.2v9.6L12 21l7.5-4.2V7.2L12 3Z" stroke="currentColor" strokeWidth="1.6" /><path d="m8 12 2.5 2.5L16.5 9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-              <p className={styles.cardIndex}>02 / PERSONAL ESTIMATE</p><h3>Your holdings, on your terms.</h3><p>Enter quantities yourself to see an estimate against current market prices. Your figures stay in this browser and never represent a Venmo balance.</p><Link href="/dashboard#portfolio">View portfolio tools <ArrowIcon /></Link>
+              <p className={styles.cardIndex}>02 / PERSONAL ESTIMATE</p><h3>Your holdings, on your terms.</h3><p>Enter quantities yourself to see an estimate against market reference prices. Your figures stay in this browser and never represent a Venmo balance.</p><Link href="/dashboard#portfolio">View portfolio tools <ArrowIcon /></Link>
             </article>
             <article className={styles.featureCard}>
               <span className={`${styles.featureIcon} ${styles.iconMint}`}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 8h14l1.2 12H3.8L5 8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M8 8V6a4 4 0 0 1 8 0v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /><path d="M9 13h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg></span>
@@ -121,7 +121,7 @@ export default function Home() {
           <div className={styles.controlCopy}><p className={styles.eyebrow}>CLEAR BY DESIGN</p><h2 id="control-title">Your wallet stays yours.<br /><span>Your data stays understandable.</span></h2><p>This hackathon concept adds market context and product discovery around the wallet experience. It does not connect to Venmo, move money, or trade crypto. Manual portfolio estimates and saved shopping collections are stored locally on this device.</p></div>
           <Link href="/dashboard#settings" className={styles.controlLink}>See data and privacy settings <ArrowIcon /></Link>
         </section>
-      </main>
+      </main></MarketSnapshotProvider>
 
       <footer className={styles.footer}>
         <Link href="/" className={styles.brand}><BrandMark /><span>PayPal <b>Markets</b></span></Link>

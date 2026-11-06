@@ -1,0 +1,122 @@
+# Customer web sign-in
+
+This is a separate, opt-in server-side Log in with PayPal integration for the
+customer website. The default is disabled. It does not connect the internal
+management concept, implement the mobile handoff, enable payment actions, or
+grant merchant reporting permissions. No provider credentials are sent to the
+browser. The server does not persist PayPal access tokens, refresh tokens, raw
+provider subjects, or user profiles.
+
+The API contract is `postman/specs/customer-web-auth.yaml`. The generated local
+collection defaults to an unreachable loopback port and contains only safe
+negative checks; provide the URL of a deliberately isolated test service when
+running it. Neither artifact is published to a workspace by this change.
+
+## Configuration and prerequisites
+
+Set these values through the deployment's approved secret/configuration
+mechanism. Do not put secrets in client code, logs, screenshots, or source.
+Nothing in this change edits an environment file or provisions a database.
+
+| Variable | Purpose |
+| --- | --- |
+| `PAYPAL_LOGIN_ENABLED` | Exactly `true` enables the feature; otherwise it is disabled. |
+| `PAYPAL_ENV` | Explicitly `sandbox` or `live`; there is no implicit environment fallback. |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Credentials for the matching PayPal app, with Log in with PayPal enabled. The secret remains server-side. Existing webhook credentials do not by themselves establish login eligibility. |
+| `AUTH_PUBLIC_ORIGIN` | Canonical HTTPS origin without a trailing slash or path. Register its exact `/api/auth/paypal/callback` URL with the PayPal app. |
+| `AUTH_SESSION_DATABASE_URL` | Connection URL for a dedicated PostgreSQL database. A TLS connection with server-certificate verification is required; query-string connection options are rejected so they cannot weaken that setting. |
+| `AUTH_SUBJECT_HMAC_KEY` | Stable, cryptographically random 32–64-byte secret encoded as unpadded base64url. Generate it with a trusted secret manager. Do not rotate it without a planned data-scope migration. |
+| `PAYPAL_LOGIN_ACCOUNT_ATTRIBUTES` | Optional `true` requests PayPal's account-attributes scope in addition to `openid`; default is off. Enable only when that scope and its intended use have been confirmed and consented. |
+
+Provision an isolated database and explicitly apply `customer-auth-schema.sql`
+using an authorized database administration workflow. The application never
+runs the migration automatically or reuses the legacy marketplace SQLite
+database. Its database role needs schema usage and `SELECT`, `INSERT`, `UPDATE`
+and `DELETE` on all three auth tables. Configure PostgreSQL certificate trust
+and scheduled cleanup of expired login transactions and expired session
+families. Deleting a family cascades to its session aliases; do not delete an
+alias while its family remains active. Application cleanup is deliberately
+bounded and only occurs on new sign-ins. Backups and database access controls
+must protect the short-lived login-transaction verifier and state values.
+
+In PayPal Developer Dashboard, enable Log in with PayPal for the correct sandbox
+app, select only the needed information, and register the exact callback. PayPal
+requires a privacy-policy URL and user-agreement URL, and reviews live apps and
+scopes before live activation. See the [PayPal integration guide](https://developer.paypal.com/log-in/build).
+The sandbox issuer, discovery metadata, ID-token behavior, scope eligibility,
+and callback configuration have not been verified with this project's PayPal
+app. A failed or unexpected metadata check leaves login unavailable.
+
+## Session and privacy model
+
+The server creates a five-minute one-use login transaction, and checks state,
+nonce, S256 PKCE, the ID token's issuer, audience, expiry and RSA signature, and
+the userinfo subject. Discovery and provider endpoints are restricted to the
+selected PayPal environment; redirects and oversized responses fail closed.
+Browser cookies are host-only, Secure, HttpOnly and SameSite=Lax. The opaque
+application session expires after 30 minutes, is stored only as a hash, and is
+revoked on sign-out or rotated on a successful new sign-in. Login and sign-out
+require an exact same-origin POST. A configured callback returns to the fixed
+Account destination and does not put a code or token into its destination;
+an unconfigured callback returns a generic unavailable response.
+
+Login transactions and sessions are bound to a keyed fingerprint of the
+canonical origin, selected environment and issuer, client ID and secret,
+requested account-attributes setting, and subject HMAC key. Changing any of
+these—including client-secret rotation—invalidates existing transactions and
+sessions. Sign-out revokes the linked session family under a database lock;
+rotated session aliases remain until that family expires, so an old sign-out
+can still invalidate a later session. A callback does not clear the short-lived
+transaction cookie, since a delayed response could otherwise erase a newer
+sign-in cookie. Sign-out clears both cookies. Independently started guest flows
+without a common established session or transaction cookie are separate
+families; signing out one cannot cancel another unknown family.
+
+The session response contains only `authenticated`, `loginAvailable`, and,
+when signed in, `accountType` and `dataScope`. `loginAvailable` is a store and
+metadata preflight, not proof that the provider has approved credentials,
+scopes or consent. Missing or unfamiliar account types remain `unknown`.
+PayPal's `PREMIER` type is also `unknown` until its meaning for this
+application is established; it does not imply a Business entitlement.
+`dataScope` is a stable, versioned HMAC of the verified subject and issuer,
+bound to this app, environment and client ID. It is pseudonymous personal
+data—not an anonymous value, authorization credential or automatic cross-device
+sync. Changing the HMAC key or PayPal client can change the scope. Existing
+shared guest holdings, contacts and reports must not silently be attributed to
+the signed-in person; ownership/migration and local namespace handling are
+separate work.
+
+Application telemetry filters query strings, but deployment access logs,
+reverse proxies and other instrumentation must also be configured and verified
+to avoid retaining callback query strings, authorization codes, cookies and
+tokens before enabling login. This repository does not control or verify every
+external logging surface.
+
+The customer dashboard and sign-in-start response allow form navigation only
+to the application itself and the exact live and sandbox PayPal sign-in
+origins. Authentication responses use `Referrer-Policy: no-referrer`. Verify
+the effective headers and the redirect in the target browser and hosting
+environment before enabling sign-in; local header checks do not prove a
+successful PayPal authorization.
+
+Before public enablement, put the login routes behind a verified trusted edge
+with effective shared rate and abuse controls. Origin checking is a browser
+CSRF defense, not proof of client identity: a non-browser caller can forge the
+header and exhaust the transaction capacity or database connections. Shared
+database quotas cap retained rows at 2,048 families, 4,096 transactions and
+8,192 session aliases, including completed and revoked records. Capacity
+exhaustion fails closed; bounded cleanup reclaims eligible rows on later
+sign-in attempts. These quotas and per-process concurrency limits do not
+provide rate limiting or prevent denial of service. This repository does not
+provision or verify the required edge controls.
+
+## Verification boundaries
+
+Local tests use synthetic RSA-signed identity responses. An isolated,
+socket-only PostgreSQL fixture is provided; check its execution result before
+claiming the real store was tested. Neither can prove PayPal's actual response
+or app approval. Before claiming a working integration, run the approved sandbox
+flow with fictional personal and business test accounts, verify the exact
+provider metadata and returned claims, and check browser cookies, sign-out,
+expiry, account switching and the guest-data boundary. The native app requires
+a separately reviewed, verified-link and one-use handoff design.

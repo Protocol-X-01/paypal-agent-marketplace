@@ -30,6 +30,7 @@ export async function accessToken(signal: AbortSignal): Promise<string> {
     },
     body: "grant_type=client_credentials",
     cache: "no-store",
+    redirect: "error",
     signal,
   });
   if (!res.ok) throw new Error(`paypal auth failed: ${res.status}`);
@@ -67,6 +68,7 @@ async function call<T>(
     },
     body,
     cache: "no-store",
+    redirect: "error",
     signal,
   });
   const json: unknown = await res.json().catch(() => ({}));

@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: PayPal Transaction Search - experimental first-page subset
+  version: 0.1.0
+  description: >-
+    A narrow, local test contract for a future authorized PayPal Business
+    reporting adapter. This is not an app endpoint and does not establish
+    merchant access, complete pagination, credit/debit direction, sales,
+    refunds or customer metrics. The example data are fictional. The response
+    schema includes only the fields needed for an inspection and permits other
+    fields because transaction_info itself may contain sensitive information.
+servers:
+  - url: https://api-m.sandbox.paypal.com
+paths:
+  /v1/reporting/transactions:
+    get:
+      operationId: inspectFirstReportingPage
+      summary: Inspect the first page of a reporting period
+      description: >-
+        PayPal documents transaction IDs as non-unique and date ranges of up
+        to 31 days. Page numbering and page stability need sandbox validation;
+        the consumer does not claim that this first page is a complete report.
+      security:
+        - reportingOAuth:
+            - https://uri.paypal.com/services/reporting/search/read
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: end_date
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: fields
+          in: query
+          schema: { type: string, enum: [transaction_info], default: transaction_info }
+        - name: balance_affecting_records_only
+          in: query
+          schema: { type: string, enum: ['Y'], default: 'Y' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Search response; optional fields may be absent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction_details:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        transaction_info:
+                          type: object
+                          properties:
+                            transaction_event_code: { type: string }
+                            transaction_status: { type: string }
+                          additionalProperties: true
+                      additionalProperties: true
+                  last_refreshed_datetime: { type: string, format: date-time }
+                  page: { type: integer, minimum: 0 }
+                  total_items: { type: integer, minimum: 0 }
+                  total_pages: { type: integer, minimum: 0 }
+                additionalProperties: true
+              example:
+                transaction_details:
+                  - transaction_info:
+                      transaction_event_code: T0006
+                      transaction_status: S
+                last_refreshed_datetime: '2026-01-08T00:00:00Z'
+                page: 1
+                total_items: 1
+                total_pages: 1
+        '400':
+          description: Invalid request.
+        '403':
+          description: Reporting permission denied.
+        '500':
+          description: Provider error.
+        default:
+          description: Other provider, gateway or transport failure.
+components:
+  securitySchemes:
+    reportingOAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://api-m.sandbox.paypal.com/v1/oauth2/token
+          scopes:
+            https://uri.paypal.com/services/reporting/search/read: Transaction Search reporting access

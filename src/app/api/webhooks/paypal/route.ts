@@ -2,6 +2,8 @@ import { verifyWebhook } from "@/lib/paypal";
 
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
 const BODY_READ_TIMEOUT_MS = 3_000;
+const MAX_CONCURRENT_VERIFICATIONS = 8;
+const VERIFICATION_RETRY_AFTER_SECONDS = 5;
 const PAYPAL_CERT_HOSTS = new Set([
   "api.paypal.com",
   "api-m.paypal.com",
@@ -13,6 +15,24 @@ const TRANSMISSION_ID_PATTERN = /^(?!\d+$)\w+\S+$/;
 const TRANSMISSION_TIME_PATTERN =
   /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
 const SIGNATURE_PATTERN = /^\S+$/;
+
+const globalForPayPalWebhook = globalThis as typeof globalThis & {
+  __paypalWebhookVerificationsInFlight?: number;
+};
+
+function tryAcquireVerificationSlot(): boolean {
+  const inFlight = globalForPayPalWebhook.__paypalWebhookVerificationsInFlight ?? 0;
+  if (inFlight >= MAX_CONCURRENT_VERIFICATIONS) return false;
+  globalForPayPalWebhook.__paypalWebhookVerificationsInFlight = inFlight + 1;
+  return true;
+}
+
+function releaseVerificationSlot(): void {
+  globalForPayPalWebhook.__paypalWebhookVerificationsInFlight = Math.max(
+    0,
+    (globalForPayPalWebhook.__paypalWebhookVerificationsInFlight ?? 1) - 1,
+  );
+}
 
 interface VerificationHeaders {
   transmission_id: string;
@@ -139,7 +159,9 @@ async function readBoundedJson(request: Request): Promise<BodyReadResult> {
 
       byteLength += value.byteLength;
       if (byteLength > MAX_WEBHOOK_BODY_BYTES) {
-        await reader.cancel().catch(() => undefined);
+        // Some stream implementations never settle cancellation. Do not let
+        // cleanup hold a verification slot after rejecting an oversized body.
+        void reader.cancel().catch(() => undefined);
         return { ok: false, reason: "too-large" };
       }
       chunks.push(value);
@@ -162,18 +184,23 @@ async function readBoundedJson(request: Request): Promise<BodyReadResult> {
   }
 }
 
-function jsonError(error: string, status: number) {
-  return Response.json({ error }, { status });
+function jsonError(error: string, status: number, headers?: HeadersInit) {
+  return Response.json({ error }, { status, headers });
 }
 
-function rejectRequest(request: Request, error: string, status: number) {
+function rejectRequest(
+  request: Request,
+  error: string,
+  status: number,
+  headers?: HeadersInit,
+) {
   try {
     const cancellation = request.body?.cancel();
     if (cancellation) void cancellation.catch(() => undefined);
   } catch {
     // The stream may already be locked or consumed; the response still stands.
   }
-  return jsonError(error, status);
+  return jsonError(error, status, headers);
 }
 
 export async function POST(request: Request) {
@@ -202,41 +229,54 @@ export async function POST(request: Request) {
     return rejectRequest(request, "content type must be application/json", 415);
   }
 
-  const body = await readBoundedJson(request);
-  if (!body.ok) {
-    if (body.reason === "too-large") {
-      return rejectRequest(request, "webhook body is too large", 413);
-    }
-    if (body.reason === "timeout") {
-      return rejectRequest(request, "webhook body read timed out", 408);
-    }
-    return rejectRequest(request, "bad payload", 400);
-  }
-
-  if (
-    !body.value ||
-    typeof body.value !== "object" ||
-    Array.isArray(body.value) ||
-    typeof (body.value as Record<string, unknown>).event_type !== "string" ||
-    !(body.value as Record<string, string>).event_type.trim()
-  ) {
-    return rejectRequest(request, "bad payload", 400);
+  if (!tryAcquireVerificationSlot()) {
+    return rejectRequest(
+      request,
+      "webhook verification is temporarily busy",
+      503,
+      { "Retry-After": String(VERIFICATION_RETRY_AFTER_SECONDS) },
+    );
   }
 
   try {
-    const verification = await verifyWebhook(
-      { ...verificationHeaders, webhook_id: webhookId },
-      body.raw,
-    );
-
-    if (verification.verification_status !== "SUCCESS") {
-      return rejectRequest(request, "verification failed", 400);
+    const body = await readBoundedJson(request);
+    if (!body.ok) {
+      if (body.reason === "too-large") {
+        return rejectRequest(request, "webhook body is too large", 413);
+      }
+      if (body.reason === "timeout") {
+        return rejectRequest(request, "webhook body read timed out", 408);
+      }
+      return rejectRequest(request, "bad payload", 400);
     }
-  } catch {
-    return rejectRequest(request, "verification service unavailable", 503);
-  }
 
-  // The current companion has no marketplace ledger or checkout. Acknowledge
-  // verified deliveries without applying wallet credits or issuing payouts.
-  return Response.json({ received: true, processed: false });
+    if (
+      !body.value ||
+      typeof body.value !== "object" ||
+      Array.isArray(body.value) ||
+      typeof (body.value as Record<string, unknown>).event_type !== "string" ||
+      !(body.value as Record<string, string>).event_type.trim()
+    ) {
+      return rejectRequest(request, "bad payload", 400);
+    }
+
+    try {
+      const verification = await verifyWebhook(
+        { ...verificationHeaders, webhook_id: webhookId },
+        body.raw,
+      );
+
+      if (verification.verification_status !== "SUCCESS") {
+        return rejectRequest(request, "verification failed", 400);
+      }
+    } catch {
+      return rejectRequest(request, "verification service unavailable", 503);
+    }
+
+    // The current companion has no marketplace ledger or checkout. Acknowledge
+    // verified deliveries without applying wallet credits or issuing payouts.
+    return Response.json({ received: true, processed: false });
+  } finally {
+    releaseVerificationSlot();
+  }
 }

@@ -1,0 +1,385 @@
+.card {
+  --draft-muted: #52677f;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: clamp(18px, 3vw, 26px);
+  color: #172f4f;
+  background: linear-gradient(125deg, #ffffff 55%, #f3f7ff 100%);
+  border: 1px solid #dce6f5;
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(20, 49, 86, .045);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.headingCopy {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: var(--draft-muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+  line-height: 1.4;
+}
+
+.headingCopy h3 {
+  margin: 0;
+  color: #173456;
+  font-size: clamp(19px, 3vw, 24px);
+  font-weight: 660;
+  letter-spacing: -.04em;
+  line-height: 1.18;
+}
+
+.headingCopy > p:last-child {
+  max-width: 550px;
+  margin: 8px 0 0;
+  color: var(--draft-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.draftBadge {
+  flex: none;
+  max-width: 100%;
+  padding: 8px 10px;
+  color: #245999;
+  background: #eff5ff;
+  border: 1px dashed #a9c2e9;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 680;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.form,
+.review {
+  display: grid;
+  gap: 17px;
+  min-width: 0;
+}
+
+.fields {
+  display: grid;
+  gap: 15px;
+  min-width: 0;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #324b6b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 13px;
+  color: #173456;
+  background: #fff;
+  border: 1px solid #cfdced;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--draft-muted);
+  opacity: 1;
+}
+
+.field input:focus-visible,
+.field textarea:focus-visible,
+.actions button:focus-visible,
+.formActions button:focus-visible {
+  outline: 3px solid rgba(23, 105, 210, .28);
+  outline-offset: 2px;
+  border-color: #1769d2;
+}
+
+.field small {
+  color: var(--draft-muted);
+  font-size: 10px;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.field .fieldError {
+  color: #9a3c35;
+  font-weight: 600;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: #9a3c35;
+}
+
+.amountField {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding-left: 13px;
+  color: var(--draft-muted);
+  background: #fff;
+  border: 1px solid #cfdced;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.amountField:focus-within {
+  outline: 3px solid rgba(23, 105, 210, .18);
+  border-color: #1769d2;
+}
+
+.amountFieldInvalid {
+  border-color: #9a3c35;
+}
+
+.amountField input {
+  min-height: 46px;
+  padding-left: 7px;
+  border: 0;
+  outline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountField input:focus-visible {
+  outline: 0;
+}
+
+.optional {
+  color: var(--draft-muted);
+  font-size: 10px;
+  font-weight: 450;
+}
+
+.formActions,
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.actions button,
+.formActions button {
+  min-height: 46px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  box-shadow: none;
+}
+
+.primaryButton {
+  color: #fff;
+  background: #145fc8;
+  box-shadow: 0 4px 12px rgba(20, 95, 200, .16);
+}
+
+.primaryButton:hover {
+  background: #0c4fab;
+}
+
+.secondaryButton {
+  color: #28527f;
+  background: #f4f7fc;
+  border-color: #d6e1f0 !important;
+}
+
+.secondaryButton:hover {
+  background: #eaf1fb;
+}
+
+.clearButton {
+  color: var(--draft-muted);
+  background: transparent;
+  border-color: #dce5f0 !important;
+}
+
+.clearButton:hover {
+  color: #344f71;
+  background: #f7f9fc;
+}
+
+.reviewNotice {
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  color: #254d7a;
+  background: #f0f6ff;
+  border-left: 3px solid #2470d0;
+  border-radius: 8px;
+}
+
+.reviewNotice strong {
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.reviewNotice span,
+.nextStep {
+  color: var(--draft-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.summary > div {
+  min-width: 0;
+  padding: 13px 14px;
+  background: #fff;
+  border: 1px solid #e1e9f4;
+  border-radius: 10px;
+}
+
+.summary .noteSummary {
+  grid-column: 1 / -1;
+}
+
+.summary dt {
+  margin-bottom: 5px;
+  color: var(--draft-muted);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.summary dd {
+  margin: 0;
+  color: #193959;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.summary .noteSummary dd {
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.nextStep,
+.privacyNote {
+  margin: 0;
+}
+
+.recipientNotice {
+  margin: 0;
+  color: #835b08;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.reviewHeading {
+  margin: 0;
+  color: #173456;
+  font-size: 15px;
+  font-weight: 700;
+  scroll-margin-top: 16px;
+}
+
+.reviewHeading:focus {
+  outline: 3px solid rgba(23, 105, 210, .3);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
+.privacyNote {
+  padding-top: 13px;
+  color: var(--draft-muted);
+  border-top: 1px solid #e6edf6;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.successMessage,
+.errorMessage {
+  margin: -4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.successMessage {
+  color: #246746;
+}
+
+.errorMessage {
+  color: #9a3c35;
+}
+
+@media (min-width: 640px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, .72fr);
+    align-items: start;
+  }
+
+  .noteField {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .header {
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .draftBadge {
+    align-self: flex-start;
+  }
+
+  .actions button,
+  .formActions button {
+    width: 100%;
+  }
+
+  .summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summary .noteSummary {
+    grid-column: auto;
+  }
+}
