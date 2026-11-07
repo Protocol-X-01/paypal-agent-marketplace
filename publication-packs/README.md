@@ -15,11 +15,12 @@
 
 | Review | Download |
 | --- | --- |
-| [Read the edition overview](releases/paypal-markets-CONCEPT-20261107-v4/README.md) | [Download the complete v4 pack](releases/paypal-markets-CONCEPT-20261107-v4.zip) |
-| [Browse the v4 files](releases/paypal-markets-CONCEPT-20261107-v4/) | [View archive checksum](releases/paypal-markets-CONCEPT-20261107-v4.zip.sha256) |
-| [Open the offline catalogue file](releases/paypal-markets-CONCEPT-20261107-v4/START-HERE.html) | [Read usage and identity guidance](releases/paypal-markets-CONCEPT-20261107-v4/USAGE.md) |
+| [Browse the GitHub visual catalogue](START-HERE.md) | [Download the complete v4 pack](releases/paypal-markets-CONCEPT-20261107-v4.zip) |
+| [Read the edition overview](releases/paypal-markets-CONCEPT-20261107-v4/README.md) | [View archive checksum](releases/paypal-markets-CONCEPT-20261107-v4.zip.sha256) |
+| [Browse the v4 files](releases/paypal-markets-CONCEPT-20261107-v4/) | [Open the offline HTML catalogue after extraction](releases/paypal-markets-CONCEPT-20261107-v4/START-HERE.html) |
+| [Read usage and identity guidance](releases/paypal-markets-CONCEPT-20261107-v4/USAGE.md) | [Review provenance](releases/paypal-markets-CONCEPT-20261107-v4/PROVENANCE.json) |
 
-GitHub displays HTML files as source. For the visual catalogue, download and extract the ZIP, then open `START-HERE.html` in a browser. The catalogue is bundled for offline viewing.
+Use `START-HERE.md` to view the images and follow links directly in GitHub. GitHub displays `START-HERE.html` as source; to use that offline catalogue, download and extract the ZIP first, then open the HTML file from the extracted edition folder. Its relative image and document links resolve within that folder.
 
 ## Inside this edition
 

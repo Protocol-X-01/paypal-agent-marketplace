@@ -9,6 +9,8 @@
 <p align="center"><strong>INDEPENDENT CONCEPT · HACKATHON DESIGN STUDY</strong></p>
 <p align="center">Market clarity · personal planning · everyday discovery</p>
 <p align="center">
+  <a href="publication-packs/START-HERE.md"><strong>Browse the visual gallery</strong></a>
+  &nbsp;·&nbsp;
   <a href="publication-packs/README.md"><strong>Explore the publication pack</strong></a>
   &nbsp;·&nbsp;
   <a href="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip"><strong>Download edition v4</strong></a>
@@ -38,7 +40,7 @@ Market prices are reference data, not PayPal or Venmo execution quotes. Portfoli
 
 ## Publication pack
 
-The latest shared edition is **PayPal Markets — CONCEPT v4**. It contains the offline visual catalogue, two original concept illustrations, historical web and Expo Web captures, fictional Operations examples, asset provenance, source evidence and a submission-readiness checklist.
+The latest shared edition is **PayPal Markets — CONCEPT v4**. [Browse its GitHub-rendered visual gallery](publication-packs/START-HERE.md), or download the pack for its offline HTML catalogue, two original concept illustrations, historical web and Expo Web captures, fictional Operations examples, asset provenance, source evidence and submission-readiness checklist.
 
 - [Open the pack index](publication-packs/README.md)
 - [Download the v4 ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip)
