@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-11-07T05:10:37Z",
+  "base_commit": "1329b80bc75ab0b8192010aa1a5983cd111ec6e0",
+  "source_state": "Uncommitted local working tree. These hashes identify the current source snapshot only; the included screenshots retain their own 6 November capture provenance and are not asserted to come from this exact snapshot.",
+  "selected_source_files": [
+    {
+      "path": "src/app/page.tsx",
+      "sha256": "d9eb381c8c403cbdce523a6c896831925ee86e4fc580221dbf192765a5ffab3b"
+    },
+    {
+      "path": "src/app/home.module.css",
+      "sha256": "e79c46243c09c3f10a7a0c71f02c4626e5be68e061304557dd2a8e242f305543"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "sha256": "367ca6402bbb51fc5415b4d270992f8226ba21033c2bc9564d5ce705f54c1817"
+    },
+    {
+      "path": "src/app/components/live-markets.tsx",
+      "sha256": "080be1cae63dd081c3405409352af1ff7cc32c5d3efd77ea2acad6101327673d"
+    },
+    {
+      "path": "src/app/components/marketplace.tsx",
+      "sha256": "6d30d621ba3336b8798e8c04577517517df1ed617b6f20deac3a453edad3448e"
+    },
+    {
+      "path": "src/app/components/site-shell.tsx",
+      "sha256": "99da653f960feb9dab686ac4b42edc08d9af436472b4357f67cdb820765ec296"
+    },
+    {
+      "path": "apps/management/src/app/management-dashboard.tsx",
+      "sha256": "aadb3b0401e62085de9a77845eb0d9f896199ba726cefb8f8e4561d9d4486105"
+    },
+    {
+      "path": "apps/management/src/lib/management-data.ts",
+      "sha256": "a5c96726543694c50db7f455e36b1c020077f7ee4dcb7aa317bf947cc41d437a"
+    },
+    {
+      "path": "apps/mobile/src/app/_layout.tsx",
+      "sha256": "634fb6b7ddc41d293b3de30f092ed2542096df8941870a726d261c4fa713a7e1"
+    },
+    {
+      "path": "apps/mobile/src/app/business.tsx",
+      "sha256": "b00a1acadf666bb47c3f9b649f4e0b59ecb5bda10723d75955070d8d3be1422e"
+    },
+    {
+      "path": "apps/mobile/src/app/portfolio.tsx",
+      "sha256": "db806e2f04e830e839b980971afe8befac21e5e981994ad48b79002cc3092578"
+    },
+    {
+      "path": "apps/mobile/src/app/shop.tsx",
+      "sha256": "9d234b8d711cac73423aea970d5fba75e75c8968d94c72d4475e2bf15863adbe"
+    }
+  ]
+}

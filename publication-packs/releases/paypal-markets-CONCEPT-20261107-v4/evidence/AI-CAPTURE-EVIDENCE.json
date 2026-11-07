@@ -1,0 +1,65 @@
+{
+  "checkedAt": "2026-11-06T14:30:27.425Z",
+  "surface": "actual browser UI and Next route",
+  "status": 200,
+  "request": {
+    "coinId": "bitcoin",
+    "currency": "GBP",
+    "days": 7
+  },
+  "response": {
+    "kind": "market",
+    "generatedAt": "2026-11-06T14:29:17.634Z",
+    "model": "gpt-6-luna",
+    "insight": {
+      "headline": "Bitcoin was lower over the observed week",
+      "summary": "The final recorded price was below the first. Prices moved within a wider range during the period.",
+      "observations": [
+        "The observations are historical candle closes and high-low ranges from CoinGecko, expressed in pounds sterling.",
+        "The recorded low was below both the opening and closing prices; the recorded high was above them."
+      ],
+      "caution": "These are public market observations, not PayPal execution quotes."
+    },
+    "source": {
+      "coinId": "bitcoin",
+      "currency": "GBP",
+      "days": 7,
+      "provider": "CoinGecko",
+      "retrievedAt": "2026-11-06T14:29:15.521Z",
+      "sampleCount": 42,
+      "candleIntervalMinutes": 240,
+      "timestampKind": "close",
+      "priceBasis": "candle_close",
+      "rangeBasis": "candle_high_low",
+      "firstTimestamp": 1793376000000,
+      "lastTimestamp": 1793966400000,
+      "firstPrice": 57893.75300182581,
+      "lastPrice": 56777.54426336877,
+      "low": 55943.52165043399,
+      "high": 60106.284308802664,
+      "changePercent": -1.928029676054752
+    },
+    "disclaimer": "AI-generated commentary may be inaccurate. CoinGecko observations are historical reference data, not PayPal execution quotes or personalized investment advice."
+  },
+  "scope": "Actual local browser generation using public market history only. No private holdings or account data. Historical v1 capture evidence retains its original earlier limitations.",
+  "selected_source_hashes_recorded_at": "2026-11-06T15:45:29.830445+00:00",
+  "selected_source_files": [
+    {
+      "path": "src/app/api/ai/market-insight/route.ts",
+      "sha256": "f3dadaac1f229c3f6c37c18d02ccd633931b740a93ba1f2c134188322cefa11d"
+    },
+    {
+      "path": "packages/ai-insights/src/core.ts",
+      "sha256": "f4018021fac5af3b29426f34282de30c3386661d3c480e75e1945ecadda486ba"
+    },
+    {
+      "path": "packages/ai-insights/ui/InsightPanel.tsx",
+      "sha256": "4547fe6214728ec5373c5312617c8e742d5b899c5779c872ef9880b10fcf2602"
+    },
+    {
+      "path": "packages/ai-insights/ui/client.ts",
+      "sha256": "40ffb4327598d4a4e0c34e54669a92b527a4b63347dabd9d07ef73df0df26daa"
+    }
+  ],
+  "capture_sha256": "45d0cb6f948fdc58654efe613005570868af93ef344ee8a8cbec78d56a875bb0"
+}

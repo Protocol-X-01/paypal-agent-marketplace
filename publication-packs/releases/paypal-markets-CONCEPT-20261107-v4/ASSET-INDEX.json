@@ -1,0 +1,232 @@
+[
+  {
+    "bytes": 46918,
+    "capture": {
+      "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+      "scope": "Personal workspace and empty calculator inputs; sign-in unavailable; captured 2026-11-06.",
+      "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "empty",
+    "kind": "actual-ui",
+    "path": "captures/account-phone.png",
+    "sha256": "2135617c720ca672da673ddb836f3a8a7d7ef9f1c290fe6686de48bef3845401",
+    "title": "CONCEPT — Account Phone"
+  },
+  {
+    "bytes": 63422,
+    "capture": {
+      "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+      "scope": "Business report tools with empty inputs; separate fictional sample action; no account connection; captured 2026-11-06.",
+      "surface": "Expo Web responsive preview at tablet width, 1024 x 900 pixels; not a physical tablet.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "empty",
+    "kind": "actual-ui",
+    "path": "captures/business-tablet-fictional.png",
+    "sha256": "a2dd623b394b3639caff8334373b7974c0bbb2281e33db0baa62fecf3c15169d",
+    "title": "CONCEPT — Business Tablet Fictional"
+  },
+  {
+    "bytes": 46470,
+    "capture": {
+      "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+      "scope": "UK/GBP discovery controls and curated categories; no product offer or checkout shown; captured 2026-11-06.",
+      "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "empty",
+    "kind": "actual-ui",
+    "path": "captures/shop-phone.png",
+    "sha256": "584229f07a1fdf6347a3c4a9a60fd60955a5cf249a86a06e495a96912956350a",
+    "title": "CONCEPT — Shop Phone"
+  },
+  {
+    "bytes": 33915,
+    "capture": {
+      "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+      "scope": "Invented empty local shortlist; no saved retailer links, prices or personal data; captured 2026-11-06.",
+      "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "fictional",
+    "kind": "actual-ui",
+    "path": "captures/shop-shortlist-phone.png",
+    "sha256": "d6ddd3f83376cb332df7d16f249949a3ce13210199ef398ba20a06013478af73",
+    "title": "CONCEPT — Shop Shortlist Phone"
+  },
+  {
+    "bytes": 76026,
+    "capture": {
+      "artifact": "Local development browser capture from 2026-11-06; source identity and selected hashes in evidence/CAPTURE-EVIDENCE.json.",
+      "scope": "Historical public CoinGecko snapshot and vivid sky-blue line captured 2026-11-06; not a current quote or hosted-service result.",
+      "surface": "Local web homepage browser capture, 1265 x 712 pixels.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "public",
+    "kind": "actual-ui",
+    "path": "captures/web-home-sky-public.png",
+    "sha256": "4f910a0bdc5bc7c154bc07ba1f62520450f8d023605ae97edd96494f7b313b11",
+    "title": "CONCEPT — Web Home Sky Public"
+  },
+  {
+    "bytes": 78446,
+    "capture": {
+      "artifact": "Local development browser capture from 2026-11-06; source and request evidence in evidence/AI-CAPTURE-EVIDENCE.json.",
+      "scope": "Historical seven-day public BTC/GBP OHLC commentary from CoinGecko and OpenAI captured 2026-11-06; no holdings; not investment advice.",
+      "surface": "Local web market dashboard browser capture, 1265 x 712 pixels.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "public",
+    "kind": "actual-ui",
+    "path": "captures/ai-market-public.png",
+    "sha256": "45d0cb6f948fdc58654efe613005570868af93ef344ee8a8cbec78d56a875bb0",
+    "title": "CONCEPT — Ai Market Public"
+  },
+  {
+    "bytes": 68398,
+    "capture": {
+      "artifact": "Separate local Operations concept capture from 2026-11-06; source and fixture scope in evidence/CAPTURE-EVIDENCE.json.",
+      "scope": "Explicit disconnected fictional aggregate preview with invented figures, captured 2026-11-06; no staff identity or customer feed.",
+      "surface": "Separate local Operations web app browser capture, 1265 x 712 pixels.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "fictional",
+    "kind": "actual-ui",
+    "path": "captures/operations-fictional-public.png",
+    "sha256": "fac6d5416c205d9ff6fafa12f857d70ce6f4b9cd508be57bc9cbd40aacab1346",
+    "title": "CONCEPT — Operations Fictional Public"
+  },
+  {
+    "bytes": 76808,
+    "capture": {
+      "artifact": "Separate local Operations concept capture from 2026-11-06; source and fixture scope in evidence/CAPTURE-EVIDENCE.json.",
+      "scope": "Fictional cohort and event charts from the same local fixture, captured 2026-11-06; not internal PayPal reporting.",
+      "surface": "Separate local Operations web app scrolled browser capture, 1265 x 712 pixels.",
+      "verified_at": "2026-11-07T05:10:37Z"
+    },
+    "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+    "data": "fictional",
+    "kind": "actual-ui",
+    "path": "captures/operations-fictional-charts.png",
+    "sha256": "d91bef760770ef4c659fb7b73518d26d6de7243c3b88912780a25e2380ea8ac1",
+    "title": "CONCEPT — Operations Fictional Charts"
+  },
+  {
+    "bytes": 1487520,
+    "concept_label_present": true,
+    "credit": "Original illustrative image generated with OpenAI image_gen through Codex on 2026-11-06; visually reviewed unchanged. PayPal identity remains with PayPal; no affiliation, endorsement or trademark licence is claimed.",
+    "data": "not-applicable",
+    "kind": "concept-art",
+    "path": "artwork/concept-cover-wide.png",
+    "sha256": "f17d8c8e8a37ba258383406f5e39f3b6a7bc0230ecd484e21a2defdb93108e5c",
+    "title": "INDEPENDENT CONCEPT — landscape cover"
+  },
+  {
+    "bytes": 1693201,
+    "concept_label_present": true,
+    "credit": "Original illustrative image generated with OpenAI image_gen through Codex on 2026-11-06; visually reviewed unchanged. PayPal identity remains with PayPal; no affiliation, endorsement or trademark licence is claimed.",
+    "data": "not-applicable",
+    "kind": "concept-art",
+    "path": "artwork/concept-social-square.png",
+    "sha256": "87763522ec106698110342c5ca404a41fd9a10fc624081af7c3372049abe5f98",
+    "title": "INDEPENDENT CONCEPT — square social tile"
+  },
+  {
+    "bytes": 247,
+    "credit": "Project concept palette; not official PayPal brand guidance.",
+    "data": "not-applicable",
+    "kind": "brand-reference",
+    "path": "identity/palette.json",
+    "sha256": "62cfcb2e7712c915f3f74b4d3afe3fb79a856e3532474ec1ed3457512aa9ea9c",
+    "title": "CONCEPT — working palette"
+  },
+  {
+    "bytes": 3176,
+    "credit": "Public-safe prompts, origins and measured hashes for the two original concept artworks.",
+    "data": "not-applicable",
+    "kind": "evidence",
+    "path": "evidence/ARTWORK-PROVENANCE.json",
+    "sha256": "7d8f842111806f314913206de3709348661daff8e7510586788dcc484b07894d",
+    "title": "Original artwork prompts and provenance"
+  },
+  {
+    "bytes": 3456,
+    "credit": "Original capture dates, selected source hashes and scope; Operations values are invented.",
+    "data": "public",
+    "kind": "evidence",
+    "path": "evidence/CAPTURE-EVIDENCE.json",
+    "sha256": "144645fd1a1e51a193cde508a3b9ac4a67d9c02dcf13e7fa4b76fd121df346e9",
+    "title": "Historical website and Operations capture evidence"
+  },
+  {
+    "bytes": 2634,
+    "credit": "Historical local route and public CoinGecko OHLC scope; no private holdings.",
+    "data": "public",
+    "kind": "evidence",
+    "path": "evidence/AI-CAPTURE-EVIDENCE.json",
+    "sha256": "d7cf29f1cafb274c5b5417ee48155e2365a51ca4205d490bb48908247c3c0dbc",
+    "title": "Historical public-market AI capture evidence"
+  },
+  {
+    "bytes": 355,
+    "credit": "Local browser interaction on public market history; not a hosted-service or device check.",
+    "data": "public",
+    "kind": "evidence",
+    "path": "evidence/WHEEL-ZOOM-CHECK.json",
+    "sha256": "5850c3befb8f825fb285455e289dc548a7d9af3175a56a920c162f54ac9e29c1",
+    "title": "Historical local chart wheel-zoom check"
+  },
+  {
+    "bytes": 2138,
+    "credit": "Hashes only; records the current local source identity without copying source code.",
+    "data": "not-applicable",
+    "kind": "evidence",
+    "path": "evidence/SOURCE-SNAPSHOT-20261107.json",
+    "sha256": "df4e9ac4d16bdc53adccef72098be4aa2949f00e54aa5f134b823788e3488562",
+    "title": "Selected current dirty-tree source hashes"
+  },
+  {
+    "bytes": 3500,
+    "credit": "Review record for the unchanged screenshot files in this pack; no image pixels were edited.",
+    "data": "not-applicable",
+    "kind": "evidence",
+    "path": "evidence/CAPTURE-REVIEW-20261107.json",
+    "sha256": "93f3fc89defdd059e41441692492ebf2b9870d1e732b440053d2307786c7fd1f",
+    "title": "Measured screenshot hashes, pixel dimensions and review scope"
+  },
+  {
+    "bytes": 1989,
+    "credit": "Project-authored, concept-only identity guidance.",
+    "data": "not-applicable",
+    "kind": "evidence",
+    "path": "guide/BRAND-QUICK-START.md",
+    "sha256": "006b90783f97bc6a765ac31ee3dce4d4158a34b50023b9736c09b8e2ecf3b184",
+    "title": "Concept identity quick start"
+  },
+  {
+    "bytes": 1940,
+    "credit": "Project-authored, evidence-bounded product description.",
+    "data": "public",
+    "kind": "evidence",
+    "path": "copy/CONCEPT-COPY.md",
+    "sha256": "b39820c57d2e3c4a87757b94b7196a6ee360e979f4458950e823d37d9348d7fe",
+    "title": "INDEPENDENT CONCEPT copy and caption"
+  },
+  {
+    "bytes": 1326,
+    "credit": "Project-authored readiness boundaries; external submission remains separately authorized.",
+    "data": "not-applicable",
+    "kind": "evidence",
+    "path": "copy/SUBMISSION-CHECKLIST.md",
+    "sha256": "96c3574bec895e484eb73ea654d0c8021930288068f3027172437d54c271da67",
+    "title": "Concept submission readiness checklist"
+  }
+]
