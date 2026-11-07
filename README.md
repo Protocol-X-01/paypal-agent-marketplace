@@ -1,92 +1,76 @@
 # PayPal Markets
 
-PayPal Markets is a public website and companion Expo app for customers who already use Venmo for wallet and payment activity. It adds clear cryptocurrency prices, market context, charts, a device-local manual holdings estimate, and Channel3 product discovery.
+<p align="center">
+  <a href="publication-packs/README.md">
+    <img src="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-cover-wide.png" alt="PayPal Markets — independent concept cover for Markets, Portfolio and Discover" width="880" />
+  </a>
+</p>
 
-## What works in this build
+<p align="center"><strong>INDEPENDENT CONCEPT · HACKATHON DESIGN STUDY</strong></p>
+<p align="center">Market clarity · personal planning · everyday discovery</p>
+<p align="center">
+  <a href="publication-packs/README.md"><strong>Explore the publication pack</strong></a>
+  &nbsp;·&nbsp;
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip"><strong>Download edition v4</strong></a>
+  &nbsp;·&nbsp;
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/README.md">Read its scope and evidence</a>
+</p>
 
-- A public homepage with live CoinGecko market snapshots and a link into the dashboard.
-- Live Bitcoin, Ethereum, Solana, Chainlink, Litecoin, Bitcoin Cash, and PayPal USD market metrics from CoinGecko.
-- Price history charts for 1 day, 1 week, 1 month, 3 months, and 1 year, with controls to zoom and move through the visible window.
-- A choice of 27 display currencies for dashboard and mobile market values, charts, and portfolio estimates. The preference is saved separately on each browser or device.
-- A locally stored watchlist and manual crypto quantities. These do not connect to or read from Venmo or another wallet.
-- A web Venmo payment draft with a review step. Recipient and USD amount are entered manually; amount formatting preserves the entered cents, and the app only copies the draft when asked. Venmo remains the place to verify the recipient and send a payment.
-- Channel3 product search, a shared curated catalog with 14 category shelves, Target/CVS/Walmart/Best Buy retailer filters, retailer offers, price comparison, and device-local named collections. Catalog pages contain up to 24 products, with customer-initiated loading up to 96 results per selection. Current offers show advertised affiliate commission when supplied; this is not customer cashback or a guaranteed payout. Curated sections use verified Channel3 category browsing; searches and category loads happen only after a customer action. Before a retailer handoff, the app rechecks the exact product and asks the customer to choose from the current offers; it requires another check after five minutes. Checkout remains with the retailer. Website images are fetched only from Channel3's image host without credentials or redirects; responses must allow CORS, be a supported raster image, and stay within 4 MiB, or a placeholder is shown.
-- A GB or US shopping storefront, saved separately per browser or device, with GB as the default. This setting chooses the catalog locale and GBP or USD offer currency; it is independent of the portfolio display currency. Changing it clears current offers and retailer checks while preserving saved collections.
-- A companion Expo client with Markets, Channel3 Shop and device-local collections, manual Portfolio, a Business report view, and a Venmo note draft. An Android debug build has been installed and opened on a Xiaomi; full physical-device acceptance remains open.
-- An Account area for Personal Lite planning and PayPal Business account-holder reports. Business starts empty, offers a clearly labeled synthetic preview, and can read a user-provided aggregate CSV in browser or native app memory. The report compares supplied periods and sales channels for transactions, gross and refunds. The website also offers a separate, opt-in PayPal Activity Download checkout-row preview. Imported reports are unverified and not live; they are not uploaded or saved by the app. PayPal internal management has its own disconnected concept under `apps/management`, with an explicit fictional preview.
-- AG Charts metric history and an AG Grid Business view; the Business workspace is empty by default and offers an opt-in synthetic preview labeled as not-live PayPal activity.
-- Data settings to export or reset locally saved holdings, the display currency, watchlists, and product collections.
-- A standalone web app manifest and layouts tuned for phone screens.
-- Local Postman collections for Channel3 product APIs and the app's market endpoints.
-- Baseline response headers and an app liveness endpoint for Render health checks.
+> **Independent concept.** This project is not an official PayPal or Venmo product. No affiliation, endorsement or trademark licence is claimed.
 
-Tracked assets match the seven cryptocurrencies listed on [PayPal's UK help page](https://www.paypal.com/uk/cshelp/article/what-is-cryptocurrency-help560); eligibility and availability vary by region and account. Market prices are reference data and may differ from prices offered by a payment provider or exchange. PayPal USD (PYUSD) is shown as its own USD-pegged stablecoin; its $1.00 chart reference appears when USD is selected. The public homepage snapshot remains in USD. CoinGecko data is not a PayPal or Venmo execution price, and cached data may be delayed; the displayed retrieval time helps identify its age. The display preference does not change a wallet or payment currency. The app requires a CoinGecko Demo key in `COINGECKO_DEMO_API_KEY` and does not fall back to shared keyless access.
+PayPal Markets explores a clearer customer view of public cryptocurrency reference prices, locally calculated portfolio estimates and Channel3 product discovery, alongside a Venmo-first payment experience.
 
-## Start locally
+This branch contains the web application and the publication pack. The companion Expo app and separate internal Operations experience are not included as source here. Their historical preview captures are included in the pack and are labelled with their actual scope.
 
-The [current local acceptance record](docs/LOCAL-UPGRADE-ACCEPTANCE-20261106.md) distinguishes implemented source, browser checks, device checks and remaining release gates. The independent [CONCEPT pack](publication-packs/releases/paypal-markets-CONCEPT-20261106-v2/START-HERE.html) contains reviewed artwork and public/fictional captures for submission preparation.
+## Product overview
 
-```bash
-npm install
+- **Markets:** CoinGecko reference prices and history for BTC, ETH, SOL, LINK, LTC, BCH and PYUSD, with chart controls and market context.
+- **Portfolio:** customer-entered quantities and local estimates. These are not connected wallet balances or settlement values.
+- **Discover:** Channel3 product search and curated browsing for GB and US storefronts. Current advertised commission appears only when the provider supplies it; it is not guaranteed earnings or customer cashback. Product purchases remain with the retailer.
+- **Business:** a workspace for customer-provided aggregate reports and clearly labelled fictional examples. It does not connect to a PayPal Business account or provide PayPal-wide customer monitoring.
+- **Operations concept:** the pack includes an explicitly fictional internal-management presentation. No PayPal staff identity or internal customer-data feed is connected.
+
+## Important boundaries
+
+Venmo remains the customer's wallet and payment surface. Contact payments are prepared as a draft for the customer to review and send in Venmo. This prototype does not hold keys, execute crypto trades or complete retailer checkout.
+
+Market prices are reference data, not PayPal or Venmo execution quotes. Portfolio values come from manually entered quantities. Account sign-in is disabled by default; this branch does not establish connected balances or live business reporting. The AI market explanation is a local development demo and is unavailable on the hosted site. Elastic export is opt-in and disabled by default; no real telemetry is implied by the concept pack.
+
+## Publication pack
+
+The latest shared edition is **PayPal Markets — CONCEPT v4**. It contains the offline visual catalogue, two original concept illustrations, historical web and Expo Web captures, fictional Operations examples, asset provenance, source evidence and a submission-readiness checklist.
+
+- [Open the pack index](publication-packs/README.md)
+- [Download the v4 ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip)
+- [Read the v4 overview](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/README.md)
+- [Browse the v4 files](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/)
+
+GitHub shows the offline `START-HERE.html` file as source. To view its catalogue, download and extract the ZIP, then open `START-HERE.html` in a browser. The pack is for private review and preparation; publication, submission and deployment are separate actions.
+
+## Run the web app locally
+
+Use Node from `.node-version`, then install dependencies and create a local environment file:
+
+```sh
+npm ci
 cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000` for the public homepage or `http://localhost:3000/dashboard` for the market workspace. A product query such as `/dashboard?q=headphones` opens Discover with the phrase filled in; it does not run the search automatically. Set `CHANNEL3_API_KEY` in `.env.local` to enable product search and curated category browsing. Provider credentials are read only on the server and are not included in the browser bundle. Set `COINGECKO_DEMO_API_KEY` to a CoinGecko Demo key before loading market data.
+Open `http://localhost:3000`. Add provider credentials to `.env.local` only when you have them; never commit secret values. CoinGecko market data requires `COINGECKO_DEMO_API_KEY`. Channel3 search requires `CHANNEL3_API_KEY`; curated browsing also requires the shared `CHANNEL3_COLLECTION_ID`. AI insights remain off unless the documented local-only settings are explicitly enabled.
 
-Website and mobile storefront choices send an explicit locale: GB/GBP/en or US/USD/en. For legacy requests that omit a storefront, the server instead uses supported values from `CHANNEL3_LANGUAGE`, `CHANNEL3_COUNTRY`, and `CHANNEL3_CURRENCY`, defaulting to en/GB/GBP when unset. Same-origin browser requests work by default. Expo Web development allows only the local `localhost:8081` origins; a hosted Expo Web client must be listed as an exact HTTPS origin in the server-only `MOBILE_WEB_ORIGINS` variable. Cross-origin requests never include credentials. Channel3 search and curated browsing share an eight-request-per-minute process limit keyed by Render's Cloudflare-verified client address when available, falling back to one unknown-address bucket otherwise. Search also permits eight concurrent request-body readers per process; excess requests get a retryable 503. These limits are not shared across instances and do not replace edge connection limits. Native clients can omit `Origin`.
+## Project guide
 
-The Business workspace's aggregate importer accepts a bounded, aggregate-only CSV using the [blank template](public/templates/business-aggregate-template.csv). It compares two complete consecutive 7- or 30-day UTC periods with matching broad sales channels and one currency. The browser reads a selected file; the native screen accepts pasted CSV and clears its input and report when leaving Business or choosing Clear. The app does not upload or save the report, though the device keyboard or clipboard may retain a copy. Avoid identifying or very small customer groups. The view shows the source-stated timestamp and never treats transaction counts as unique customers or retention.
+- [Upgrade roadmap](docs/UPGRADE-ROADMAP.md)
+- [Local acceptance record](docs/LOCAL-UPGRADE-ACCEPTANCE-20261106.md)
+- [Deployment and hosted-check record](docs/DEPLOYMENT-CANDIDATE-20261106.md)
+- [Local AI insight boundaries](docs/LOCAL-AI-INSIGHTS.md)
+- [Intraday candle sources and limits](docs/INTRADAY-MARKET-DATA.md)
+- [Business data scope](docs/PAYPAL-BUSINESS-DATA.md)
+- [Zapier MCP readiness](docs/ZAPIER-READINESS.md)
 
-Separately, the website can preview a narrow subset of a user-selected [PayPal Activity Download CSV](https://developer.paypal.com/reports/activity-download/). Android and iOS also offer an opt-in copied-text preview; they cannot verify the original file's bytes or that every row was copied, and the clipboard is read before its size can be checked. The user must confirm authorization and that one unsplit export covers both complete 7- or 30-day UTC periods, and select its UK or US date order. The preview accepts only UTC/GMT rows with English status and balance-impact values, requires PayPal's `Transaction Event Code` and `Balance Impact` columns, and rejects malformed, duplicate or unsupported data, inputs over 4 MiB, and more than 50,000 rows. It requires at least one row in each period but cannot independently verify full export coverage. It counts only completed `T0006`/`T0007` credit rows, reports exclusions, and calculates neither amounts nor refunds, unique customers or retention. These are self-provided, unverified report-row counts, not live PayPal data or complete sales. The report can contain names, email addresses and other personal information; the app processes it locally without upload or persistence. The clipboard, browser or operating system may retain copies. Merchant account connections, live monitoring, and alerts remain unconfigured.
+Local Postman collections and OpenAPI contracts are under `postman/`. They have not been published to a Postman cloud workspace.
 
-Business amounts use a pinned copy of [SIX's ISO 4217 current-currency list](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml), published 2026-09-17, for their minor-unit scale. Codes without a numeric minor unit and codes not in that list are rejected, including historical codes; the pinned list must be updated as the standard changes. This report currency is supplied by the report and does not follow the portfolio or shopping preference.
+## Verification and release status
 
-## Postman collections
-
-- `postman/collections/Channel3 Marketplace` covers product search, retailer/brand/category browsing, similar products, product details, URL lookup, and product price history.
-- `postman/collections/PayPal Market APIs` covers the local crypto market, display-currency quotes and charts, Channel3 search and curated catalog browse, and service health endpoint.
-- `postman/environments/Channel3.environment.yaml` has an empty secret field. Add the Channel3 key locally in Postman; do not commit it. The app's `.env.local` does not automatically populate Postman.
-
-OpenAPI contracts are in `postman/specs/`. These files and collections are local; they have not been pushed to a Postman cloud workspace.
-
-## Local verification
-
-With the development server running on `127.0.0.1:3000`, run the website's currency, chart, portfolio, and CORS checks from the repository root:
-
-```sh
-node --test tests/chart-scale.test.mjs tests/currency-contract.test.mjs tests/portfolio-summary.test.mjs tests/market-cors.test.mjs tests/business-snapshot.test.mjs tests/paypal-activity-import.test.mjs tests/channel3-storefront.test.mjs tests/storefront-storage.test.mjs tests/marketplace-safety.test.mjs tests/marketplace-search-capacity.test.mjs
-```
-
-`node --test tests/marketplace-search-http.test.mjs` additionally checks saturation and recovery against the local server. It briefly occupies all search body-reader slots and does not call Channel3.
-
-Run the mobile display checks from `apps/mobile`:
-
-```sh
-node --test tests/market-display.test.cjs tests/channel3-shop.test.cjs tests/business-snapshot.test.cjs
-```
-
-The [local market simulation](postman/simulations/coingecko-currency-regression.md) exercises provider failures and currency responses with synthetic data. Its guide lists the Linux and Postman CLI prerequisites.
-
-## Providers and boundaries
-
-- CoinGecko supplies broad market metrics and historical price series.
-- Channel3 supplies product discovery and retailer offers. It does not replace Venmo or process payments; purchases remain with the retailer.
-- Customer-saved product lists are app-managed and remain in browser or device storage. The shared curated catalog is app-wide and uses Channel3 browse filters. An optional server-only `CHANNEL3_COLLECTION_ID` scopes search and browse to a provider collection; invalid configured IDs fail closed. A new Everyday Discoveries collection was created from the Twitch rules on 2026-11-06 with four additional retailer inclusions; integration verification is recorded separately in the local acceptance report. This does not provide cross-device customer-list sync.
-- Venmo remains the customer wallet/payment surface. This prototype does not import wallet balances or initiate crypto trades.
-- The legacy agent chat, wallet, and checkout routes are retired. The PayPal webhook verifies deliveries and acknowledges them without crediting balances or issuing payouts. Payment flows should remain disabled until they have authenticated ownership, durable order mapping, and idempotent event processing.
-- Zapier MCP onboarding has run in read-only mode with Google Calendar and GitHub; calendar writes, AI payments, subscriptions, and other agent actions remain deferred.
-- The Render web service is live at `https://paypal-markets-companion.onrender.com`; `/api/health` returned HTTP 200 on 2026-11-03. The current local display-currency changes have not been deployed there. Elastic Observability and the separate restricted Kernel agent account are not integrated.
-
-## Render and PayPal webhooks
-
-The webhook callback is `https://paypal-markets-companion.onrender.com/api/webhooks/paypal`. The user reports that the PayPal webhook ID was set, but the Render environment value has not been independently verified here and no signed delivery has been tested. `/api/health` checks app liveness only. The endpoint verifies and acknowledges valid deliveries without processing payments. The service uses Render's free plan, which can sleep after inactivity and has ephemeral local storage; use an always-on plan and durable storage before relying on it for production webhook handling or customer data.
-
-## Commands
-
-```bash
-npm run lint
-npx tsc --noEmit
-```
-
-The Bryntum Scheduler trial bundle is kept outside the app's compile and lint inputs until its license and intended integration are settled. AG Grid Enterprise and AG Charts are installed; set `NEXT_PUBLIC_AG_GRID_LICENSE` for the Business workspace at build time. Because it is a `NEXT_PUBLIC_` value, Next.js includes it in client-side JavaScript: it is visible to browser users and is not a server secret. Handle its distribution according to the AG Grid license terms.
+The roadmap and acceptance record distinguish source implementation, local browser checks, provider responses, native-device checks and hosted release evidence. The latest hosted revision and its bounded checks are recorded in the deployment document. A health response confirms liveness only; it does not prove every feature, provider consent, signed webhook delivery or production readiness.
