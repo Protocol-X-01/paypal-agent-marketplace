@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-06T14:01:02.045Z",
+  "surface": "local browser main market line chart",
+  "input": "mouseWheel deltaY=-120 over actual AG series plot",
+  "before": "1.0\u00d7 view\n\u2212\nReset\n+",
+  "after": "1.6\u00d7 view\n\u2190\n\u2212\nReset\n+\n\u2192",
+  "source": "CoinGecko",
+  "asset": "Bitcoin",
+  "currency": "GBP",
+  "days": 7
+}

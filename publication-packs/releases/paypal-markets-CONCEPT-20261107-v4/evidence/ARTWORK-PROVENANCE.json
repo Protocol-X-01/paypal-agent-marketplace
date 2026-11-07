@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "project": "PayPal Markets — independent CONCEPT",
+  "created_at": "2026-11-06",
+  "creator": "OpenAI image_gen through Codex",
+  "reference_images": [],
+  "source_type": "original illustrative concept artwork; not an application capture",
+  "ownership_note": "PayPal brand remains owned by PayPal. No affiliation, endorsement, or third-party trademark licence is claimed.",
+  "outputs": [
+    {
+      "file": "concept-cover-wide.png",
+      "sha256": "f17d8c8e8a37ba258383406f5e39f3b6a7bc0230ecd484e21a2defdb93108e5c",
+      "prompt": "Use case: ads-marketing. Create a polished wide landscape 16:9 concept cover for a PayPal hackathon product called PayPal Markets. This is INDEPENDENT CONCEPT ART, not an official PayPal campaign or an actual app screenshot. Preserve the recognisable PayPal navy/blue identity through clean typography and colours, without inventing a replacement corporate logo. Professional, calm, premium mobile-finance presentation: luminous white and very pale blue background, deep navy typography, vivid sky blue #00CCFF as the main data-line accent, PayPal blue #0070E0, small restrained purple/gold allocation accents. Elegant abstract floating interface-inspired panels: a clear cyan reference-price line, blue rising and muted coral falling candlestick marks, a simple allocation doughnut and a subtle shopping bag/discovery motif. Keep the panels illustrative with NO balances, numbers, account details, merchant photos, buy/sell controls or invented feature claims. Generous negative space; sharp, sophisticated geometry; subtle depth, not neon sci-fi. Verbatim legible text: 'PayPal Markets' as the main title; 'Markets. Portfolio. Discover.' as a supporting line; 'INDEPENDENT CONCEPT' prominently visible as a deliberate badge; 'Protocol-X · Hackathon design study' as a small footer. All text spelled exactly. No official-launch, partnership, approval or endorsement claim. Compose as a finished professional concept cover, not a collage of multiple separate designs."
+    },
+    {
+      "file": "concept-social-square.png",
+      "sha256": "87763522ec106698110342c5ca404a41fd9a10fc624081af7c3372049abe5f98",
+      "prompt": "Use case: ads-marketing. Create a square concept social tile for the PayPal Markets hackathon design study. It must read clearly as independent company-brand concept artwork, not an official campaign or actual UI capture. Refined deep PayPal navy background, crisp white typography, vivid sky blue #00CCFF flowing price-line motif, small PayPal-blue abstract candle marks and a restrained geometric allocation ring. A clean premium editorial composition with ample breathing room and subtle material depth. No figures, balances, real account data, merchant products, trade controls or fabricated capabilities. Verbatim legible text: 'PayPal Markets', 'Market clarity. Everyday discovery.', and a prominent 'INDEPENDENT CONCEPT' label. Small footer: 'Protocol-X · Hackathon design study'. Preserve PayPal's recognisable navy/blue identity; do not invent a replacement PayPal logo or imply official endorsement. This is a single finished square promotional concept tile."
+    }
+  ]
+}
