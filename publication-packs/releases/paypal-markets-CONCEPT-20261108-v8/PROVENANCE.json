@@ -1,0 +1,497 @@
+{
+  "assets": [
+    {
+      "bytes": 46918,
+      "capture": {
+        "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+        "scope": "Personal workspace and empty calculator inputs; sign-in unavailable; captured 2026-11-06.",
+        "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "empty",
+      "kind": "actual-ui",
+      "path": "captures/account-phone.png",
+      "sha256": "2135617c720ca672da673ddb836f3a8a7d7ef9f1c290fe6686de48bef3845401",
+      "title": "CONCEPT — Account Phone"
+    },
+    {
+      "bytes": 63422,
+      "capture": {
+        "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+        "scope": "Business report tools with empty inputs; separate fictional sample action; no account connection; captured 2026-11-06.",
+        "surface": "Expo Web responsive preview at tablet width, 1024 x 900 pixels; not a physical tablet.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "empty",
+      "kind": "actual-ui",
+      "path": "captures/business-tablet-fictional.png",
+      "sha256": "a2dd623b394b3639caff8334373b7974c0bbb2281e33db0baa62fecf3c15169d",
+      "title": "CONCEPT — Business Tablet Fictional"
+    },
+    {
+      "bytes": 46470,
+      "capture": {
+        "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+        "scope": "UK/GBP discovery controls and curated categories; no product offer or checkout shown; captured 2026-11-06.",
+        "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "empty",
+      "kind": "actual-ui",
+      "path": "captures/shop-phone.png",
+      "sha256": "584229f07a1fdf6347a3c4a9a60fd60955a5cf249a86a06e495a96912956350a",
+      "title": "CONCEPT — Shop Phone"
+    },
+    {
+      "bytes": 33915,
+      "capture": {
+        "artifact": "paypal-mobile-session-web-export-m5mgug47; historical 2026-11-06 capture; export manifest SHA-256 60b1e9daf86c994fa2b3bb07dc7f392ad5c6df9aa72738bc2ad10f066f1b5a25.",
+        "scope": "Invented empty local shortlist; no saved retailer links, prices or personal data; captured 2026-11-06.",
+        "surface": "Expo Web responsive preview at phone width, 390 x 844 pixels; not an Android or iOS device.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "fictional",
+      "kind": "actual-ui",
+      "path": "captures/shop-shortlist-phone.png",
+      "sha256": "d6ddd3f83376cb332df7d16f249949a3ce13210199ef398ba20a06013478af73",
+      "title": "CONCEPT — Shop Shortlist Phone"
+    },
+    {
+      "bytes": 76026,
+      "capture": {
+        "artifact": "Local development browser capture from 2026-11-06; source identity and selected hashes in evidence/CAPTURE-EVIDENCE.json.",
+        "scope": "Historical public CoinGecko snapshot and vivid sky-blue line captured 2026-11-06; not a current quote or hosted-service result.",
+        "surface": "Local web homepage browser capture, 1265 x 712 pixels.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/web-home-sky-public.png",
+      "sha256": "4f910a0bdc5bc7c154bc07ba1f62520450f8d023605ae97edd96494f7b313b11",
+      "title": "CONCEPT — Web Home Sky Public"
+    },
+    {
+      "bytes": 78446,
+      "capture": {
+        "artifact": "Local development browser capture from 2026-11-06; source and request evidence in evidence/AI-CAPTURE-EVIDENCE.json.",
+        "scope": "Historical seven-day public BTC/GBP OHLC commentary from CoinGecko and OpenAI captured 2026-11-06; no holdings; not investment advice.",
+        "surface": "Local web market dashboard browser capture, 1265 x 712 pixels.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/ai-market-public.png",
+      "sha256": "45d0cb6f948fdc58654efe613005570868af93ef344ee8a8cbec78d56a875bb0",
+      "title": "CONCEPT — Ai Market Public"
+    },
+    {
+      "bytes": 68398,
+      "capture": {
+        "artifact": "Separate local Operations concept capture from 2026-11-06; source and fixture scope in evidence/CAPTURE-EVIDENCE.json.",
+        "scope": "Explicit disconnected fictional aggregate preview with invented figures, captured 2026-11-06; no staff identity or customer feed.",
+        "surface": "Separate local Operations web app browser capture, 1265 x 712 pixels.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "fictional",
+      "kind": "actual-ui",
+      "path": "captures/operations-fictional-public.png",
+      "sha256": "fac6d5416c205d9ff6fafa12f857d70ce6f4b9cd508be57bc9cbd40aacab1346",
+      "title": "CONCEPT — Operations Fictional Public"
+    },
+    {
+      "bytes": 76808,
+      "capture": {
+        "artifact": "Separate local Operations concept capture from 2026-11-06; source and fixture scope in evidence/CAPTURE-EVIDENCE.json.",
+        "scope": "Fictional cohort and event charts from the same local fixture, captured 2026-11-06; not internal PayPal reporting.",
+        "surface": "Separate local Operations web app scrolled browser capture, 1265 x 712 pixels.",
+        "verified_at": "2026-11-07T05:10:37Z"
+      },
+      "credit": "Unmodified local capture by the project team; PayPal/Venmo marks remain with their owner. No affiliation or rights grant implied.",
+      "data": "fictional",
+      "kind": "actual-ui",
+      "path": "captures/operations-fictional-charts.png",
+      "sha256": "d91bef760770ef4c659fb7b73518d26d6de7243c3b88912780a25e2380ea8ac1",
+      "title": "CONCEPT — Operations Fictional Charts"
+    },
+    {
+      "bytes": 1487520,
+      "concept_label_present": true,
+      "credit": "Original illustrative image generated with OpenAI image_gen through Codex on 2026-11-06; visually reviewed unchanged. PayPal identity remains with PayPal; no affiliation, endorsement or trademark licence is claimed.",
+      "data": "not-applicable",
+      "kind": "concept-art",
+      "path": "artwork/concept-cover-wide.png",
+      "sha256": "f17d8c8e8a37ba258383406f5e39f3b6a7bc0230ecd484e21a2defdb93108e5c",
+      "title": "INDEPENDENT CONCEPT — landscape cover"
+    },
+    {
+      "bytes": 1693201,
+      "concept_label_present": true,
+      "credit": "Original illustrative image generated with OpenAI image_gen through Codex on 2026-11-06; visually reviewed unchanged. PayPal identity remains with PayPal; no affiliation, endorsement or trademark licence is claimed.",
+      "data": "not-applicable",
+      "kind": "concept-art",
+      "path": "artwork/concept-social-square.png",
+      "sha256": "87763522ec106698110342c5ca404a41fd9a10fc624081af7c3372049abe5f98",
+      "title": "INDEPENDENT CONCEPT — square social tile"
+    },
+    {
+      "bytes": 247,
+      "credit": "Project concept palette; not official PayPal brand guidance.",
+      "data": "not-applicable",
+      "kind": "brand-reference",
+      "path": "identity/palette.json",
+      "sha256": "62cfcb2e7712c915f3f74b4d3afe3fb79a856e3532474ec1ed3457512aa9ea9c",
+      "title": "CONCEPT — working palette"
+    },
+    {
+      "bytes": 3176,
+      "credit": "Public-safe prompts, origins and measured hashes for the two original concept artworks.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "evidence/ARTWORK-PROVENANCE.json",
+      "sha256": "7d8f842111806f314913206de3709348661daff8e7510586788dcc484b07894d",
+      "title": "Original artwork prompts and provenance"
+    },
+    {
+      "bytes": 3456,
+      "credit": "Original capture dates, selected source hashes and scope; Operations values are invented.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "evidence/CAPTURE-EVIDENCE.json",
+      "sha256": "144645fd1a1e51a193cde508a3b9ac4a67d9c02dcf13e7fa4b76fd121df346e9",
+      "title": "Historical website and Operations capture evidence"
+    },
+    {
+      "bytes": 2634,
+      "credit": "Historical local route and public CoinGecko OHLC scope; no private holdings.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "evidence/AI-CAPTURE-EVIDENCE.json",
+      "sha256": "d7cf29f1cafb274c5b5417ee48155e2365a51ca4205d490bb48908247c3c0dbc",
+      "title": "Historical public-market AI capture evidence"
+    },
+    {
+      "bytes": 355,
+      "credit": "Local browser interaction on public market history; not a hosted-service or device check.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "evidence/WHEEL-ZOOM-CHECK.json",
+      "sha256": "5850c3befb8f825fb285455e289dc548a7d9af3175a56a920c162f54ac9e29c1",
+      "title": "Historical local chart wheel-zoom check"
+    },
+    {
+      "bytes": 2138,
+      "credit": "Hashes only; records the current local source identity without copying source code.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "evidence/SOURCE-SNAPSHOT-20261107.json",
+      "sha256": "df4e9ac4d16bdc53adccef72098be4aa2949f00e54aa5f134b823788e3488562",
+      "title": "Selected current dirty-tree source hashes"
+    },
+    {
+      "bytes": 3500,
+      "credit": "Review record for the unchanged screenshot files in this pack; no image pixels were edited.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "evidence/CAPTURE-REVIEW-20261107.json",
+      "sha256": "93f3fc89defdd059e41441692492ebf2b9870d1e732b440053d2307786c7fd1f",
+      "title": "Measured screenshot hashes, pixel dimensions and review scope"
+    },
+    {
+      "bytes": 1989,
+      "credit": "Project-authored, concept-only identity guidance.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "guide/BRAND-QUICK-START.md",
+      "sha256": "006b90783f97bc6a765ac31ee3dce4d4158a34b50023b9736c09b8e2ecf3b184",
+      "title": "Concept identity quick start"
+    },
+    {
+      "bytes": 1940,
+      "credit": "Project-authored, evidence-bounded product description.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "copy/CONCEPT-COPY.md",
+      "sha256": "b39820c57d2e3c4a87757b94b7196a6ee360e979f4458950e823d37d9348d7fe",
+      "title": "INDEPENDENT CONCEPT copy and caption"
+    },
+    {
+      "bytes": 1326,
+      "credit": "Project-authored readiness boundaries; external submission remains separately authorized.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "copy/SUBMISSION-CHECKLIST.md",
+      "sha256": "96c3574bec895e484eb73ea654d0c8021930288068f3027172437d54c271da67",
+      "title": "Concept submission readiness checklist"
+    },
+    {
+      "bytes": 294479,
+      "capture": {
+        "artifact": "com.protocolx.paypalmarkets 0.1.0 debug APK, SHA-256 ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42; exact match to the installed base APK. Not a standalone release build.",
+        "scope": "Markets overview after explicit Refresh. Public CoinGecko reference quote; response retrieval and provider update times are shown in the capture. No signed-in account or personal portfolio data.",
+        "surface": "Xiaomi 22071212AG native Android device, 1220 × 2712 physical pixels, Android 15; not an emulator or browser preview.",
+        "verified_at": "2026-11-08T09:02:23Z"
+      },
+      "credit": "Unmodified native Android device capture by the project team; PayPal identity remains with PayPal. No affiliation or endorsement is claimed.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/native-markets-overview.png",
+      "sha256": "67f5cf3e02661459997d813c74e1b5423269714c2c476fa822dea89b5bb9d299",
+      "title": "CONCEPT — Native Android Markets Overview"
+    },
+    {
+      "bytes": 300742,
+      "capture": {
+        "artifact": "com.protocolx.paypalmarkets 0.1.0 debug APK, SHA-256 ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42; exact match to the installed base APK. Not a standalone release build.",
+        "scope": "BTC/USD one-week Line view with SMA 20 and EMA 20 overlays, RSI 14 panel and historical sample inspector. The displayed chart and sparkline retrieval times are older than the separately refreshed overview quote.",
+        "surface": "Xiaomi 22071212AG native Android device, 1220 × 2712 physical pixels, Android 15; not an emulator or browser preview.",
+        "verified_at": "2026-11-08T09:02:23Z"
+      },
+      "credit": "Unmodified native Android device capture by the project team; PayPal identity remains with PayPal. No affiliation or endorsement is claimed.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/native-markets-chart-indicators.png",
+      "sha256": "1e181fc3e9f6f6d2682d7a01a1e4467f88e7b588c42572494e7c75f4303421db",
+      "title": "CONCEPT — Native Android Chart and Indicators"
+    },
+    {
+      "bytes": 2886,
+      "credit": "Public-safe device/build identity, selected source hashes, unchanged screenshot hashes and observed retrieval-time limits. No device serial or account data.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "evidence/NATIVE-ANDROID-CAPTURE-20261108.json",
+      "sha256": "6a6a2fa25d129e7bce43a06d1da7edfb8fdbe6120fd858151878ba4c6d3bd4c2",
+      "title": "Native Android build, screenshot and data-freshness evidence"
+    },
+    {
+      "bytes": 256411,
+      "capture": {
+        "artifact": "Existing com.protocolx.paypalmarkets 0.1.0 debug APK, SHA-256 ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42. Updated JavaScript was hot-reloaded from the dirty local source over Metro; this source update is not baked into the APK. Not a standalone release build.",
+        "scope": "BTC/USD one-week Price Line view after manual refresh. The screenshot shows the chart response retrieval time and the selected chart sample time; the overview same-timestamp warning was observed before scrolling to the chart and is detailed in the accompanying evidence.",
+        "surface": "Xiaomi 22071212AG native Android device, 1220 × 2712 physical pixels, Android 15; not an emulator or browser preview.",
+        "verified_at": "2026-11-08T09:34:22Z"
+      },
+      "credit": "Unmodified native Android device capture by the project team; PayPal identity remains with PayPal. No affiliation or endorsement is claimed.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/native-markets-refresh.png",
+      "sha256": "e10d49ca37904db327e0351b5ffa9cd09bf51fe9591cf09829ca8058b650ef74",
+      "title": "CONCEPT — Native Android Markets Chart After Refresh"
+    },
+    {
+      "bytes": 3142,
+      "credit": "Observed device interaction, selected source hashes, screenshot hash and explicit evidence limits; no device serial or account data.",
+      "data": "public",
+      "kind": "evidence",
+      "path": "evidence/NATIVE-MARKET-REFRESH-20261108.json",
+      "sha256": "57a631e3ffb201cbfdb6c139369dd8db781cb0a015cfbb0b05ad8e33fa874a1e",
+      "title": "Native Android chart-refresh and retrieval-time evidence"
+    },
+    {
+      "bytes": 291287,
+      "capture": {
+        "artifact": "com.protocolx.paypalmarkets 0.1.0 debug app. Updated JavaScript was served over Metro from a dirty review checkout based on b40086e. The exact runtime bundle hash was not recorded; no standalone release build is established.",
+        "scope": "Dark-mode Markets overview with USD display and public CoinGecko BTC/USD reference data; the screen shows response retrieval and provider update times. No signed-in account or personal portfolio data is visible.",
+        "surface": "Xiaomi Android 15 phone, native app screen, 1220 × 2712 pixels; not an emulator or browser preview.",
+        "verified_at": "2026-11-08T16:11:00Z"
+      },
+      "credit": "Unmodified local device capture by the project team on 8 November 2026. Public market references are shown. PayPal marks remain with their owner; no affiliation or trademark licence is claimed.",
+      "data": "public",
+      "kind": "actual-ui",
+      "path": "captures/native-markets-dark.png",
+      "sha256": "5e727cb6889df68f7d7c3b9278431834e9db64d42cacd790caa80e72a24d3140",
+      "title": "CONCEPT — Native Android Markets · Dark mode"
+    },
+    {
+      "bytes": 1490,
+      "credit": "Project-team capture metadata based on the saved screenshot and recorded local Android debug-session notes.",
+      "data": "not-applicable",
+      "kind": "evidence",
+      "path": "evidence/NATIVE-ANDROID-DARK-CAPTURE-20261108.json",
+      "sha256": "8589c6c601e14e00f935b707aeea659213860e45237838e2d6a178f162b6ecae",
+      "title": "Dark-mode native Android capture scope and provenance"
+    }
+  ],
+  "claims": [
+    {
+      "evidence": [
+        "captures/account-phone.png",
+        "captures/shop-phone.png",
+        "captures/business-tablet-fictional.png",
+        "captures/shop-shortlist-phone.png",
+        "evidence/CAPTURE-REVIEW-20261107.json"
+      ],
+      "status": "verified",
+      "text": "The included Expo Web screenshots show the phone-width Personal and Shop workspaces, an empty tablet-width Business report workspace, and an invented empty shortlist. They are browser previews captured on 6 November 2026, not native device acceptance."
+    },
+    {
+      "evidence": [
+        "captures/web-home-sky-public.png",
+        "evidence/CAPTURE-EVIDENCE.json"
+      ],
+      "status": "verified",
+      "text": "The historical website screenshot shows a local PayPal Markets concept homepage with a public CoinGecko reference snapshot; the values are not current execution quotes."
+    },
+    {
+      "evidence": [
+        "captures/ai-market-public.png",
+        "evidence/AI-CAPTURE-EVIDENCE.json"
+      ],
+      "status": "verified",
+      "text": "The historical market insight screenshot shows local generated commentary based on public seven-day BTC/GBP candle data, not private holdings or personalized investment advice."
+    },
+    {
+      "evidence": [
+        "captures/operations-fictional-public.png",
+        "captures/operations-fictional-charts.png",
+        "evidence/CAPTURE-EVIDENCE.json"
+      ],
+      "status": "verified",
+      "text": "The separate Operations screenshots show a disconnected local concept using explicitly invented aggregate and cohort figures. They do not show PayPal internal monitoring or real customer activity."
+    },
+    {
+      "evidence": [
+        "artwork/concept-cover-wide.png",
+        "artwork/concept-social-square.png",
+        "evidence/ARTWORK-PROVENANCE.json"
+      ],
+      "status": "verified",
+      "text": "The two original illustrations are visibly labelled INDEPENDENT CONCEPT and are promotional concept art, not product screenshots."
+    },
+    {
+      "evidence": [],
+      "status": "concept",
+      "text": "The visual direction explores market context, manually entered estimates and Channel3 discovery around an existing wallet experience, while keeping customer and fictional management surfaces distinct."
+    },
+    {
+      "evidence": [
+        "captures/native-markets-overview.png",
+        "captures/native-markets-chart-indicators.png",
+        "evidence/NATIVE-ANDROID-CAPTURE-20261108.json",
+        "captures/native-markets-refresh.png",
+        "evidence/NATIVE-MARKET-REFRESH-20261108.json"
+      ],
+      "status": "verified",
+      "text": "On one Xiaomi Android 15 device, the PayPal Markets debug app rendered a native Markets overview and BTC/USD chart using public CoinGecko data. The installed APK binary matched the local debug artifact hash in evidence; the later refreshed chart used updated local JavaScript served by Metro, so this does not establish a standalone release package."
+    },
+    {
+      "evidence": [
+        "captures/native-markets-chart-indicators.png",
+        "evidence/NATIVE-ANDROID-CAPTURE-20261108.json"
+      ],
+      "status": "verified",
+      "text": "The native BTC/USD one-week Line view showed a selected historical sample, SMA 20 and EMA 20 lines, and an RSI 14 panel. The chart, sparkline and overview carried different retrieval times, which remain separately visible."
+    },
+    {
+      "evidence": [],
+      "status": "unverified",
+      "text": "Live PayPal/Venmo sign-in, connected wallet balances, payments, crypto trading, real Business reporting, internal staff monitoring, native iOS/tablet acceptance, and current hosted-release acceptance are not established by this pack."
+    },
+    {
+      "evidence": [
+        "captures/native-markets-refresh.png",
+        "evidence/NATIVE-MARKET-REFRESH-20261108.json"
+      ],
+      "status": "verified",
+      "text": "In one local Xiaomi debug-app session, manual refresh returned a newer BTC/USD chart retrieval time and a 09:24 UTC sample, while the overview repeated its earlier 09:22:48 UTC retrieval timestamp and displayed the same-timestamp freshness warning."
+    },
+    {
+      "evidence": [
+        "captures/native-markets-dark.png",
+        "evidence/NATIVE-ANDROID-DARK-CAPTURE-20261108.json"
+      ],
+      "status": "verified",
+      "text": "A later Xiaomi Android 15 debug session visibly rendered the dark-mode Markets overview with a public CoinGecko BTC/USD reference and separate retrieval/provider-update timestamps. JavaScript was served over Metro; the exact runtime bundle hash was not recorded, and this is not a standalone release build."
+    },
+    {
+      "evidence": [
+        "captures/native-markets-overview.png",
+        "captures/native-markets-chart-indicators.png",
+        "captures/native-markets-refresh.png",
+        "captures/web-home-sky-public.png",
+        "captures/shop-phone.png"
+      ],
+      "status": "verified",
+      "text": "The earlier 09:01–09:34 Xiaomi Markets captures and 6 November web/Expo Web images are historical Light-mode previews; they remain included for comparison and are not evidence of the later dark styling."
+    }
+  ],
+  "content_fingerprint": "3c04d8be429ad5231bf31708accf81312ce04c16fad3235b791f3bac3bad8093",
+  "created_at": "2026-11-08T21:13:21.209295Z",
+  "credits": [
+    "PayPal and Venmo names and marks remain with their respective owners. No official affiliation, endorsement or trademark licence is claimed.",
+    "Concept cover and square social art were generated with OpenAI image_gen through Codex on 2026-11-06; the prompts and original output hashes are included. No external reference images were used.",
+    "Actual UI images are unchanged local browser/Expo Web captures dated 2026-11-06. Public market content is historical CoinGecko reference data. The Operations fixture is invented.",
+    "No official logo source, editable brand design file, font asset or licence for redistribution is included.",
+    "The earlier native Android overview and indicator captures are unchanged screenshots from a Xiaomi 22071212AG debug app, reviewed at 09:02 UTC. The additional chart-refresh screenshot was captured at 09:29 UTC after updated JavaScript was served over Metro to the same installed debug app; it was not rebuilt into the APK. The installed APK hash matched the local debug artifact, and the selected source hashes and runtime limits are recorded in the included evidence.",
+    "The dark-mode native Markets screenshot was captured on a Xiaomi Android 15 phone during a local debug session on 8 November 2026. Updated JavaScript was served by Metro from a dirty checkout based on b40086e; the exact runtime bundle hash was not recorded. The screenshot is copied unchanged and is not a standalone release-build capture."
+  ],
+  "external_actions": [],
+  "helper_checks": {
+    "copied_assets_match_expected_sha256": true,
+    "input_images_modified_by_helper": false,
+    "source_evidence_matches_expected_sha256": true
+  },
+  "input_manifest_sha256": "8c7d31965d2f77cc160588049fd8927e6b08f6342f57f54201ab88469b112f87",
+  "limitations": [
+    "Prepared locally; no publication, upload, submission edit or deployment is performed.",
+    "This is not an official PayPal/Venmo service. No connected wallet, live customer/staff reporting, real payment, purchase, trade or production security capability is established.",
+    "Market data and AI commentary are historical references; neither represents PayPal execution pricing, guaranteed accuracy or personal financial advice.",
+    "The source tree is uncommitted. The included captures are development previews and do not prove the current code builds or is deployed.",
+    "The new local homepage visual seen on 7 November is not an included capture. The included homepage image is explicitly historical from 6 November.",
+    "Native visual acceptance covers three Markets captures from one Xiaomi Android 15 debug-app session: overview, chart with indicators, and chart after refresh. The later refreshed JavaScript was served live over Metro and is not baked into a standalone release APK. Other app sections, iOS/tablet, release packaging and hosted behavior remain unverified by these captures.",
+    "CoinGecko overview quote retrieval was 09:00:59.060 UTC with provider update 08:59:57.000 UTC. At capture, the line chart retrieval was 08:48:12.523 UTC and the 7-day sparkline retrieval was 08:01:50.628 UTC. These timestamps show different freshness; none proves 100% accuracy or a PayPal/Venmo execution price.",
+    "The refreshed screen used an existing debug APK with updated JavaScript served live over Metro; it does not prove a rebuilt or standalone release app. A repeated overview retrieval timestamp triggered a warning and does not establish an upstream refresh or price-accuracy guarantee.",
+    "The new dark-mode capture covers only the Markets overview in one Xiaomi Android 15 debug session. Metro served the updated JavaScript; the exact bundle hash is not recorded and the APK is not a standalone release build. The web, Shop, Portfolio and Account screens were not recaptured in dark mode for this edition."
+  ],
+  "project": {
+    "brand_mode": "company-concept",
+    "brand_owner": "PayPal",
+    "edition": "20261108-v8",
+    "message": "Independent CONCEPT for PayPal Markets: a dark-mode native Markets view with public crypto reference pricing, presented alongside clearly dated historical Light-mode web, mobile, portfolio and discovery previews.",
+    "name": "PayPal Markets",
+    "slug": "paypal-markets",
+    "source_revision": "v7 historical assets are preserved. The new 16:11 UTC Xiaomi Android 15 screenshot shows the 0.1.0 debug app with JavaScript served over Metro from a dirty review checkout based on b40086e. The exact running bundle hash was not recorded; this is not a standalone release build."
+  },
+  "readiness": {
+    "message_reviewed": true,
+    "public_share_reviewed": true,
+    "reviewed_at": "2026-11-08T21:07:14Z",
+    "reviewed_by": "Codex visual, source-scope and public-share review",
+    "ui_verified": true
+  },
+  "schema_version": 1,
+  "scope": "local-preparation",
+  "source_evidence": [
+    {
+      "bytes": 2886,
+      "label": "Earlier Xiaomi Light-mode captures and debug-app provenance",
+      "sha256": "6a6a2fa25d129e7bce43a06d1da7edfb8fdbe6120fd858151878ba4c6d3bd4c2"
+    },
+    {
+      "bytes": 3142,
+      "label": "Earlier Xiaomi Light-mode chart-refresh observations",
+      "sha256": "57a631e3ffb201cbfdb6c139369dd8db781cb0a015cfbb0b05ad8e33fa874a1e"
+    },
+    {
+      "bytes": 1490,
+      "label": "New Xiaomi dark-mode capture and runtime limits",
+      "sha256": "8589c6c601e14e00f935b707aeea659213860e45237838e2d6a178f162b6ecae"
+    }
+  ],
+  "usage_notes": [
+    "Keep INDEPENDENT CONCEPT visible in covers, presentations, submissions and captions. State that no official PayPal/Venmo affiliation or endorsement is claimed.",
+    "Use the included screenshots unchanged and preserve their recorded data and surface captions. Expo Web is not native-device acceptance; Operations figures are fictional; public market values are historical.",
+    "The palette is a project concept, not an official PayPal brand standard. Do not create or substitute an unofficial PayPal logo or imply a rights grant.",
+    "This edition preserves the prior captures and artwork unchanged and adds a native chart-refresh capture. The 7 November homepage visual is not part of this pack; the included homepage remains the historical 6 November capture.",
+    "This pack is for local review and submission preparation only. Upload, publication, deployment and submission are outside its scope.",
+    "Use native screenshots unchanged with a prominent CONCEPT caption. In the earlier overview and indicator captures, chart and sparkline retrieval times were older than the refreshed overview. In the later refresh capture, the chart returned a newer retrieval timestamp while the overview repeated its prior timestamp and flagged uncertain freshness. These are point-in-time public references, not guaranteed-accurate or execution quotes.",
+    "Caption the refreshed chart as a local debug-session observation. Its chart retrieval and selected sample times are visible; per-resource times may differ, and the CoinGecko response may be cached.",
+    "Present the new native Markets image as one dark-mode Xiaomi debug-session capture. Keep the earlier website, Expo Web and native Markets images explicitly labelled historical Light-mode previews; they are retained for continuity, not current visual proof."
+  ]
+}

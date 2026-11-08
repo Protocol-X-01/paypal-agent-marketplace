@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="publication-packs/README.md">
-    <img src="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-cover-wide.png" alt="PayPal Markets — independent concept cover for Markets, Portfolio and Discover" width="880" />
+    <img src="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-cover-wide.png" alt="PayPal Markets — independent concept cover for Markets, Portfolio and Discover" width="880" />
   </a>
 </p>
 
@@ -13,9 +13,9 @@
   &nbsp;·&nbsp;
   <a href="publication-packs/README.md"><strong>Explore the publication pack</strong></a>
   &nbsp;·&nbsp;
-  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip"><strong>Download edition v4</strong></a>
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8.zip"><strong>Download edition v8</strong></a>
   &nbsp;·&nbsp;
-  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/README.md">Read its scope and evidence</a>
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/README.md">Read its scope and evidence</a>
 </p>
 
 > **Independent concept.** This project is not an official PayPal or Venmo product. No affiliation, endorsement or trademark licence is claimed.
@@ -40,14 +40,14 @@ Market prices are reference data, not PayPal or Venmo execution quotes. Portfoli
 
 ## Publication pack
 
-The latest shared edition is **PayPal Markets — CONCEPT v4**. [Browse its GitHub-rendered visual gallery](publication-packs/START-HERE.md), or download the pack for its offline HTML catalogue, two original concept illustrations, historical web and Expo Web captures, fictional Operations examples, asset provenance, source evidence and submission-readiness checklist.
+The latest gallery edition is **PayPal Markets — CONCEPT v8**. [Browse its GitHub-rendered visual gallery](publication-packs/START-HERE.md), or download the pack for its offline HTML catalogue, two original concept illustrations, a Xiaomi dark-mode Markets debug capture, historical Light-mode web/Expo/mobile previews, fictional Operations examples, asset provenance, source evidence and scope checklist.
 
 - [Open the pack index](publication-packs/README.md)
-- [Download the v4 ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4.zip)
-- [Read the v4 overview](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/README.md)
-- [Browse the v4 files](publication-packs/releases/paypal-markets-CONCEPT-20261107-v4/)
+- [Download the v8 ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261108-v8.zip)
+- [Read the v8 overview](publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/README.md)
+- [Browse the v8 files](publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/)
 
-GitHub shows the offline `START-HERE.html` file as source. To view its catalogue, download and extract the ZIP, then open `START-HERE.html` in a browser. The pack is for private review and preparation; publication, submission and deployment are separate actions.
+GitHub shows the offline `START-HERE.html` file as source. To view its catalogue, download and extract the ZIP, then open `START-HERE.html` in a browser. The new native dark-mode image is one local Android 15 debug-session capture with JavaScript served over Metro; its exact bundle hash was not recorded and it is not a standalone release build. Older website and mobile images are labelled historical Light-mode previews. Publication, submission and deployment remain separate actions.
 
 ## Run the web app locally
 

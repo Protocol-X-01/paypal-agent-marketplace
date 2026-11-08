@@ -1,0 +1,59 @@
+{
+  "reviewed_at_utc": "2026-11-08T09:34:22Z",
+  "capture_file_time_utc": "2026-11-08T09:29:43.476Z",
+  "device": {
+    "model": "Xiaomi 22071212AG",
+    "android_version": "15",
+    "api_level": 35
+  },
+  "application": {
+    "package": "com.protocolx.paypalmarkets",
+    "version_name": "0.1.0",
+    "installed_build_type": "debug",
+    "installed_apk_sha256": "ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42",
+    "standalone_release_build": false,
+    "updated_javascript_delivery": "The updated local JavaScript was served from the dirty working tree by Metro over the existing adb reverse connection; it was not rebuilt into or reinstalled as this APK."
+  },
+  "source": {
+    "base_commit": "1329b80bc75ab0b8192010aa1a5983cd111ec6e0",
+    "working_tree": "Dirty local main branch; this capture is not evidence of a published source revision.",
+    "selected_file_sha256": {
+      "apps/mobile/src/app/index.tsx": "dad9b83c3671767660df7043d87c133b6858ddb557af9aaf50da15e6d04ebbc8",
+      "apps/mobile/src/lib/market-resource.ts": "185c5f5ee0375ffe2e357b3f832a11941f131746b9573e5310151dc46648de6e",
+      "apps/mobile/src/components/market-chart.tsx": "c95341cd3cdbaa1e53491c31ceec247be36dc2195c7b2dfabd92ce91c74da5d2"
+    }
+  },
+  "interaction": {
+    "screen": "Markets",
+    "asset": "BTC/USD",
+    "chart_view": "1W, Price, Line",
+    "action": "Tapped the manual Refresh control once, then inspected the resulting on-device view.",
+    "overview_response": {
+      "retrieved_at_utc": "2026-11-08T09:22:48.137Z",
+      "observation": "The response repeated the retrieval timestamp already displayed before the tap. The app retained the view and displayed Market data needs attention with a same-timestamp freshness warning."
+    },
+    "chart_response": {
+      "retrieved_at_utc": "2026-11-08T09:25:14.648Z",
+      "selected_sample_time_utc": "2026-11-08T09:24:00.000Z",
+      "available_samples": 169,
+      "plotted_samples": 118,
+      "observation": "The selected BTC/USD weekly Line view displayed its own newer chart retrieval and sample timestamps."
+    }
+  },
+  "capture": {
+    "pack_destination": "captures/native-markets-refresh.png",
+    "sha256": "e10d49ca37904db327e0351b5ffa9cd09bf51fe9591cf09829ca8058b650ef74",
+    "dimensions_px": [
+      1220,
+      2712
+    ],
+    "visual_review": "Unmodified device screenshot inspected for chart state, timestamps and public-safe content. No personal notification text, holdings, contacts or account details are visible."
+  },
+  "scope_and_limits": [
+    "This is one local development session on one Xiaomi Android device.",
+    "It verifies the displayed chart refresh and same-timestamp overview warning, not the freshness or accuracy of CoinGecko upstream data.",
+    "The overview, chart and sample timestamps are per-resource and are not synchronized.",
+    "The installed APK is an existing debug artifact; Metro supplied the updated JavaScript. No reinstall, new build, release APK, hosted route or customer login was verified.",
+    "No signed-in account, wallet balance, portfolio holding, contact, payment or customer record was accessed."
+  ]
+}

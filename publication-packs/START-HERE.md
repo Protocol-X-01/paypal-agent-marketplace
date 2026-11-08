@@ -1,45 +1,59 @@
-# PayPal Markets — CONCEPT visual catalogue
+# PayPal Markets — CONCEPT visual gallery
 
 **Independent concept for PayPal. No official affiliation or endorsement is claimed.** PayPal and Venmo names and marks remain with their owners; this pack does not claim a trademark licence.
 
-This GitHub-rendered gallery makes the edition's visuals and evidence links easy to browse in the repository. The screenshots are historical previews. The separate Operations images use fictional figures.
+This GitHub-rendered page presents edition v8. The newest image is a real Xiaomi Android 15 debug-session capture of the dark-mode Markets overview. The earlier website, Expo Web and native screens remain in the gallery as clearly dated **Light-mode** previews.
 
 | Browse in the repository | Download for offline review |
 | --- | --- |
-| [Open the edition overview](releases/paypal-markets-CONCEPT-20261107-v4/README.md) | [Download the complete v4 ZIP](releases/paypal-markets-CONCEPT-20261107-v4.zip) |
-| [Review provenance](releases/paypal-markets-CONCEPT-20261107-v4/PROVENANCE.json) | [Verify the ZIP checksum](releases/paypal-markets-CONCEPT-20261107-v4.zip.sha256) |
+| [Open the v8 overview](releases/paypal-markets-CONCEPT-20261108-v8/README.md) | [Download the full v8 ZIP](releases/paypal-markets-CONCEPT-20261108-v8.zip) |
+| [Review provenance](releases/paypal-markets-CONCEPT-20261108-v8/PROVENANCE.json) | [Verify the ZIP checksum](releases/paypal-markets-CONCEPT-20261108-v8.zip.sha256) |
 
-GitHub displays `.html` files as source. The local `START-HERE.html` is an offline catalogue: extract the ZIP and open it from inside the extracted edition folder so its relative links resolve.
+GitHub displays `.html` files as source. For the image-rich offline catalogue, download and extract the ZIP, then open `START-HERE.html` inside the extracted edition folder.
 
-## Product previews
+## Native Markets · Dark mode
 
-The phone and tablet captures are Expo Web previews, not native-device acceptance. They are unchanged historical captures from 6 November 2026.
+| Xiaomi Android · Markets overview |
+| --- |
+| **INDEPENDENT CONCEPT — Dark-mode Markets on Xiaomi Android 15**<br>[![CONCEPT — Dark-mode PayPal Markets screen with public CoinGecko reference data](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-dark.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-dark.png) |
 
-| Personal · phone | Discover · phone |
+Captured on 8 November 2026 in the installed PayPal Markets 0.1.0 debug app. Updated JavaScript was served over Metro from a dirty review checkout based on `b40086e`; the exact runtime bundle hash was not recorded. This is not a standalone release build. The screen shows a public BTC/USD reference and separate response/provider timestamps; no signed-in account or personal balance is shown. These are point-in-time provider values, not guaranteed-current or PayPal execution prices.
+
+## Native Markets · Historical Light mode
+
+These earlier Xiaomi Android 15 captures are retained for continuity. They show the earlier Light-mode palette and are not examples of the later dark appearance.
+
+| Markets overview · 09:01 UTC | Chart with indicators · 09:01 UTC | Chart after refresh · 09:29 UTC |
+| --- | --- | --- |
+| [![CONCEPT — Historical Light-mode native Markets overview](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-overview.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-overview.png) | [![CONCEPT — Historical Light-mode native chart with SMA, EMA and RSI](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-chart-indicators.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-chart-indicators.png) | [![CONCEPT — Historical Light-mode native chart after refresh](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-refresh.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/native-markets-refresh.png) |
+
+The earlier native app was also a debug build. The chart and overview may have different retrieval times; see the included capture and refresh evidence. Neither screenshot proves standalone release packaging or current hosted behavior.
+
+## Web and responsive previews · Historical Light mode
+
+The following web and Expo Web images were captured on 6 November 2026. They are useful for viewing earlier layout work and do not show the later dark palette. Expo Web is a browser preview, not physical-device acceptance.
+
+| Markets website | Personal · phone-width Expo Web |
 | --- | --- |
-| **Personal account concept**<br>[![CONCEPT — Personal workspace, phone-width Expo Web preview](releases/paypal-markets-CONCEPT-20261107-v4/captures/account-phone.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/account-phone.png) | **Channel3 discovery concept**<br>[![CONCEPT — Discover storefront, phone-width Expo Web preview](releases/paypal-markets-CONCEPT-20261107-v4/captures/shop-phone.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/shop-phone.png) |
-| Customer-entered estimates; no connected wallet balance. | UK/GBP discovery controls; no checkout or product offer shown. |
+| **Historical Light-mode homepage**<br>[![CONCEPT — Historical Light-mode PayPal Markets web homepage](releases/paypal-markets-CONCEPT-20261108-v8/captures/web-home-sky-public.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/web-home-sky-public.png) | **Personal account concept**<br>[![CONCEPT — Historical Light-mode Personal workspace, phone-width Expo Web preview](releases/paypal-markets-CONCEPT-20261108-v8/captures/account-phone.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/account-phone.png) |
 
-| Business · tablet | Saved shortlist · phone |
-| --- | --- |
-| **Business workspace concept**<br>[![CONCEPT — Empty Business report workspace, tablet-width Expo Web preview](releases/paypal-markets-CONCEPT-20261107-v4/captures/business-tablet-fictional.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/business-tablet-fictional.png) | **Shortlist concept**<br>[![CONCEPT — Invented empty product shortlist, phone-width Expo Web preview](releases/paypal-markets-CONCEPT-20261107-v4/captures/shop-shortlist-phone.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/shop-shortlist-phone.png) |
-| Empty example state; no PayPal Business account connected. | Invented empty list; no customer or retailer data. |
+| Discover · phone-width Expo Web | Business · tablet-width Expo Web | Saved shortlist · phone-width Expo Web |
+| --- | --- | --- |
+| [![CONCEPT — Historical Light-mode Discover storefront preview](releases/paypal-markets-CONCEPT-20261108-v8/captures/shop-phone.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/shop-phone.png) | [![CONCEPT — Historical empty Business report workspace; fictional example action](releases/paypal-markets-CONCEPT-20261108-v8/captures/business-tablet-fictional.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/business-tablet-fictional.png) | [![CONCEPT — Historical empty saved shortlist](releases/paypal-markets-CONCEPT-20261108-v8/captures/shop-shortlist-phone.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/shop-shortlist-phone.png) |
 
-## Web and market views
+## Historical market insight · Light mode
 
-Market and AI captures show a historical public CoinGecko reference snapshot. Values are not current execution quotes, and the commentary is not personalized investment advice.
+The screenshot shows a local insight based on historical public BTC/GBP candle data. It is not personalized investment advice.
 
-| Markets homepage | Market insight |
-| --- | --- |
-| **Historical homepage concept**<br>[![CONCEPT — PayPal Markets local web homepage with public market reference data](releases/paypal-markets-CONCEPT-20261107-v4/captures/web-home-sky-public.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/web-home-sky-public.png) | **Historical local insight concept**<br>[![CONCEPT — Local market insight based on historical public BTC/GBP candles](releases/paypal-markets-CONCEPT-20261107-v4/captures/ai-market-public.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/ai-market-public.png) |
+[![CONCEPT — Historical Light-mode local market insight based on public market references](releases/paypal-markets-CONCEPT-20261108-v8/captures/ai-market-public.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/ai-market-public.png)
 
-## Separate Operations concept
+## Separate fictional Operations concept
 
-These disconnected local presentation previews use invented aggregate and cohort figures. They do not show PayPal internal reporting or customer activity.
+These disconnected local presentation previews use invented aggregate and cohort figures. They do not show PayPal internal reporting, staff tools or real customer activity.
 
 | Fictional overview | Fictional charts |
 | --- | --- |
-| **Operations overview**<br>[![INDEPENDENT CONCEPT — Fictional Operations overview with invented figures](releases/paypal-markets-CONCEPT-20261107-v4/captures/operations-fictional-public.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/operations-fictional-public.png) | **Operations charts**<br>[![INDEPENDENT CONCEPT — Fictional Operations charts](releases/paypal-markets-CONCEPT-20261107-v4/captures/operations-fictional-charts.png)](releases/paypal-markets-CONCEPT-20261107-v4/captures/operations-fictional-charts.png) |
+| [![INDEPENDENT CONCEPT — Fictional Operations overview with invented figures](releases/paypal-markets-CONCEPT-20261108-v8/captures/operations-fictional-public.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/operations-fictional-public.png) | [![INDEPENDENT CONCEPT — Fictional Operations charts](releases/paypal-markets-CONCEPT-20261108-v8/captures/operations-fictional-charts.png)](releases/paypal-markets-CONCEPT-20261108-v8/captures/operations-fictional-charts.png) |
 
 ## Independent concept artwork
 
@@ -47,13 +61,13 @@ These original illustrations are promotional concepts, not product screenshots o
 
 | Landscape cover | Square social tile |
 | --- | --- |
-| [![INDEPENDENT CONCEPT — PayPal Markets landscape cover artwork](releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-cover-wide.png)](releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-cover-wide.png) | [![INDEPENDENT CONCEPT — PayPal Markets square social artwork](releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-social-square.png)](releases/paypal-markets-CONCEPT-20261107-v4/artwork/concept-social-square.png) |
+| [![INDEPENDENT CONCEPT — PayPal Markets landscape cover artwork](releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-cover-wide.png)](releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-cover-wide.png) | [![INDEPENDENT CONCEPT — PayPal Markets square social artwork](releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-social-square.png)](releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-social-square.png) |
 
-## Evidence and limits
+## Evidence and limitations
 
-- [Capture review](releases/paypal-markets-CONCEPT-20261107-v4/evidence/CAPTURE-REVIEW-20261107.json) records screenshot hashes, dimensions and review scope.
-- [Capture evidence](releases/paypal-markets-CONCEPT-20261107-v4/evidence/CAPTURE-EVIDENCE.json), [market insight evidence](releases/paypal-markets-CONCEPT-20261107-v4/evidence/AI-CAPTURE-EVIDENCE.json) and [artwork provenance](releases/paypal-markets-CONCEPT-20261107-v4/evidence/ARTWORK-PROVENANCE.json) record the sources and limits.
-- [Usage and identity guidance](releases/paypal-markets-CONCEPT-20261107-v4/USAGE.md) keeps the CONCEPT disclosure, credits and scope with the pack.
-- Live sign-in, connected wallet balances, payments, trading, real Business reporting, internal monitoring, native-device acceptance and production readiness are not established by this edition.
+- [New dark-mode capture record](releases/paypal-markets-CONCEPT-20261108-v8/evidence/NATIVE-ANDROID-DARK-CAPTURE-20261108.json) documents the image hash, visible scope and debug-session limits.
+- [Earlier native capture record](releases/paypal-markets-CONCEPT-20261108-v8/evidence/NATIVE-ANDROID-CAPTURE-20261108.json) and [chart-refresh observations](releases/paypal-markets-CONCEPT-20261108-v8/evidence/NATIVE-MARKET-REFRESH-20261108.json) describe the historical Light-mode device session.
+- [Capture review](releases/paypal-markets-CONCEPT-20261108-v8/evidence/CAPTURE-REVIEW-20261107.json), [market insight evidence](releases/paypal-markets-CONCEPT-20261108-v8/evidence/AI-CAPTURE-EVIDENCE.json) and [artwork provenance](releases/paypal-markets-CONCEPT-20261108-v8/evidence/ARTWORK-PROVENANCE.json) record remaining source details.
+- [Usage and identity guidance](releases/paypal-markets-CONCEPT-20261108-v8/USAGE.md) keeps the concept disclosure, credits and scope with the pack.
 
-The pack is staged for review. Public publication, external submission and deployment remain separate actions.
+The dark-mode proof is limited to one native Markets overview in one local Xiaomi Android 15 debug session. The exact Metro JavaScript bundle hash was not recorded. The web app, Discover, Portfolio, Account, tablet/iOS layouts, standalone release app and hosted behavior were not recaptured as dark-mode evidence here. No live sign-in, connected balances, payment, trade, live Business reporting, internal PayPal monitoring or production readiness is established.

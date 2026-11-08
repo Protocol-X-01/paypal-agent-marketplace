@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-07T05:10:37Z",
+  "reviewer": "Codex visual review",
+  "source_edition": "paypal-markets-CONCEPT-20261106-v3",
+  "method": "Opened each unchanged PNG in a local image viewer, checked content scope, and measured native dimensions and SHA-256 from its bytes. No screenshot pixels were edited.",
+  "captures": [
+    {
+      "file": "captures/account-phone.png",
+      "sha256": "2135617c720ca672da673ddb836f3a8a7d7ef9f1c290fe6686de48bef3845401",
+      "width": 390,
+      "height": 844,
+      "capture_date": "2026-11-06",
+      "data": "empty",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/business-tablet-fictional.png",
+      "sha256": "a2dd623b394b3639caff8334373b7974c0bbb2281e33db0baa62fecf3c15169d",
+      "width": 1024,
+      "height": 900,
+      "capture_date": "2026-11-06",
+      "data": "empty",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/shop-phone.png",
+      "sha256": "584229f07a1fdf6347a3c4a9a60fd60955a5cf249a86a06e495a96912956350a",
+      "width": 390,
+      "height": 844,
+      "capture_date": "2026-11-06",
+      "data": "empty",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/shop-shortlist-phone.png",
+      "sha256": "d6ddd3f83376cb332df7d16f249949a3ce13210199ef398ba20a06013478af73",
+      "width": 390,
+      "height": 844,
+      "capture_date": "2026-11-06",
+      "data": "fictional",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/web-home-sky-public.png",
+      "sha256": "4f910a0bdc5bc7c154bc07ba1f62520450f8d023605ae97edd96494f7b313b11",
+      "width": 1265,
+      "height": 712,
+      "capture_date": "2026-11-06",
+      "data": "public",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/ai-market-public.png",
+      "sha256": "45d0cb6f948fdc58654efe613005570868af93ef344ee8a8cbec78d56a875bb0",
+      "width": 1265,
+      "height": 712,
+      "capture_date": "2026-11-06",
+      "data": "public",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/operations-fictional-public.png",
+      "sha256": "fac6d5416c205d9ff6fafa12f857d70ce6f4b9cd508be57bc9cbd40aacab1346",
+      "width": 1265,
+      "height": 712,
+      "capture_date": "2026-11-06",
+      "data": "fictional",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    },
+    {
+      "file": "captures/operations-fictional-charts.png",
+      "sha256": "d91bef760770ef4c659fb7b73518d26d6de7243c3b88912780a25e2380ea8ac1",
+      "width": 1265,
+      "height": 712,
+      "capture_date": "2026-11-06",
+      "data": "fictional",
+      "review": "Unmodified original asset; visually reviewed 2026-11-07 for accurate scope and public-safe empty, fictional or public data."
+    }
+  ]
+}

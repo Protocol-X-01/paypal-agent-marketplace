@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "capture_id": "PAYPAL-ANDROID-DARK-MARKETS-20261108",
+  "observed_at_utc": "2026-11-08T16:11:00Z",
+  "asset": {
+    "path_in_pack": "captures/native-markets-dark.png",
+    "sha256": "5e727cb6889df68f7d7c3b9278431834e9db64d42cacd790caa80e72a24d3140",
+    "pixel_dimensions": {
+      "width": 1220,
+      "height": 2712
+    },
+    "copy_policy": "Screenshot bytes are copied unchanged; no crop, retouch, overlay or resampling."
+  },
+  "surface": "Xiaomi Android 15 phone, native app screen; not an emulator or browser preview.",
+  "application": {
+    "package": "com.protocolx.paypalmarkets",
+    "version_name": "0.1.0",
+    "build_type": "debug",
+    "javascript_delivery": "Updated JavaScript was served by Metro from a dirty local review checkout based on b40086e.",
+    "standalone_release_build": false,
+    "runtime_bundle_hash_recorded": false
+  },
+  "visible_scope": "Dark-mode Markets overview with USD display and public CoinGecko BTC/USD reference data. The image shows response retrieval at 2026-11-08T16:05:24.449Z and provider update at 2026-11-08T16:04:56.000Z. No signed-in account or personal portfolio data is visible.",
+  "limitations": [
+    "One local Android debug session only; the exact JavaScript bundle and dirty source snapshot at capture time were not recorded.",
+    "This image does not establish a standalone release APK, the current hosted website, other screens, payment or trading behavior, or a price-accuracy guarantee."
+  ]
+}
