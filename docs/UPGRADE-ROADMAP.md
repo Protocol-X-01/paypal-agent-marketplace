@@ -1,6 +1,10 @@
 # PayPal Markets website and app roadmap
 
-Updated 2026-11-08. This is the working scope for the PayPal hackathon concept. The project began as an agent marketplace prototype; the product direction now puts Venmo in the wallet role and adds market context, portfolio estimates, and Channel3 product discovery around it.
+Updated 2026-11-09. This is the working scope for the PayPal hackathon concept. The project began as an agent marketplace prototype; the product direction now puts Venmo in the wallet role and adds market context, portfolio estimates, and Channel3 product discovery around it.
+
+## Current development checkpoint — 9 November 2026
+
+The private review branch `codex/paypal-upgrade-20261109` is pushed at `0553e99`. Its isolated local checkout now has an uncommitted PayPal-specific OAuth code and user-info adapter for both web and native runtimes, based on PayPal's documented `/connect`, token-service, and Identity API flow. Targeted ESLint and website TypeScript checks pass. This is source-level readiness only: no tests, production build, buyer consent, signed native acceptance, or deployment occurred; customer login remains disabled. The current local diff is not on GitHub or Render. See [customer login setup](CUSTOMER-LOGIN-SETUP.md) for the compatibility finding and remaining acceptance gates.
 
 ## Product boundaries
 

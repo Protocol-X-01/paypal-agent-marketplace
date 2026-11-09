@@ -43,16 +43,22 @@ In PayPal Developer Dashboard, enable Log in with PayPal for the correct sandbox
 app, select only the needed information, and register the exact callback. PayPal
 requires a privacy-policy URL and user-agreement URL, and reviews live apps and
 scopes before live activation. See the [PayPal integration guide](https://developer.paypal.com/log-in/build).
-The sandbox issuer, discovery metadata, ID-token behavior, scope eligibility,
-and callback configuration have not been verified with this project's PayPal
-app. A failed or unexpected metadata check leaves login unavailable.
+The local web and native runtimes now use PayPal's documented authorization-code
+and user-info flow rather than relying on a discovery document or ID token.
+This project's sandbox consent, token response and returned account-type claim
+remain unverified. Keep login disabled until the complete sandbox flow and the
+separate operational acceptance gates pass.
 
 ## Session and privacy model
 
-The server creates a five-minute one-use login transaction, and checks state,
-nonce, S256 PKCE, the ID token's issuer, audience, expiry and RSA signature, and
-the userinfo subject. Discovery and provider endpoints are restricted to the
-selected PayPal environment; redirects and oversized responses fail closed.
+The server creates a five-minute one-use login transaction and consumes its
+state before exchanging the authorization code with the server-held client
+secret. It then fetches OpenID user-info with the short-lived Bearer access
+token and requires a bounded `sub`. PayPal's documented manual flow does not
+specify PKCE or an ID token; the existing database nonce/verifier columns remain
+for schema compatibility and are not sent to PayPal. Requests are restricted
+to fixed PayPal hosts and paths, have five-second deadlines and bounded
+responses, and fail on redirects. Access and refresh tokens are not persisted.
 Browser cookies are host-only, Secure, HttpOnly and SameSite=Lax. The opaque
 application session expires after 30 minutes, is stored only as a hash, and is
 revoked on sign-out or rotated on a successful new sign-in. Login and sign-out
@@ -66,8 +72,8 @@ Web and native callbacks share a 4 KiB response filter. It ignores unrecognized
 extensions without forwarding or reflecting them, rejects duplicate recognized
 parameters and unsupported hybrid/JARM/token fields, and keeps code and error
 responses separate. A bounded `scope` is informational and discarded; a bounded
-`iss` reaches the OpenID verifier for its issuer check. Malformed responses fail
-before a web transaction is consumed. These local checks do not establish actual
+`iss`, when present, is checked against the configured PayPal environment.
+Malformed responses fail before a web transaction is consumed. These local checks do not establish actual
 PayPal sandbox metadata, consent, or successful customer sign-in.
 
 The web store locks a pending transaction before checking its submitted state,

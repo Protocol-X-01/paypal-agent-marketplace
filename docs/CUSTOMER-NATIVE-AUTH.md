@@ -4,7 +4,9 @@ The local server prototype now has protocol/configuration helpers, a native Post
 
 ## Relationship to the existing web flow
 
-Reuse verified PayPal discovery, authorization-code validation, nonce, S256 PKCE, signed ID-token checks, userinfo subject binding and identity mapping from `src/lib/customer-auth/provider.ts`. The existing `CustomerIdentity` is `{ accountType: personal | business | unknown, dataScope }`. Missing, unfamiliar and PREMIER remain unknown. A Business label chooses an initial screen; it grants no merchant reporting, payment, staff or wallet permissions.
+Use the PayPal-specific authorization-code and user-info adapter in `src/lib/customer-auth/provider.ts`. It uses one-time server-side state, the fixed native callback, the confidential server-side token exchange and a bounded user-info subject. PayPal's published manual flow does not specify S256 PKCE or a signed ID token; provider compatibility fields in the existing database remain unused and are not sent to PayPal. `CustomerIdentity` remains `{ accountType: personal | business | unknown, dataScope }`. Missing, unfamiliar and PREMIER remain unknown. A Business label chooses an initial screen; it grants no merchant reporting, payment, staff or wallet permissions.
+
+The 9 November local adapter update uses fixed sandbox/live endpoint paths and a short-lived provider token only in memory. Runtime no longer depends on the sandbox discovery URL. Sandbox consent and claims, signed app links, and device handoff remain unverified; native login stays disabled.
 
 Native app sessions are distinct from browser cookies and PayPal tokens. Do not weaken the web controller's exact same-origin POST requirement, read its HttpOnly cookie from the app, or add a client-controlled return URL. Use a separate native callback and cookie namespace. Reuse the stable subject HMAC derivation, so web and native can name the same verified owner locally, without implying cross-device data synchronization.
 
@@ -152,9 +154,9 @@ Contacts use a generation-bound repository with serialized mutations, exact dest
 
 Disabled builds import only the SecureStore presence helper, avoiding new browser/crypto module loading. Web remains native-login-disabled and uses its existing guest workspace. Backgrounding hides private information even when native login is disabled; foreground rechecks stored auth presence. A session retry revalidates an existing session rather than treating the retry button as sign-out. Actual operating-system background timing, screenshots and storage behavior remain device acceptance work.
 
-## Native readiness follows cached provider discovery — local6November follow-on
+## Native readiness follows cached provider discovery — local 6 November follow-on (superseded 9 November)
 
-Enabled availability now requires session-store readiness followed by the existing cached PayPal discovery helper. Either prerequisite failing returns200with loginAvailable:false. Disabled mode does not access store/provider; budget denial or budget-database failure retains429/503 without a provider probe. This is readiness metadata, not proof of client entitlement, consent or a successful provider login. Authenticated session reads and cancellation/logout remain independent of provider discovery, preserving recovery during an outage.
+At that checkpoint, enabled availability required store readiness followed by discovery. The 9 November adapter replaces runtime discovery with fixed PayPal endpoint construction; enabled availability still requires session-store readiness. Disabled mode does not access store/provider; budget denial or budget-database failure retains429/503 without a provider probe. This is readiness metadata, not proof of client entitlement, consent or a successful provider login. Authenticated session reads and cancellation/logout remain independent of provider availability, preserving recovery during an outage.
 
 Local guarded verification:13native controller tests (including unavailable/recovered discovery, disabled/store-failure no-provider behavior, budget429/503 and session/recovery continuity), full root TypeScript and scoped zero-warning ESLint passed. Evidence: /home/protocol-x/Downloads/paypal-native-readiness-check-mi6j6lpn. Native OpenAPI and all10disabled collection requests linted clean; no collection requests or real provider calls were executed in this pass. This modifies local source only, not the prior immutable build artifact or hosted service.
 

@@ -15,6 +15,19 @@ const ENDPOINT_PATHS = {
   jwks_uri: new Set(["/v1/oauth2/certs"]),
 } as const;
 
+/** PayPal's documented server-side authorization-code and user-info contract. */
+export type PayPalProvider = {
+  protocol: "paypal-code-userinfo";
+  issuer: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  userinfoEndpoint: string;
+  fetch: oidc.CustomFetch;
+};
+
+/** The OIDC shape remains for the isolated legacy metadata simulations only. */
+export type CustomerAuthProvider = PayPalProvider | oidc.Configuration;
+
 function allowedHosts(environment: AuthEnvironment): ReadonlySet<string> {
   return new Set(environment === "live"
     ? ["www.paypal.com", "api.paypal.com", "api-m.paypal.com"]
@@ -97,6 +110,36 @@ function providerFetch(environment: AuthEnvironment, transport: typeof fetch): o
   };
 }
 
+function apiHostFor(environment: AuthEnvironment): string {
+  return environment === "live" ? "api-m.paypal.com" : "api-m.sandbox.paypal.com";
+}
+
+/** Construct fixed endpoints from the selected PayPal environment; no discovery or caller URL is trusted. */
+export function createPayPalProvider(config: AuthConfig, transport: typeof fetch = fetch): PayPalProvider {
+  const issuer = issuerFor(config.environment);
+  const authorizationEndpoint = checkedUrl(`${issuer}/connect`, config.environment);
+  const apiOrigin = `https://${apiHostFor(config.environment)}`;
+  const tokenEndpoint = checkedUrl(`${apiOrigin}/v1/oauth2/token`, config.environment);
+  const userinfoEndpoint = checkedUrl(`${apiOrigin}/v1/identity/openidconnect/userinfo`, config.environment);
+  if (authorizationEndpoint.pathname !== "/connect" ||
+      tokenEndpoint.pathname !== "/v1/oauth2/token" ||
+      userinfoEndpoint.pathname !== "/v1/identity/openidconnect/userinfo") {
+    throw new Error("Unsupported PayPal endpoint configuration");
+  }
+  return {
+    protocol: "paypal-code-userinfo",
+    issuer,
+    authorizationEndpoint: authorizationEndpoint.href,
+    tokenEndpoint: tokenEndpoint.href,
+    userinfoEndpoint: userinfoEndpoint.href,
+    fetch: providerFetch(config.environment, transport),
+  };
+}
+
+function isPayPalProvider(provider: CustomerAuthProvider): provider is PayPalProvider {
+  return "protocol" in provider && provider.protocol === "paypal-code-userinfo";
+}
+
 function checkMetadata(config: oidc.Configuration, environment: AuthEnvironment): void {
   const metadata = config.serverMetadata();
   if (metadata.issuer !== issuerFor(environment) ||
@@ -116,7 +159,7 @@ function checkMetadata(config: oidc.Configuration, environment: AuthEnvironment)
   }
 }
 
-/** Optional transport is injected only by local synthetic tests. */
+/** @deprecated Retained for legacy synthetic OIDC fixtures; runtime uses createPayPalProvider. */
 export async function discoverProvider(config: AuthConfig, transport: typeof fetch = fetch): Promise<oidc.Configuration> {
   const provider = await oidc.discovery(
     new URL(issuerFor(config.environment)),
@@ -148,12 +191,26 @@ export function authorizationCallback(config: AuthConfig, surface: Authorization
   return `${config.origin}${surface === "native" ? "/api/auth/native/paypal/callback" : "/api/auth/paypal/callback"}`;
 }
 
-export async function beginAuthorization(provider: oidc.Configuration, config: AuthConfig, surface: AuthorizationSurface = "web") {
+export async function beginAuthorization(provider: CustomerAuthProvider, config: AuthConfig, surface: AuthorizationSurface = "web") {
   const state = oidc.randomState();
   const nonce = oidc.randomNonce();
   const verifier = oidc.randomPKCECodeVerifier();
-  const challenge = await oidc.calculatePKCECodeChallenge(verifier);
   const scope = config.accountAttributes ? "openid https://uri.paypal.com/services/paypalattributes" : "openid";
+  if (isPayPalProvider(provider)) {
+    // PayPal's published manual flow documents code/state and the confidential
+    // server exchange; it does not document PKCE or an ID-token nonce.
+    const location = new URL(provider.authorizationEndpoint);
+    location.searchParams.set("flowEntry", "static");
+    location.searchParams.set("client_id", config.clientId);
+    location.searchParams.set("response_type", "code");
+    location.searchParams.set("scope", scope);
+    location.searchParams.set("redirect_uri", authorizationCallback(config, surface));
+    location.searchParams.set("state", state);
+    // Keep the current database transaction shape until its separately managed
+    // schema can be migrated; these compatibility values are not sent to PayPal.
+    return { location: location.href, transaction: { state, nonce, verifier } };
+  }
+  const challenge = await oidc.calculatePKCECodeChallenge(verifier);
   const location = oidc.buildAuthorizationUrl(provider, {
     redirect_uri: authorizationCallback(config, surface),
     scope, response_type: "code", state, nonce, code_challenge: challenge, code_challenge_method: "S256",
@@ -161,7 +218,80 @@ export async function beginAuthorization(provider: oidc.Configuration, config: A
   return { location: location.href, transaction: { state, nonce, verifier } };
 }
 
-export async function completeAuthorization(provider: oidc.Configuration, currentUrl: URL, transaction: LoginTransaction, config: AuthConfig, surface: AuthorizationSurface = "web"): Promise<CustomerIdentity> {
+async function completePayPalAuthorization(provider: PayPalProvider, currentUrl: URL, transaction: LoginTransaction, config: AuthConfig, surface: AuthorizationSurface): Promise<CustomerIdentity> {
+  const callback = new URL(authorizationCallback(config, surface));
+  if (currentUrl.origin !== callback.origin || currentUrl.pathname !== callback.pathname ||
+      currentUrl.username || currentUrl.password || currentUrl.hash) throw new Error("Unexpected identity callback");
+  const stateValues = currentUrl.searchParams.getAll("state");
+  const codeValues = currentUrl.searchParams.getAll("code");
+  const code = codeValues[0];
+  if (stateValues.length !== 1 || stateValues[0] !== transaction.state || codeValues.length !== 1 ||
+      !code || code.length > 2048 || /[\u0000-\u0020\u007f]/.test(code) || currentUrl.searchParams.has("error")) {
+    throw new Error("Unexpected identity callback parameters");
+  }
+  const issuerValues = currentUrl.searchParams.getAll("iss");
+  if (issuerValues.length > 1 || (issuerValues.length === 1 && issuerValues[0] !== provider.issuer)) {
+    throw new Error("Unexpected identity issuer");
+  }
+
+  const tokenUrl = checkedUrl(provider.tokenEndpoint, config.environment);
+  const userinfoUrl = checkedUrl(provider.userinfoEndpoint, config.environment);
+  if (tokenUrl.hostname !== apiHostFor(config.environment) || tokenUrl.pathname !== "/v1/oauth2/token" ||
+      userinfoUrl.hostname !== apiHostFor(config.environment) || userinfoUrl.pathname !== "/v1/identity/openidconnect/userinfo") {
+    throw new Error("Unsupported PayPal identity endpoint");
+  }
+
+  const form = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: callback.href });
+  const formEncode = (value: string) => new URLSearchParams([['value', value]]).toString().slice("value=".length);
+  const basic = Buffer.from(`${formEncode(config.clientId)}:${formEncode(config.clientSecret)}`, "utf8").toString("base64");
+  const tokenResponse = await provider.fetch(tokenUrl.href, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  if (tokenResponse.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(tokenResponse.headers.get("content-type") ?? "")) {
+    throw new Error("PayPal token exchange failed");
+  }
+  const tokens: unknown = await tokenResponse.json();
+  if (!tokens || typeof tokens !== "object" || Array.isArray(tokens)) throw new Error("PayPal token response is invalid");
+  const tokenRecord = tokens as Record<string, unknown>;
+  const accessToken = tokenRecord.access_token;
+  const grantedScope = tokenRecord.scope;
+  if (typeof accessToken !== "string" || accessToken.length < 1 || accessToken.length > 4096 ||
+      !/^[\x21-\x7e]+$/.test(accessToken) || typeof tokenRecord.token_type !== "string" ||
+      tokenRecord.token_type.toLowerCase() !== "bearer" || typeof grantedScope !== "string" ||
+      grantedScope.length > 1024 || !/^[\x21-\x7e]+(?: [\x21-\x7e]+)*$/.test(grantedScope) ||
+      !grantedScope.split(" ").includes("openid")) {
+    throw new Error("PayPal token response is incomplete");
+  }
+
+  userinfoUrl.searchParams.set("schema", "openid");
+  const profileResponse = await provider.fetch(userinfoUrl.href, {
+    method: "GET",
+    redirect: "manual",
+    body: undefined,
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (profileResponse.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(profileResponse.headers.get("content-type") ?? "")) {
+    throw new Error("PayPal user-info request failed");
+  }
+  const profile: unknown = await profileResponse.json();
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) throw new Error("PayPal user-info response is invalid");
+  const subject = (profile as Record<string, unknown>).sub;
+  if (typeof subject !== "string" || subject.length < 1 || subject.length > 255) throw new Error("PayPal subject is invalid");
+  return {
+    accountType: normalizeAccountType((profile as Record<string, unknown>).account_type),
+    dataScope: deriveDataScope(config, provider.issuer, subject),
+  };
+}
+
+export async function completeAuthorization(provider: CustomerAuthProvider, currentUrl: URL, transaction: LoginTransaction, config: AuthConfig, surface: AuthorizationSurface = "web"): Promise<CustomerIdentity> {
+  if (isPayPalProvider(provider)) return completePayPalAuthorization(provider, currentUrl, transaction, config, surface);
   const callback = new URL(authorizationCallback(config, surface));
   if (currentUrl.origin !== callback.origin || currentUrl.pathname !== callback.pathname ||
       currentUrl.username || currentUrl.password || currentUrl.hash) throw new Error("Unexpected identity callback");
@@ -175,7 +305,7 @@ export async function completeAuthorization(provider: oidc.Configuration, curren
   if (!claims || typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 255 || typeof tokens.access_token !== "string") {
     throw new Error("Identity response is incomplete");
   }
-  // The library verifies the userinfo subject against the validated ID token.
+  // Legacy synthetic OIDC fixtures verify the userinfo subject against the ID token.
   const profile = await oidc.fetchUserInfo(provider, tokens.access_token, claims.sub);
   return { accountType: normalizeAccountType(profile.account_type), dataScope: deriveDataScope(config, provider.serverMetadata().issuer, claims.sub) };
 }

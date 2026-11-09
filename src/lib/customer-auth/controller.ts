@@ -2,10 +2,8 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import type * as oidc from "openid-client";
-
 import { authContextFingerprint, readAuthConfig, type AuthConfig } from "./config";
-import { beginAuthorization, completeAuthorization, discoverProvider } from "./provider";
+import { beginAuthorization, completeAuthorization, createPayPalProvider, type CustomerAuthProvider } from "./provider";
 import { buildProviderCallbackUrl, parseProviderCallbackQuery } from "./provider-callback";
 import { createPostgresStore, type AuthStore } from "./store";
 
@@ -22,7 +20,7 @@ type Dependencies = {
   budget?: AuthBudgetConsumer;
   config(): AuthConfig | null;
   store(config: AuthConfig): AuthStore;
-  provider(config: AuthConfig): Promise<oidc.Configuration>;
+  provider(config: AuthConfig): Promise<CustomerAuthProvider>;
 };
 
 function randomHandle(): string { return randomBytes(32).toString("base64url"); }
@@ -218,11 +216,11 @@ function runtimeStore(config: AuthConfig): AuthStore {
   return storeCache.store;
 }
 
-let providerCache: { fingerprint: string; until: number; value: Promise<oidc.Configuration> } | null = null;
-function runtimeProvider(config: AuthConfig): Promise<oidc.Configuration> {
+let providerCache: { fingerprint: string; until: number; value: Promise<CustomerAuthProvider> } | null = null;
+function runtimeProvider(config: AuthConfig): Promise<CustomerAuthProvider> {
   const fingerprint = createHash("sha256").update(JSON.stringify([config.environment, config.clientId, config.clientSecret])).digest("hex");
   if (providerCache && providerCache.fingerprint === fingerprint && providerCache.until > Date.now()) return providerCache.value;
-  const entry = { fingerprint, until: Date.now() + 5 * 60_000, value: discoverProvider(config) };
+  const entry = { fingerprint, until: Date.now() + 5 * 60_000, value: Promise.resolve(createPayPalProvider(config)) };
   providerCache = entry;
   // Briefly cache failures to avoid a provider outage triggering a request storm.
   void entry.value.catch(() => { if (providerCache === entry) entry.until = Date.now() + 15_000; });

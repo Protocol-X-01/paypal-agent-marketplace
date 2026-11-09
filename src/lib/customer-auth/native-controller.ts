@@ -1,8 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
-import type * as oidc from "openid-client";
 import type { NativeAuthConfig } from "./native-config";
-import { beginAuthorization, completeAuthorization } from "./provider";
+import { beginAuthorization, completeAuthorization, type CustomerAuthProvider } from "./provider";
 import { buildProviderCallbackUrl, parseProviderCallbackQuery } from "./provider-callback";
 import type { NativeAuthStore } from "./native-store";
 import { NativeStoreError } from "./native-store";
@@ -19,7 +18,7 @@ type Dependencies = {
   budget?: AuthBudgetConsumer;
   config(): NativeAuthConfig | null;
   store(config: NativeAuthConfig): NativeAuthStore;
-  provider(config: NativeAuthConfig): Promise<oidc.Configuration>;
+  provider(config: NativeAuthConfig): Promise<CustomerAuthProvider>;
   begin?: typeof beginAuthorization;
   complete?: typeof completeAuthorization;
   now?: () => number;
