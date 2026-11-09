@@ -56,3 +56,13 @@ Loaded the current `zapier:onboarding` instructions and followed the read-only r
 The primary Calendar lookup returned one PayPal-related item within the next seven days. Its title and time are intentionally kept out of this project file. GitHub's repository lookup confirmed that `Protocol-X-01/paypal-agent-marketplace` is private, uses `main` as its default branch, and reports zero open issues. The current `PayPal Project Pulse` skill already combines this Calendar and GitHub pattern; it remains read-only and unscheduled, so no duplicate skill was created.
 
 No Calendar or GitHub data was changed, no trigger was polled, and no new account or connection was added. The connector's raw GitHub repository response included a temporary read-only clone credential; it was not used, and its value is omitted from this record. Customer events, payments and subscription actions remain outside this demonstration and require their own explicit account and action setup.
+
+## Fresh onboarding run — 9 November 2026, 16:58 UTC
+
+Reloaded the current `zapier:onboarding` instructions and ran the existing `PayPal Project Pulse` skill read-only. The primary-calendar window covered 9–16 November in Europe/London; two PayPal/hackathon-related items were returned, and unrelated personal calendar details were omitted. The calendar default is the user's personal Google account; GitHub is connected as `Protocol-X-01`.
+
+The enabled inventory remains Google Calendar (11 actions) and GitHub (26 actions), with lookups, searches and read triggers; no write action is enabled in these two connected inventories. The existing project-pulse skill remains read-only and unscheduled, so no duplicate was created.
+
+GitHub confirmed the repository remains private. Its default `main` branch is `ca3bc037ba7d428338a6c9399e0368e7923e096a`; repository metadata reports `pushed_at` as `2026-11-09T16:51:18Z` and `open_issues_count` as 0 (this repository field may include pull requests). The separate `codex/paypal-upgrade-20261109` feature branch was independently verified at `b93c72882f566aefc7bfaa349b32fc3ab88f54b8`; the feature-branch push did not update `main`.
+
+No Calendar or GitHub records were changed, no trigger was polled, and no automation was scheduled. This confirms live on-demand reads across two connected apps, not customer-specific PayPal consent, payment authority, or an in-app Zapier connection.
