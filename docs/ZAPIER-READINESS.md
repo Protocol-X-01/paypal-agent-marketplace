@@ -66,3 +66,7 @@ The enabled inventory remains Google Calendar (11 actions) and GitHub (26 action
 GitHub confirmed the repository remains private. Its default `main` branch is `ca3bc037ba7d428338a6c9399e0368e7923e096a`; repository metadata reports `pushed_at` as `2026-11-09T16:51:18Z` and `open_issues_count` as 0 (this repository field may include pull requests). The separate `codex/paypal-upgrade-20261109` feature branch was independently verified at `b93c72882f566aefc7bfaa349b32fc3ab88f54b8`; the feature-branch push did not update `main`.
 
 No Calendar or GitHub records were changed, no trigger was polled, and no automation was scheduled. This confirms live on-demand reads across two connected apps, not customer-specific PayPal consent, payment authority, or an in-app Zapier connection.
+
+## Fresh onboarding run — 9 November 2026, 18:30 UTC
+
+Reloaded `zapier:onboarding` and completed the read-only rundown using the existing `PayPal Project Pulse` skill. The primary Calendar query covered 9–16 November in Europe/London and returned two PayPal/hackathon-related events; unrelated personal event details are omitted. GitHub confirms the repository remains private, with `main` at `510d62d741b944a5707d636b9b135f3770b9d3de`, last pushed at `2026-11-09T18:07:21Z`, and `open_issues_count` 0 (the repository count may include pull requests). The skill remains saved and unscheduled; no Calendar or GitHub records changed, no trigger was polled, and no automation was scheduled.

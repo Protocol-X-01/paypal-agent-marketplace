@@ -42,8 +42,8 @@ type ThresholdStorageView = {
 };
 
 const EXAMPLE = `window_days,period,start_date,end_exclusive,channel,currency,transactions,gross_minor,refund_minor,source_updated_at
-7,previous,2026-10-23,2026-10-30,online,GBP,100,100000,2000,2026-11-06T00:00:00Z
-7,current,2026-10-30,2026-11-06,online,GBP,120,120000,3000,2026-11-06T00:00:00Z`;
+7,previous,2026-10-23,2026-10-30,online,USD,100,100000,2000,2026-11-06T00:00:00Z
+7,current,2026-10-30,2026-11-06,online,USD,120,120000,3000,2026-11-06T00:00:00Z`;
 
 function amount(value: number, currency: string): string {
   return formatBusinessMinorAmount(value, currency);
@@ -527,7 +527,7 @@ export function BusinessContent() {
             </Pressable>
             {guideOpen && <View style={styles.guide}>
               <Text style={styles.guideText}>Include the exact columns shown below, with one previous and one current row for each included channel: online, in_person, or other. Periods must be consecutive and complete; end_exclusive is the first UTC day outside the period.</Text>
-              <Text style={styles.guideText}>Amounts are whole minor units: 1250 is £12.50 in GBP. Use one ISO 4217 currency with a defined minor unit from the app’s September 2026 list and the same UTC source timestamp for every row, at or after the end of the current period. Each row supports up to one billion transactions and one trillion minor units.</Text>
+              <Text style={styles.guideText}>Amounts are whole minor units: 1250 is $12.50 in USD. Use one ISO 4217 currency with a defined minor unit from the app’s September 2026 list and the same UTC source timestamp for every row, at or after the end of the current period. Each row supports up to one billion transactions and one trillion minor units.</Text>
               <Text style={styles.guideExampleLabel}>EXAMPLE FORMAT · FICTIONAL FIGURES</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled>
                 <Text style={styles.guideExample} selectable>{EXAMPLE}</Text>

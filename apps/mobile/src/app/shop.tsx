@@ -17,7 +17,7 @@ import { fetch as expoFetch } from 'expo/fetch';
 
 import { searchChannel3, fetchChannel3Catalog, createCustomerCollectionsRepository, planProductSave, newCollection, MAX_COLLECTIONS, MAX_COLLECTION_NAME_LENGTH, type Channel3Catalog, type Channel3CatalogSection, type Channel3CatalogRetailer, type Channel3Offer, type Channel3PriceRange, type Channel3Product, type SavedProduct, type ShoppingCollection } from '@/lib/channel3';
 import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS, getChannel3SeasonalEdit } from '@/lib/channel3-shelves';
-import { isFreshVerifiedOffer, VERIFIED_OFFERS_TTL_MS } from '@/lib/channel3-offers';
+import { VERIFIED_OFFERS_TTL_MS } from '@/lib/channel3-offers';
 import { createChannel3ImageLoader, type Channel3ImageLease } from '@/lib/channel3-image';
 import { createStorefrontFence, DEFAULT_SHOP_STOREFRONT, loadShopDiscoveryMode, loadShopStorefront, saveShopDiscoveryMode, saveShopStorefront, SHOP_STOREFRONTS, type ShopDiscoveryMode, type ShopStorefront, type StorefrontTicket } from '@/lib/shop-storefront';
 import { useCustomerSession } from '@/lib/customer-session-context';
@@ -28,7 +28,7 @@ import { useAppearanceStyles, usePalette } from '@/lib/theme-context';
 
 const EMPTY_COLLECTIONS: ShoppingCollection[] = [];
 const AFFILIATE_DISCLOSURE = 'We may earn a commission from retailer links.';
-const COMMISSION_LEGEND = '★ Max advertised commission · not cashback; earnings vary.';
+const COMMISSION_LEGEND = '★ Max advertised commission; we may earn from links. Not cashback; rates vary.';
 const SUGGESTIONS = ['wireless headphones', 'travel backpack', 'desk lamp'];
 const MAX_SEARCH_RESULTS = 96;
 const MAX_SEARCH_PAGES = 8;
@@ -44,12 +44,75 @@ function offerHandoffLabel(offer: Channel3Offer): string {
 }
 
 function preferredRetailerOffer(product: Pick<Channel3Product, 'offers'>): Channel3Offer | null {
-  return product.offers.find((offer) => offer.url && offer.availability === 'InStock') ?? product.offers.find((offer) => offer.url) ?? null;
+  return product.offers.find((offer) => offer.url && offer.availability === 'InStock') ?? null;
+}
+
+const SIMILAR_PRODUCT_FAMILIES = [
+  { query: 'travel backpack', terms: ['bag', 'bags', 'backpack', 'backpacks', 'rucksack', 'sackpack', 'sack', 'tote', 'duffel', 'luggage', 'carryon'] },
+  { query: 'wireless headphones', terms: ['headphone', 'headphones', 'earbud', 'earbuds', 'earphone', 'earphones', 'headset'] },
+  { query: 'shoes', terms: ['shoe', 'shoes', 'sneaker', 'sneakers', 'boot', 'boots'] },
+  { query: 'laptops', terms: ['laptop', 'notebook', 'computer'] },
+  { query: 'smartphones', terms: ['phone', 'smartphone', 'mobile'] },
+  { query: 'tablets', terms: ['tablet', 'ipad'] },
+  { query: 'desk lamps', terms: ['lamp', 'lighting', 'light'] },
+  { query: 'coffee makers', terms: ['coffee', 'coffeemaker', 'espresso'] },
+  { query: 'cameras', terms: ['camera', 'webcam'] },
+  { query: 'water bottles', terms: ['bottle', 'flask', 'tumbler'] },
+  { query: 'chairs', terms: ['chair', 'stool', 'desk'] },
+  { query: 'watches', terms: ['watch', 'watches', 'smartwatch', 'wearable'] },
+  { query: 'monitors and televisions', terms: ['monitor', 'television', 'display', 'screen'] },
+  { query: 'printers', terms: ['printer', 'printers', 'scanner'] },
+  { query: 'gaming accessories', terms: ['gaming', 'console', 'controller', 'videogame'] },
+  { query: 'board games and toys', terms: ['toy', 'toys', 'puzzle', 'boardgame', 'boardgames'] },
+  { query: 'skin care and beauty', terms: ['skincare', 'makeup', 'cosmetics', 'beauty'] },
+  { query: 'fitness equipment', terms: ['fitness', 'exercise', 'yoga', 'weights', 'dumbbell', 'treadmill'] },
+  { query: 'pet supplies', terms: ['pet', 'pets', 'dog', 'dogs', 'cat', 'cats'] },
+  { query: 'clothing', terms: ['shirt', 'shirts', 'dress', 'jacket', 'jeans', 'clothing', 'apparel'] },
+  { query: 'jewelry', terms: ['jewelry', 'jewellery', 'necklace', 'ring', 'bracelet'] },
+  { query: 'home and bedding', terms: ['bedding', 'duvet', 'pillow', 'mattress', 'decor'] },
+  { query: 'small appliances', terms: ['vacuum', 'blender', 'toaster', 'appliance', 'airfryer'] },
+  { query: 'pantry and snacks', terms: ['snack', 'snacks', 'pantry', 'grocery', 'food'] },
+];
+const SIMILAR_STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'from', 'new', 'black', 'white', 'blue', 'red', 'green', 'pink', 'small', 'large', 'medium', 'mens', 'womens', 'kids']);
+
+function productWords(value: string): Set<string> {
+  return new Set((value.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((word) => !SIMILAR_STOP_WORDS.has(word)));
+}
+
+function similarProductQuery(value: string): string | null {
+  const words = productWords(value);
+  return SIMILAR_PRODUCT_FAMILIES.find((family) => family.terms.some((term) => words.has(term)))?.query ?? null;
+}
+
+function findSimilarInStockProducts(source: Pick<Channel3Product, 'id' | 'title' | 'brand'>, candidates: readonly Channel3Product[]): Channel3Product[] {
+  const sourceWords = productWords(`${source.brand ?? ''} ${source.title}`);
+  const families = SIMILAR_PRODUCT_FAMILIES.filter((family) => family.terms.some((word) => sourceWords.has(word)));
+  const seen = new Set<string>();
+  return candidates.flatMap((candidate) => {
+    if (candidate.id === source.id || seen.has(candidate.id) || !candidate.offers.some((offer) => offer.url && offer.availability === 'InStock')) return [];
+    const candidateWords = productWords(`${candidate.brand ?? ''} ${candidate.title}`);
+    const sharedWords = [...sourceWords].filter((word) => candidateWords.has(word)).length;
+    const sharedFamily = families.some((family) => family.terms.some((word) => candidateWords.has(word)));
+    const sameBrand = Boolean(source.brand && candidate.brand && source.brand.toLowerCase() === candidate.brand.toLowerCase());
+    if (!sharedFamily && sharedWords < 2) return [];
+    const score = sharedWords + (sharedFamily ? 4 : 0) + (sameBrand ? 2 : 0);
+    seen.add(candidate.id);
+    return [{ candidate, score }];
+  }).sort((left, right) => right.score - left.score || left.candidate.title.localeCompare(right.candidate.title)).slice(0, 3).map(({ candidate }) => candidate);
 }
 
 type CollectionsRepository = ReturnType<typeof createCustomerCollectionsRepository>;
 type RetainedRename = { collectionName: string; value: string };
 type VerifiedOffers = { repository?: CollectionsRepository; offers: Channel3Offer[]; verifiedAt: number; ticket: StorefrontTicket };
+function offerSnapshotStatus(offer: Channel3Offer, verified: VerifiedOffers | undefined, unconfirmed: boolean) {
+  if (unconfirmed) return { label: 'Earlier report · current stock unconfirmed', availability: 'unknown' as const };
+  const current = verified?.offers.find((candidate) => candidate.domain === offer.domain);
+  if (verified && !current) return { label: 'Not in current check', availability: 'unknown' as const };
+  if (current?.availability === 'InStock') return { label: 'Current check · reported in stock', availability: 'InStock' as const };
+  if (current?.availability === 'OutOfStock') return { label: 'Current check · reported out of stock', availability: 'OutOfStock' as const };
+  if (verified) return { label: 'Current stock unknown', availability: 'unknown' as const };
+  return { label: offer.availability === 'InStock' ? 'Reported in stock' : offer.availability === 'OutOfStock' ? 'Reported out of stock' : 'Check stock', availability: offer.availability };
+}
 type SearchStopReason = 'complete' | 'result-limit' | 'page-limit' | 'repeated-token' | null;
 type SearchSnapshot = {
   query: string;
@@ -255,6 +318,11 @@ export default function ShopScreen() {
   const [curatedError, setCuratedError] = useState<string | null>(null);
   const [curatedTicket, setCuratedTicket] = useState<StorefrontTicket | null>(null);
   const [verifiedByProduct, setVerifiedByProduct] = useState<Record<string, VerifiedOffers>>({});
+  const [availabilityUnconfirmedByProduct, setAvailabilityUnconfirmedByProduct] = useState<Record<string, boolean>>({});
+  const [similarByProduct, setSimilarByProduct] = useState<Record<string, Channel3Product[]>>({});
+  const [similarVisibleByProduct, setSimilarVisibleByProduct] = useState<Record<string, boolean>>({});
+  const [similarLoadingByProduct, setSimilarLoadingByProduct] = useState<Record<string, boolean>>({});
+  const [similarErrorByProduct, setSimilarErrorByProduct] = useState<Record<string, string>>({});
   const [offerErrors, setOfferErrors] = useState<Record<string, string>>({});
   const [storedRefreshingProductId, setRefreshingProductId] = useState<string | null>(null);
   const [refreshRepository, setRefreshRepository] = useState<CollectionsRepository | null>(null);
@@ -413,6 +481,11 @@ export default function ShopScreen() {
     for (const timer of offerTimers.current.values()) clearTimeout(timer);
     offerTimers.current.clear();
     setVerifiedByProduct({});
+    setAvailabilityUnconfirmedByProduct({});
+    setSimilarByProduct({});
+    setSimilarVisibleByProduct({});
+    setSimilarLoadingByProduct({});
+    setSimilarErrorByProduct({});
     setOfferErrors({});
   }
 
@@ -833,6 +906,56 @@ export default function ShopScreen() {
     }
   }
 
+  async function toggleSimilarAlternatives(product: Channel3Product | SavedProduct, candidates: readonly Channel3Product[], sourceTicket?: StorefrontTicket | null) {
+    if (similarVisibleByProduct[product.id]) {
+      setSimilarVisibleByProduct((current) => ({ ...current, [product.id]: false }));
+      return;
+    }
+    const privateRepository = sourceTicket === undefined ? repository : undefined;
+    const privateCurrent = () => !privateRepository || (privateVisible && privateRepository.isCurrent());
+    if (!storefrontReady || sourceTicket === null || refreshingProductRef.current !== null || (sourceTicket && !storefrontFence.current.isCurrent(sourceTicket)) || !privateCurrent()) return;
+    const cached = findSimilarInStockProducts(product, [...(similarByProduct[product.id] ?? []), ...candidates]);
+    if (cached.length) {
+      setSimilarByProduct((current) => ({ ...current, [product.id]: cached }));
+      setSimilarErrorByProduct((current) => ({ ...current, [product.id]: '' }));
+      setSimilarVisibleByProduct((current) => ({ ...current, [product.id]: true }));
+      return;
+    }
+    setSimilarVisibleByProduct((current) => ({ ...current, [product.id]: true }));
+    const query = similarProductQuery(product.title);
+    if (!query) {
+      setSimilarErrorByProduct((current) => ({ ...current, [product.id]: 'No similar in-stock items were found in this list. Try a broader search.' }));
+      return;
+    }
+    const ticket = sourceTicket ?? storefrontFence.current.capture();
+    const controller = new AbortController();
+    recheckRequest.current = controller;
+    recheckPrivateRepository.current = privateRepository ?? null;
+    setRefreshRepository(privateRepository ?? null);
+    refreshingProductRef.current = product.id;
+    setRefreshingProductId(product.id);
+    setSimilarLoadingByProduct((current) => ({ ...current, [product.id]: true }));
+    setSimilarErrorByProduct((current) => ({ ...current, [product.id]: '' }));
+    try {
+      const result = await searchChannel3(query, ticket.storefront, controller.signal);
+      if (!privateCurrent() || controller.signal.aborted || !storefrontFence.current.isCurrent(ticket) || recheckRequest.current !== controller) return;
+      const similar = findSimilarInStockProducts(product, result.products);
+      setSimilarByProduct((current) => ({ ...current, [product.id]: similar }));
+      setSimilarErrorByProduct((current) => ({ ...current, [product.id]: similar.length ? '' : 'No similar items are currently reported in stock.' }));
+    } catch (error) {
+      if (privateCurrent() && !controller.signal.aborted && storefrontFence.current.isCurrent(ticket) && recheckRequest.current === controller) {
+        setSimilarErrorByProduct((current) => ({ ...current, [product.id]: error instanceof Error ? error.message : 'Similar items could not be loaded right now.' }));
+      }
+    } finally {
+      if (storefrontFence.current.isCurrent(ticket) && recheckRequest.current === controller) {
+        recheckRequest.current = null;
+        refreshingProductRef.current = null;
+        if (privateCurrent()) setRefreshingProductId(null);
+        setSimilarLoadingByProduct((current) => ({ ...current, [product.id]: false }));
+      }
+    }
+  }
+
   async function refreshProductOffers(product: Channel3Product | SavedProduct, sourceTicket?: StorefrontTicket | null, openAfterCheck = false, preferredDomain?: string, handoffWindow?: Window | null) {
     const closeHandoff = () => { if (handoffWindow && !handoffWindow.closed) handoffWindow.close(); };
     const privateRepository = sourceTicket === undefined ? repository : undefined;
@@ -858,6 +981,7 @@ export default function ShopScreen() {
     try {
       const query = product.title.trim().slice(0, 120);
       let exactMatch: Channel3Product | undefined;
+      const checkedCandidates: Channel3Product[] = [];
       let pageToken: string | undefined;
       const seenTokens = new Set<string>();
       // Each page is a separate rate-limited, collection-scoped request.
@@ -865,23 +989,37 @@ export default function ShopScreen() {
       for (let page = 0; page < 3; page++) {
         const result = await searchChannel3(query, ticket.storefront, controller.signal, pageToken ? { pageToken } : {});
         if (!privateCurrent() || controller.signal.aborted || !storefrontFence.current.isCurrent(ticket) || recheckRequest.current !== controller) { closeHandoff(); return; }
+        for (const candidate of result.products) if (!checkedCandidates.some((item) => item.id === candidate.id)) checkedCandidates.push(candidate);
         exactMatch = result.products.find((item) => item.id === product.id);
         if (exactMatch || !result.nextPageToken || seenTokens.has(result.nextPageToken)) break;
         seenTokens.add(result.nextPageToken);
         pageToken = result.nextPageToken;
       }
       if (!exactMatch) {
+        const similar = findSimilarInStockProducts(product, checkedCandidates);
+        setAvailabilityUnconfirmedByProduct((current) => ({ ...current, [product.id]: true }));
+        setSimilarByProduct((current) => ({ ...current, [product.id]: similar }));
+        setSimilarVisibleByProduct((current) => ({ ...current, [product.id]: true }));
+        setSimilarErrorByProduct((current) => ({ ...current, [product.id]: similar.length ? '' : 'No similar in-stock items were found in the checked results.' }));
         throw new Error('Channel3 could not confirm this exact product in the checked results. Search for it again before opening a retailer.');
       }
-      if (!exactMatch.offers.length) {
-        throw new Error('No current retailer offers were returned for this exact product.');
+      const similar = findSimilarInStockProducts(product, checkedCandidates);
+      setAvailabilityUnconfirmedByProduct((current) => {
+        if (!current[product.id]) return current;
+        const next = { ...current };
+        delete next[product.id];
+        return next;
+      });
+      const hasAnyInStockOffer = exactMatch.offers.some((offer) => offer.url && offer.availability === 'InStock');
+      const selectedRetailerUnavailable = Boolean(preferredDomain && !exactMatch.offers.some((offer) => offer.domain === preferredDomain && offer.url && offer.availability === 'InStock'));
+      setSimilarByProduct((current) => ({ ...current, [product.id]: similar }));
+      if (!hasAnyInStockOffer || selectedRetailerUnavailable) {
+        setSimilarVisibleByProduct((current) => ({ ...current, [product.id]: true }));
+        setSimilarErrorByProduct((current) => ({ ...current, [product.id]: similar.length ? '' : 'No similar in-stock items were found in the checked results.' }));
       }
       const handoffOffer = preferredDomain
-        ? exactMatch.offers.find((offer) => offer.domain === preferredDomain && offer.url)
+        ? exactMatch.offers.find((offer) => offer.domain === preferredDomain && offer.url && offer.availability === 'InStock')
         : preferredRetailerOffer(exactMatch);
-      if (openAfterCheck && !handoffOffer) {
-        throw new Error('This exact product has no confirmed retailer link in the selected region.');
-      }
       const verifiedAt = currentEpochMs();
       setVerifiedByProduct((current) => ({ ...current, [product.id]: { offers: exactMatch.offers, verifiedAt, ticket, repository: privateRepository } }));
       const timer = setTimeout(() => {
@@ -896,9 +1034,17 @@ export default function ShopScreen() {
         });
       }, VERIFIED_OFFERS_TTL_MS);
       offerTimers.current.set(product.id, timer);
+      if (openAfterCheck && !handoffOffer) {
+        setOfferError(product.id, preferredDomain
+          ? 'Sorry, Channel3 reports that retailer out of stock. Current offers and similar options are shown below.'
+          : 'Sorry, Channel3 reports no in-stock offers for this item. Similar options are shown below when available.');
+        closeHandoff();
+        return;
+      }
       if (openAfterCheck && handoffOffer) {
-        if (handoffWindow) handoffWindow.location.replace(handoffOffer.url);
-        else await Linking.openURL(handoffOffer.url);
+        if (handoffWindow) {
+          if (!handoffWindow.closed) handoffWindow.location.replace(handoffOffer.url);
+        } else await Linking.openURL(handoffOffer.url);
       }
     } catch (error) {
       closeHandoff();
@@ -915,7 +1061,6 @@ export default function ShopScreen() {
   }
 
   function openProductAtRetailer(product: Channel3Product | SavedProduct, sourceTicket?: StorefrontTicket | null) {
-    const preferred = 'offers' in product ? preferredRetailerOffer(product) : null;
     const handoffWindow = Platform.OS === 'web' ? window.open('about:blank', '_blank') : null;
     if (Platform.OS === 'web' && !handoffWindow) {
       setOfferError(product.id, 'Your browser blocked the retailer tab. Allow pop-ups, then tap the product again.');
@@ -923,32 +1068,33 @@ export default function ShopScreen() {
     }
     if (handoffWindow) {
       handoffWindow.opener = null;
-      handoffWindow.document.title = 'Checking current retailer offer';
-      const message = handoffWindow.document.createElement('p');
-      message.textContent = 'Checking this exact product and its current retailer link…';
-      message.style.cssText = 'font: 16px system-ui; color: #24364b; margin: 40px auto; max-width: 36rem; padding: 0 20px;';
-      handoffWindow.document.body.append(message);
+      handoffWindow.document.title = 'PayPal Markets';
     }
-    void refreshProductOffers(product, sourceTicket, true, preferred?.domain, handoffWindow);
+    void refreshProductOffers(product, sourceTicket, true, undefined, handoffWindow);
   }
 
-  async function openRetailer(productId: string, offer: Channel3Offer) {
-    const verified = verifiedByProduct[productId];
+  function openRetailer(product: Channel3Product | SavedProduct, offer: Channel3Offer) {
+    const verified = verifiedByProduct[product.id];
     if (verified?.repository && !verified.repository.isCurrent()) return;
-    if (!verified || !storefrontFence.current.isCurrent(verified.ticket) || !isFreshVerifiedOffer(verified.verifiedAt, currentEpochMs()) || !verified.offers.some((item) => item.url === offer.url)) {
+    if (!verified || !storefrontFence.current.isCurrent(verified.ticket) || !verified.offers.some((item) => item.url === offer.url && item.domain === offer.domain && item.availability === 'InStock')) {
       setVerifiedByProduct((current) => {
         const next = { ...current };
-        delete next[productId];
+        delete next[product.id];
         return next;
       });
-      setOfferError(productId, 'This retailer link is no longer fresh. Recheck offers before leaving the app.');
+      setOfferError(product.id, 'Refresh offers before leaving the app.');
       return;
     }
-    try {
-      await Linking.openURL(offer.url);
-    } catch {
-      if ((!verified.repository || verified.repository.isCurrent()) && storefrontFence.current.isCurrent(verified.ticket)) setOfferError(productId, 'Your device could not open this retailer link.');
+    const handoffWindow = Platform.OS === 'web' ? window.open('about:blank', '_blank') : null;
+    if (Platform.OS === 'web' && !handoffWindow) {
+      setOfferError(product.id, 'Your browser blocked the retailer tab. Allow pop-ups, then try again.');
+      return;
     }
+    if (handoffWindow) {
+      handoffWindow.opener = null;
+      handoffWindow.document.title = 'PayPal Markets';
+    }
+    void refreshProductOffers(product, verified.repository ? undefined : verified.ticket, true, offer.domain, handoffWindow);
   }
 
   function selectCollection(collection: ShoppingCollection) {
@@ -1153,18 +1299,18 @@ export default function ShopScreen() {
                         <Text style={styles.saveButtonText}>{alreadySaved ? 'Saved' : '＋ Save'}</Text>
                       </Pressable>
                     </View>
-                    {directOffer && <Text style={styles.affiliateDisclosure}>{AFFILIATE_DISCLOSURE}</Text>}
                     <View style={styles.offerSummary}>
                       <Text style={styles.offerSummaryLabel}>{product.offers.length ? `${product.offers.length} retailer offers found` : 'No retailer offers in this result'}</Text>
-                      {product.offers.map((offer, index) => (
-                        <View key={`${product.id}-curated-${offer.domain}-${index}`} style={styles.offerRow}>
+                      {product.offers.map((offer, index) => {
+                        const status = offerSnapshotStatus(offer, verifiedByProduct[product.id], Boolean(availabilityUnconfirmedByProduct[product.id]));
+                        return <View key={`${product.id}-curated-${offer.domain}-${index}`} style={styles.offerRow}>
                           <View style={styles.offerRetailerInfo}><Text style={styles.offerDomain} numberOfLines={1}>{offer.domain}</Text><Text style={styles.commission}>{commissionLabel(offer.maxCommissionRate)}</Text></View>
                           <Text style={styles.offerPrice}>{formatPrice(offer.price, offer.currency)}</Text>
-                          <Text style={[styles.availability, offer.availability === 'InStock' ? styles.inStock : offer.availability === 'OutOfStock' ? styles.outOfStock : styles.unknownStock]}>
-                            {offer.availability === 'InStock' ? 'In stock' : offer.availability === 'OutOfStock' ? 'Out of stock' : 'Check stock'}
+                          <Text style={[styles.availability, status.availability === 'InStock' ? styles.inStock : status.availability === 'OutOfStock' ? styles.outOfStock : styles.unknownStock]}>
+                            {status.label}
                           </Text>
-                        </View>
-                      ))}
+                        </View>;
+                      })}
                     </View>
                     <Pressable
                       accessibilityRole="button"
@@ -1177,7 +1323,7 @@ export default function ShopScreen() {
                       {refreshingProductId === product.id ? <ActivityIndicator size="small" color={colors.link} /> : <Text style={styles.refreshGlyph}>↻</Text>}
                       <Text style={styles.refreshOffersText}>{refreshingProductId === product.id ? 'Checking offers…' : 'Refresh offers'}</Text>
                     </Pressable>
-                    <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} onOpen={openRetailer} />
+                    <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} similarProducts={findSimilarInStockProducts(product, [...(similarByProduct[product.id] ?? []), ...(curatedCatalog?.products ?? []), ...(searchSnapshot?.products ?? [])])} similarVisible={Boolean(similarVisibleByProduct[product.id])} similarLoading={Boolean(similarLoadingByProduct[product.id])} similarError={similarErrorByProduct[product.id]} onFindSimilar={() => void toggleSimilarAlternatives(product, [...(curatedCatalog?.products ?? []), ...(searchSnapshot?.products ?? [])], curatedTicket)} onOpenSimilar={(candidate) => openProductAtRetailer(candidate, storefrontFence.current.capture())} onOpen={openRetailer} />
                   </View>
                 );
               })}</View>}
@@ -1327,18 +1473,18 @@ export default function ShopScreen() {
                       <Text style={styles.saveButtonText}>{saveTarget?.items.some((item) => item.id === product.id) ? 'Saved' : '＋ Save'}</Text>
                     </Pressable>
                   </View>
-                  {preferredRetailerOffer(product) && <Text style={styles.affiliateDisclosure}>{AFFILIATE_DISCLOSURE}</Text>}
                   <View style={styles.offerSummary}>
                     <Text style={styles.offerSummaryLabel}>{product.offers.filter((offer) => isOfferWithinPriceRange(offer, searchSnapshot.priceRange, SHOP_STOREFRONTS[searchSnapshot.ticket.storefront].currency)).length ? `${product.offers.filter((offer) => isOfferWithinPriceRange(offer, searchSnapshot.priceRange, SHOP_STOREFRONTS[searchSnapshot.ticket.storefront].currency)).length} retailer offers found` : searchSnapshot.priceRange ? 'No retailer offers match this price range' : 'No retailer offers in this result'}</Text>
-                      {product.offers.filter((offer) => isOfferWithinPriceRange(offer, searchSnapshot.priceRange, SHOP_STOREFRONTS[searchSnapshot.ticket.storefront].currency)).map((offer, index) => (
-                      <View key={`${product.id}-${offer.domain}-${index}`} style={styles.offerRow}>
+                      {product.offers.filter((offer) => isOfferWithinPriceRange(offer, searchSnapshot.priceRange, SHOP_STOREFRONTS[searchSnapshot.ticket.storefront].currency)).map((offer, index) => {
+                      const status = offerSnapshotStatus(offer, verifiedByProduct[product.id], Boolean(availabilityUnconfirmedByProduct[product.id]));
+                      return <View key={`${product.id}-${offer.domain}-${index}`} style={styles.offerRow}>
                         <View style={styles.offerRetailerInfo}><Text style={styles.offerDomain} numberOfLines={1}>{offer.domain}</Text><Text style={styles.commission}>{commissionLabel(offer.maxCommissionRate)}</Text></View>
                         <Text style={styles.offerPrice}>{formatPrice(offer.price, offer.currency)}</Text>
-                        <Text style={[styles.availability, offer.availability === 'InStock' ? styles.inStock : offer.availability === 'OutOfStock' ? styles.outOfStock : styles.unknownStock]}>
-                          {offer.availability === 'InStock' ? 'In stock' : offer.availability === 'OutOfStock' ? 'Out of stock' : 'Check stock'}
+                        <Text style={[styles.availability, status.availability === 'InStock' ? styles.inStock : status.availability === 'OutOfStock' ? styles.outOfStock : styles.unknownStock]}>
+                          {status.label}
                         </Text>
-                      </View>
-                    ))}
+                      </View>;
+                    })}
                   </View>
                   <Pressable
                     accessibilityRole="button"
@@ -1351,7 +1497,7 @@ export default function ShopScreen() {
                     {refreshingProductId === product.id ? <ActivityIndicator size="small" color={colors.link} /> : <Text style={styles.refreshGlyph}>↻</Text>}
                     <Text style={styles.refreshOffersText}>{refreshingProductId === product.id ? 'Checking offers…' : 'Refresh offers'}</Text>
                   </Pressable>
-                  <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} onOpen={openRetailer} />
+                  <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} similarProducts={findSimilarInStockProducts(product, [...(similarByProduct[product.id] ?? []), ...(searchSnapshot?.products ?? []), ...(curatedCatalog?.products ?? [])])} similarVisible={Boolean(similarVisibleByProduct[product.id])} similarLoading={Boolean(similarLoadingByProduct[product.id])} similarError={similarErrorByProduct[product.id]} onFindSimilar={() => void toggleSimilarAlternatives(product, [...(searchSnapshot?.products ?? []), ...(curatedCatalog?.products ?? [])], searchTicket)} onOpenSimilar={(candidate) => openProductAtRetailer(candidate, storefrontFence.current.capture())} onOpen={openRetailer} />
                 </View>
                 );
               })}</View>
@@ -1489,7 +1635,6 @@ export default function ShopScreen() {
                         </View>
                         <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${product.title} from ${activeCollection.name}`} onPress={() => void removeSavedProduct(product.id)} disabled={!mayChangeCollections} style={({ pressed }) => [styles.removeButton, pressed && styles.pressed, !mayChangeCollections && styles.disabled]}><Text style={styles.removeButtonText}>Remove</Text></Pressable>
                       </View>
-                      <Text style={styles.affiliateDisclosure}>{AFFILIATE_DISCLOSURE}</Text>
                       <Text style={styles.savedStamp}>Saved {timestampLabel(product.savedAt)} · {product.storefront ? `from ${SHOP_STOREFRONTS[product.storefront].label}` : 'original storefront not recorded'}</Text>
                       <Text style={styles.savedPrice} accessibilityLabel={product.lastSeenPrice ? `Last seen price ${formatPrice(product.lastSeenPrice.amount, product.lastSeenPrice.currency)}, retrieved ${priceSnapshotLabel(product.lastSeenPrice.observedAt)}. Check current offers before buying.` : 'Price unavailable. Check current offers before buying.'}>
                         {product.lastSeenPrice ? `Last seen ${formatPrice(product.lastSeenPrice.amount, product.lastSeenPrice.currency)} · ${priceSnapshotLabel(product.lastSeenPrice.observedAt)}` : 'Price unavailable'}
@@ -1498,7 +1643,7 @@ export default function ShopScreen() {
                         {refreshingProductId === product.id ? <ActivityIndicator size="small" color={colors.link} /> : <Text style={styles.refreshGlyph}>↻</Text>}
                         <Text style={styles.refreshOffersText}>{refreshingProductId === product.id ? 'Checking offers…' : 'Check current price'}</Text>
                       </Pressable>
-                      <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} onOpen={openRetailer} />
+                      <VerifiedOffersCard product={product} verified={verifiedByProduct[product.id]?.repository && !verifiedByProduct[product.id].repository?.isCurrent() ? undefined : verifiedByProduct[product.id]} error={offerErrors[product.id]} refreshing={refreshingProductId === product.id} similarProducts={findSimilarInStockProducts(product, [...(similarByProduct[product.id] ?? []), ...(searchSnapshot?.products ?? []), ...(curatedCatalog?.products ?? [])])} similarVisible={Boolean(similarVisibleByProduct[product.id])} similarLoading={Boolean(similarLoadingByProduct[product.id])} similarError={similarErrorByProduct[product.id]} onFindSimilar={() => void toggleSimilarAlternatives(product, [...(searchSnapshot?.products ?? []), ...(curatedCatalog?.products ?? [])])} onOpenSimilar={(candidate) => openProductAtRetailer(candidate, storefrontFence.current.capture())} onOpen={openRetailer} />
                     </View>
                   ))
                 )}
@@ -1513,40 +1658,68 @@ export default function ShopScreen() {
   );
 }
 
-function VerifiedOffersCard({ product, verified, error, refreshing, onOpen }: {
+function VerifiedOffersCard({ product, verified, error, refreshing, similarProducts, similarVisible, similarLoading, similarError, onFindSimilar, onOpenSimilar, onOpen }: {
   product: Channel3Product | SavedProduct;
   verified: VerifiedOffers | undefined;
   error: string | undefined;
   refreshing: boolean;
-  onOpen: (productId: string, offer: Channel3Offer) => void;
+  similarProducts: Channel3Product[];
+  similarVisible: boolean;
+  similarLoading: boolean;
+  similarError: string | undefined;
+  onFindSimilar: () => void;
+  onOpenSimilar: (product: Channel3Product) => void;
+  onOpen: (product: Channel3Product | SavedProduct, offer: Channel3Offer) => void;
 }) {
   const styles = useAppearanceStyles(baseStyles);
-  if (!verified) return error ? <Text style={styles.offerError} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null;
-  const offers = verified.offers.filter((offer) => offer.availability === 'InStock');
+  const reportedOffers = 'offers' in product ? product.offers : null;
+  const hasInStockLink = reportedOffers?.some((offer) => offer.url && offer.availability === 'InStock') ?? false;
+  if (!verified && !error && !similarVisible && hasInStockLink) return null;
+  const offers = verified?.offers.filter((offer) => offer.availability === 'InStock') ?? [];
   return (
     <View style={styles.checkedOffers}>
       {error && <Text style={styles.offerError} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>}
-      <Text style={styles.checkedOffersTitle}>Current offers · {SHOP_STOREFRONTS[verified.ticket.storefront].shortLabel}</Text>
-      <Text style={styles.checkedOffersSubtitle}>Checked {timestampLabel(new Date(verified.verifiedAt).toISOString())} · Links expire in 5 min</Text>
-      {offers.length > 0 && <Text style={styles.affiliateDisclosure}>{AFFILIATE_DISCLOSURE}</Text>}
-      {offers.length === 0 ? <Text style={styles.noOfferText}>No in-stock offers were returned.</Text> : offers.map((offer, index) => (
+      {verified && <><Text style={styles.checkedOffersTitle}>Channel3 offers · {SHOP_STOREFRONTS[verified.ticket.storefront].shortLabel}</Text>
+      <Text style={styles.checkedOffersSubtitle}>Checked {timestampLabel(new Date(verified.verifiedAt).toISOString())} · Retailer stock can differ</Text>
+      {offers.length === 0 ? <Text style={styles.noOfferText}>No offers reported in stock.</Text> : offers.map((offer, index) => (
         <View key={`${product.id}-fresh-${offer.domain}-${index}`} style={styles.checkedOfferRow}>
           <View style={styles.checkedOfferInfo}>
             <Text style={styles.offerDomain} numberOfLines={1}>Offer {index + 1} · {offerHandoffLabel(offer)}</Text>
-            <Text style={styles.offerPrice}>{formatPrice(offer.price, offer.currency)} · In stock</Text><Text style={styles.commission}>{commissionLabel(offer.maxCommissionRate)}</Text>
+            <Text style={styles.offerPrice}>{formatPrice(offer.price, offer.currency)} · Reported in stock</Text><Text style={styles.commission}>{commissionLabel(offer.maxCommissionRate)}</Text>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open offer ${index + 1} from ${offerHandoffLabel(offer)} for ${product.title}, ${formatPrice(offer.price, offer.currency)}, in stock${Platform.OS === 'web' ? `. ${AFFILIATE_DISCLOSURE}` : ''}`}
+            accessibilityLabel={`Open offer ${index + 1} from ${offerHandoffLabel(offer)} for ${product.title}, ${formatPrice(offer.price, offer.currency)}, reported in stock${Platform.OS === 'web' ? `. ${AFFILIATE_DISCLOSURE}` : ''}`}
             accessibilityHint={Platform.OS === 'web' ? undefined : AFFILIATE_DISCLOSURE}
-            onPress={() => onOpen(product.id, offer)}
+            onPress={() => onOpen(product, offer)}
             disabled={refreshing}
             style={({ pressed }) => [styles.openRetailerButton, pressed && styles.pressed, refreshing && styles.disabled]}
           >
             <Text style={styles.openRetailerText}>Open ↗</Text>
           </Pressable>
         </View>
-      ))}
+      ))}</>}
+      {Boolean(reportedOffers?.length) && !hasInStockLink && !similarVisible && <Text style={styles.similarPanelCopy}>Sorry, no in-stock link is listed for this item.</Text>}
+      {(verified || error || similarVisible || !hasInStockLink) && <Pressable accessibilityRole="button" accessibilityLabel={`Find similar in-stock items for ${product.title}`} accessibilityState={{ disabled: refreshing, expanded: similarVisible, busy: similarLoading }} onPress={onFindSimilar} disabled={refreshing} style={({ pressed }) => [styles.similarToggle, pressed && styles.pressed, refreshing && styles.disabled]}>
+        <Text style={styles.similarToggleText}>{similarVisible ? 'Hide similar items' : reportedOffers?.length && !hasInStockLink ? 'Sold out? Find similar' : 'Find similar items'}</Text>
+      </Pressable>}
+      {similarVisible && <View style={styles.similarPanel}>
+        <Text style={styles.similarPanelTitle}>Similar options · Channel3 stock</Text>
+        <Text style={styles.similarPanelCopy}>Sorry, this item may be unavailable. Retailer stock can differ.</Text>
+        {similarLoading ? <ActivityIndicator size="small" color={palette.blue} /> : similarProducts.length ? similarProducts.map((candidate) => {
+          const offer = preferredRetailerOffer(candidate);
+          if (!offer) return null;
+          return <View key={`${product.id}-similar-${candidate.id}`} style={styles.similarRow}>
+            <View style={styles.similarInfo}>
+              <Text style={styles.similarName} numberOfLines={2}>{candidate.title}</Text>
+              <Text style={styles.similarPrice}>{formatPrice(offer.price, offer.currency)} · Reported in stock</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Check and open ${candidate.title} at ${offerHandoffLabel(offer)}`} onPress={() => onOpenSimilar(candidate)} disabled={refreshing} style={({ pressed }) => [styles.openRetailerButton, pressed && styles.pressed, refreshing && styles.disabled]}>
+              <Text style={styles.openRetailerText}>Check ↗</Text>
+            </Pressable>
+          </View>;
+        }) : <Text style={styles.noOfferText}>{similarError ?? 'No similar in-stock items were found in the current list.'}</Text>}
+      </View>}
     </View>
   );
 }
@@ -1632,8 +1805,8 @@ const baseStyles = StyleSheet.create({
   productGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 10, alignItems: 'flex-start' },
   productGridItem: { width: '49%', marginBottom: 0 },
   productHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  productThumbnailLink: { width: 58, height: 58, flexShrink: 0, borderRadius: 13 },
-  productGlyph: { width: 58, height: 58, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F9FC', overflow: 'hidden' },
+  productThumbnailLink: { width: 64, height: 64, flexShrink: 0, borderRadius: 13 },
+  productGlyph: { width: 64, height: 64, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F7F9FC', overflow: 'hidden' },
   productImage: { width: '100%', height: '100%' },
   productGlyphText: { color: '#246DAA', fontSize: 18, fontWeight: '800' },
   productInfo: { flex: 1, minWidth: 0 },
@@ -1660,9 +1833,17 @@ const baseStyles = StyleSheet.create({
   checkedOffersTitle: { color: '#3E715F', fontSize: 10, fontWeight: '800' },
   checkedOffersSubtitle: { color: '#6E8A7F', fontSize: 9, lineHeight: 14, marginTop: 3, marginBottom: 6 },
   noOfferText: { color: '#806D4B', fontSize: 10, marginTop: 6 },
+  similarToggle: { minHeight: 38, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 4, marginTop: 4 },
+  similarToggleText: { color: palette.blue, fontSize: 10, fontWeight: '800' },
+  similarPanel: { backgroundColor: palette.canvas, borderRadius: 10, borderWidth: 1, borderColor: palette.line, padding: 9, marginTop: 4 },
+  similarPanelTitle: { color: palette.ink, fontSize: 10, fontWeight: '800' },
+  similarPanelCopy: { color: palette.muted, fontSize: 9, lineHeight: 14, marginTop: 3, marginBottom: 4 },
+  similarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingVertical: 7 },
+  similarInfo: { flex: 1, minWidth: 0 },
+  similarName: { color: palette.ink, fontSize: 10, fontWeight: '700' },
+  similarPrice: { color: palette.muted, fontSize: 9, marginTop: 3 },
   commission: { fontSize: 10, color: '#175F9E', fontWeight: '800', marginTop: 4 },
   commissionLegend: { color: '#175F9E', fontSize: 10, fontWeight: '800', marginTop: 7 },
-  affiliateDisclosure: { color: '#40566D', fontSize: 12, lineHeight: 17, marginTop: 8 },
   checkedOfferRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: '#DDEDE6', paddingVertical: 7 },
   checkedOfferInfo: { flex: 1, minWidth: 0 },
   openRetailerButton: { minHeight: 48, justifyContent: 'center', backgroundColor: palette.blue, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8 },
