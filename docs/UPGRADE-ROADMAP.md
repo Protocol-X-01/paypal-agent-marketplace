@@ -104,6 +104,7 @@ The [6 November local acceptance record](LOCAL-UPGRADE-ACCEPTANCE-20261106.md) t
 - The user confirmed the AG Grid license is available. AG Grid Enterprise and AG Charts are installed and integrated; the app reads `NEXT_PUBLIC_AG_GRID_LICENSE` at build time. A local, network-isolated parser check accepted the configured key as a trial and reported it unexpired through 3 December 2026; this does not establish contractual entitlement, a licensed production build, or rendered-grid acceptance. The value itself was not displayed or copied into a build. Next.js includes this public variable in browser JavaScript, so it is visible to clients and must not be treated as a server secret; follow AG Grid's license terms. See the [local acceptance record](LOCAL-UPGRADE-ACCEPTANCE-20261106.md).
 - Add documented API examples, provider outage behavior, accessibility review, and device-level visual review for the mobile clients.
 - Keep external data provenance and retrieval times visible, and avoid presenting fixtures as live prices, offers, balances, or company alerts.
+- The 2026-11-09 Operations concept copy pass shortened repeated status text while keeping the disconnected-source, fictional-data, staff-access, and preview-reset boundaries visible. No screenshot or device check was performed for this copy-only change.
 
 ## Current delivery gates
 
