@@ -1,4 +1,4 @@
-# Zapier MCP readiness — 6 November 2026
+# Zapier MCP readiness — refreshed 9 November 2026
 
 The requested onboarding walkthrough has been completed read-only. The current tool inventory was refreshed on 6 November: Google Calendar has one connected default account and 11 enabled actions; GitHub has one connected default account and 26 enabled actions. Account identifiers and private calendar contents are deliberately omitted.
 
@@ -48,3 +48,11 @@ GitHub again confirmed the repository is private, with default branch `main` at 
 Loaded and followed `zapier:onboarding`, refreshed the enabled-action inventory, and ran the saved read-only `PayPal Project Pulse` flow. Calendar exposed 11 actions and GitHub 26; the current inventory contains reads, searches, and event/repository triggers, but no enabled write action. The primary Calendar was searched for events overlapping the next seven days; four matches were returned, and three hackathon/project items were surfaced in chat. Unrelated personal details and event descriptions are not retained here.
 
 GitHub confirmed that `Protocol-X-01/paypal-agent-marketplace` is private, its default branch is `main` at `2f7ef48629160f1d1a27178318948df618074810`, the repository metadata says it was last pushed at `2026-11-07T13:07:25Z`, and `open_issues_count` is 1. GitHub's repository count may include pull requests. The saved project pulse remains read-only and unscheduled; no writes, triggers, external messages, or new connections were made.
+
+## Fresh onboarding run — 9 November 2026
+
+Loaded the current `zapier:onboarding` instructions and followed the read-only rundown flow. The enabled inventory remains Google Calendar (11 actions) and GitHub (26 actions), with one connected default account for each. Available lookups include Calendar events and GitHub repositories, branches, issues, pull requests, organizations, users and file contents; the inventory also includes read triggers. No write action is enabled in these connected inventories.
+
+The primary Calendar lookup returned one PayPal-related item within the next seven days. Its title and time are intentionally kept out of this project file. GitHub's repository lookup confirmed that `Protocol-X-01/paypal-agent-marketplace` is private, uses `main` as its default branch, and reports zero open issues. The current `PayPal Project Pulse` skill already combines this Calendar and GitHub pattern; it remains read-only and unscheduled, so no duplicate skill was created.
+
+No Calendar or GitHub data was changed, no trigger was polled, and no new account or connection was added. The connector's raw GitHub repository response included a temporary read-only clone credential; it was not used, and its value is omitted from this record. Customer events, payments and subscription actions remain outside this demonstration and require their own explicit account and action setup.
