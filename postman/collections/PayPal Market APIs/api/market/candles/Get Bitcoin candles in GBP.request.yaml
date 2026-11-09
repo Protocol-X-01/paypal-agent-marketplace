@@ -1,0 +1,39 @@
+$kind: http-request
+description: Returns CoinGecko Demo OHLC candles without deriving candles from line
+  samples. Timestamps identify candle close times. Demo auto-granularity is 30 minutes
+  for 1 day, 240 minutes for 7 or 30 days, and 5760 minutes for 90 or 365 days. Missing
+  candles are not filled. Indicators must use the returned closes and describe periods
+  as candle counts. Only days and currency are accepted as query parameters, once
+  each. The shared per-process provider budget is 24 calls per rolling 60 seconds.
+  Upstream JSON is limited to 1048576 decoded bytes, 1000 candles and an eight-second
+  request/body deadline. No prices or candles are invented when credentials, provider
+  access or validation fail.
+url: '{{baseUrl}}/api/market/candles/:coinId?days=7&currency=GBP'
+method: GET
+headers:
+- key: Accept
+  value: application/json
+queryParams:
+- key: days
+  value: '7'
+- key: currency
+  value: GBP
+pathVariables:
+- key: coinId
+  value: bitcoin
+settings: {}
+order: 1000
+scripts:
+- type: afterResponse
+  language: text/javascript
+  code: "pm.test(\"Recorded GBP candles are available\", function () {\n  pm.response.to.have.status(200);\n\
+    \  const b = pm.response.json();\n  pm.expect(b.coinId).to.eql(\"bitcoin\");\n\
+    \  pm.expect(b.currency).to.eql(\"GBP\");\n  pm.expect(b.days).to.eql(7);\n  pm.expect(b.source).to.eql(\"\
+    CoinGecko\");\n  pm.expect(b.timestampKind).to.eql(\"close\");\n  pm.expect(b.candleIntervalMinutes).to.eql(240);\n\
+    \  pm.expect(Number.isFinite(Date.parse(b.retrievedAt))).to.eql(true);\n  pm.expect(b.candles).to.be.an(\"\
+    array\");\n  pm.expect(b.candles.length).to.be.at.most(1000);\n  b.candles.forEach(function\
+    \ (c, i) {\n    pm.expect(Number.isSafeInteger(c.timestamp) && c.timestamp > 0).to.eql(true);\n\
+    \    if (i) pm.expect(c.timestamp).to.be.above(b.candles[i - 1].timestamp);\n\
+    \    [c.open,c.high,c.low,c.close].forEach(function (v) { pm.expect(Number.isFinite(v)\
+    \ && v >= 0).to.eql(true); });\n    pm.expect(c.low).to.be.at.most(Math.min(c.open,c.close));\n\
+    \    pm.expect(c.high).to.be.at.least(Math.max(c.open,c.close));\n  });\n});"

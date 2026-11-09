@@ -115,13 +115,16 @@ function fakeStore() {
           (previous && previous.context === context && previous.generation !== family.generation)) throw Error('invalid family');
       transactions.set(key, { context, login, family: familyKey, generation: family.generation, initialSession: sessionKey, status: 'pending' });
     },
-    async consumeTransaction(key, context) {
+    async consumeTransaction(key, context, submittedState) {
       checkAvailable(this);
       const tx = transactions.get(key);
       if (!tx || tx.status !== 'pending') return null;
       if (tx.context !== context) { tx.status = 'completed'; tx.login = null; return null; }
+      if (tx.login.state !== submittedState) return null;
+      const claimed = tx.login;
       tx.status = 'processing';
-      return tx.login;
+      tx.login = { state: '', nonce: '', verifier: '' };
+      return claimed;
     },
     async createSession(key, context, identity, transactionKey, previousKey) {
       checkAvailable(this);

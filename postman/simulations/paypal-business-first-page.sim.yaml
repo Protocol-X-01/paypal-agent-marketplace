@@ -1,0 +1,7 @@
+simulation: PayPal Business first-page inspection
+version: 1
+routing: path
+mocks:
+  - name: paypal-business-first-page
+    routeKey: paypal
+    path: postman/mocks/paypal-business-first-page

@@ -1,0 +1,32 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/market/chart/:coinId?days=7"
+  method: GET
+  headers:
+    Accept: application/json
+  queryParams:
+    days: "7"
+  pathVariables:
+    - key: coinId
+      value: bitcoin
+      disabled: false
+      description: (Required) CoinGecko identifier from the tracked watchlist
+  body:
+    type: text
+    content: ""
+response:
+  statusCode: 429
+  statusText: Too Many Requests
+  headers:
+    Content-Type: application/json
+    Retry-After: "17"
+  body:
+    type: json
+    content: |-
+      {
+        "error": {
+          "code": "market_data_rate_limited",
+          "message": "Market data requests are temporarily rate limited. Retry after the interval in the Retry-After header."
+        }
+      }
+order: 5000

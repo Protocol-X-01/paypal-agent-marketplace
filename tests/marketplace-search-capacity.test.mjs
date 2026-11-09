@@ -27,8 +27,10 @@ let searchImpl = async () => ({ products: [] });
 const { POST } = loadTypeScript(source, {
   "@/lib/mobile-web-cors": cors,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => allowProviderRequest },
+  "@/lib/request-limits": { acquireClientSlot: () => () => {} },
   "@/lib/channel3": {
     getChannel3Locale: (storefront) => ({ country: storefront ?? "GB", currency: storefront === "US" ? "USD" : "GBP", language: "en" }),
+    getChannel3CollectionId: () => undefined,
     search: (options) => {
       searchCalls.push(options);
       return searchImpl(options);
@@ -81,6 +83,7 @@ test("capacity rejects the ninth body, preserves CORS, and releases slots on eac
 
     const denied = await POST(request("{}", { Origin: "https://not-allowed.example" }));
     assert.equal(denied.status, 403, "origin checks precede capacity checks");
+    assert.equal(denied.headers.get("cache-control"), "no-store");
 
     const excess = heldRequest({ Origin: "http://localhost:8081" });
     const busy = await POST(excess.request);
@@ -94,7 +97,9 @@ test("capacity rejects the ninth body, preserves CORS, and releases slots on eac
     assert.equal(searchCalls.length, 0);
 
     finish(held[0]);
-    assert.equal((await pending[0]).status, 400, "malformed JSON releases a slot");
+    const malformed = await pending[0];
+    assert.equal(malformed.status, 400, "malformed JSON releases a slot");
+    assert.equal(malformed.headers.get("cache-control"), "no-store");
 
     let providerStarted;
     const started = new Promise((resolve) => { providerStarted = resolve; });
@@ -111,7 +116,9 @@ test("capacity rejects the ninth body, preserves CORS, and releases slots on eac
     held[1].controller.error(new Error("client disconnected"));
     assert.equal((await pending[1]).status, 400, "a failed stream releases its slot");
     held[2].controller.enqueue(new Uint8Array(8193));
-    assert.equal((await pending[2]).status, 413, "an oversized stream releases its slot");
+    const oversized = await pending[2];
+    assert.equal(oversized.status, 413, "an oversized stream releases its slot");
+    assert.equal(oversized.headers.get("cache-control"), "no-store");
     for (const entry of held.slice(3)) finish(entry);
     assert.deepEqual((await Promise.all(pending.slice(3))).map((response) => response.status), [400, 400, 400, 400, 400]);
 
@@ -133,7 +140,9 @@ test("capacity rejects the ninth body, preserves CORS, and releases slots on eac
 test("timed-out bodies release capacity and valid requests retain existing responses", { timeout: 10_000 }, async () => {
   searchCalls = [];
   const slow = heldRequest();
-  assert.equal((await POST(slow.request)).status, 408);
+  const timedOut = await POST(slow.request);
+  assert.equal(timedOut.status, 408);
+  assert.equal(timedOut.headers.get("cache-control"), "no-store");
 
   const held = Array.from({ length: 8 }, () => heldRequest());
   const pending = held.map((item) => POST(item.request));
@@ -146,7 +155,10 @@ test("timed-out bodies release capacity and valid requests retain existing respo
 
   assert.equal((await POST(request('{"query":"x"}'))).status, 400);
   allowProviderRequest = false;
-  assert.equal((await POST(request('{"query":"headphones"}'))).status, 429);
+  const limited = await POST(request('{"query":"headphones"}'));
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("cache-control"), "no-store");
+  assert.equal(limited.headers.get("retry-after"), "60");
   assert.equal(searchCalls.length, 0);
   allowProviderRequest = true;
   searchImpl = async () => { throw new Error("synthetic provider failure"); };

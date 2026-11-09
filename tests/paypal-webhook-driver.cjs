@@ -38,7 +38,10 @@ const paypal = load('src/lib/paypal.ts', { 'server-only': {} }, [
   ['https://api-m.paypal.com', mockBase],
   ['https://api-m.sandbox.paypal.com', mockBase],
 ]);
-const { POST } = load('src/app/api/webhooks/paypal/route.ts', { '@/lib/paypal': paypal });
+const { POST } = load('src/app/api/webhooks/paypal/route.ts', {
+  '@/lib/paypal': paypal,
+  '@/lib/request-limits': { acquireClientSlot: () => () => {} },
+});
 
 const server = http.createServer(async (req, res) => {
   if (req.method !== 'POST' || req.url !== '/api/webhooks/paypal') {

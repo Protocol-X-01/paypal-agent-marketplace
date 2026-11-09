@@ -1,0 +1,7 @@
+simulation: Elastic OTLP privacy regression
+version: 1
+routing: path
+mocks:
+  - name: elastic-otlp-privacy
+    routeKey: elastic
+    path: postman/mocks/elastic-otlp-privacy

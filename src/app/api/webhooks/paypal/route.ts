@@ -1,4 +1,5 @@
 import { verifyWebhook } from "@/lib/paypal";
+import { acquireClientSlot } from "@/lib/request-limits";
 
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
 const BODY_READ_TIMEOUT_MS = 3_000;
@@ -229,7 +230,18 @@ export async function POST(request: Request) {
     return rejectRequest(request, "content type must be application/json", 415);
   }
 
+  const releaseClientSlot = acquireClientSlot(request, "paypal-webhook-verification", 2);
+  if (!releaseClientSlot) {
+    return rejectRequest(
+      request,
+      "webhook verification is temporarily busy",
+      503,
+      { "Retry-After": String(VERIFICATION_RETRY_AFTER_SECONDS) },
+    );
+  }
+
   if (!tryAcquireVerificationSlot()) {
+    releaseClientSlot();
     return rejectRequest(
       request,
       "webhook verification is temporarily busy",
@@ -278,5 +290,6 @@ export async function POST(request: Request) {
     return Response.json({ received: true, processed: false });
   } finally {
     releaseVerificationSlot();
+    releaseClientSlot();
   }
 }

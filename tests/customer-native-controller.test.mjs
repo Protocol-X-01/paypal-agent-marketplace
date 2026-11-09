@@ -6,7 +6,8 @@ const protocol = load("src/lib/customer-auth/native-protocol.ts");
 const storeModule = load("src/lib/customer-auth/native-store.ts");
 const authConfig = load("src/lib/customer-auth/config.ts");
 const provider = load("src/lib/customer-auth/provider.ts", { "./config": authConfig });
-const { createNativeAuthController } = load("src/lib/customer-auth/native-controller.ts", { "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) }, "./provider": provider, "./native-store": storeModule, "./native-protocol": protocol });
+const providerCallback = load("src/lib/customer-auth/provider-callback.ts");
+const { createNativeAuthController } = load("src/lib/customer-auth/native-controller.ts", { "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) }, "./provider": provider, "./provider-callback": providerCallback, "./native-store": storeModule, "./native-protocol": protocol });
 const token = n => Buffer.alloc(32, n).toString("base64url");
 const config = { ...webConfig, links: { origin: webConfig.origin, android: `${webConfig.origin}/native/android`, ios: `${webConfig.origin}/native/ios` }, callback: `${webConfig.origin}/api/auth/native/paypal/callback`, contextHash: "f".repeat(64) };
 const state = token(1), verifier = token(2), challenge = protocol.nativeS256Challenge(verifier);
@@ -27,11 +28,13 @@ function fakeStore() {
     async ready() { calls.push("ready"); return true; },
     async createHandoff(h, context, input, prior) { calls.push("create"); handoffs.set(h, { ...input, context, prior, status: "pending" }); },
     async canStartHandoff(h, context) { const r = handoffs.get(h); return r?.context === context && r.status === "pending"; },
-    async claimHandoff(h, context, browser, transaction) { calls.push("claim"); const r = handoffs.get(h); if (r?.context !== context || r.status !== "pending") unavailable(); Object.assign(r, { status: "claimed", browser, transaction }); },
+    async claimHandoff(h, context, browser, transaction, claim) { calls.push("claim"); const r = handoffs.get(h); if (r?.context !== context || r.status !== "pending") unavailable(); Object.assign(r, { status: "claimed", browser, transaction, claim }); },
+    async abortClaim(h, context, browser, claim) { calls.push("abortClaim"); const r = handoffs.get(h); if (r?.context === context && r.status === "claimed" && r.browser === browser && r.claim === claim) Object.assign(r, { status: "cancelled", browser: null, transaction: null, claim: null }); },
     async reserveProvider(h, context, browser, expected, reservation) {
       calls.push("reserve"); const r = handoffs.get(h);
       if (r?.context !== context || r.status !== "claimed" || r.browser !== browser || r.transaction.state !== expected) return null;
-      Object.assign(r, { status: "processing", reservation }); return { transaction: r.transaction, appState: r.state, platform: r.platform };
+      const transaction = r.transaction;
+      Object.assign(r, { status: "processing", reservation, transaction: null, claim: null }); return { transaction, appState: r.state, platform: r.platform };
     },
     async completeProvider(h, context, reservation, code, identity) { calls.push("complete"); const r = handoffs.get(h); if (r?.context !== context || r.status !== "processing" || r.reservation !== reservation) unavailable(); Object.assign(r, { status: "ready", code, identity }); },
     async exchange(h, context, input) { calls.push("exchange"); const r = handoffs.get(h); if (r?.context !== context || r.status !== "ready" || r.code !== input.codeHash || r.state !== input.state || r.challenge !== protocol.nativeS256Challenge(input.verifier)) unavailable(); r.status = "exchanged"; r.session = input.sessionHash; const result = { ...r.identity, expiresAt: new Date(Date.now() + 1800000).toISOString() }; sessions.set(input.sessionHash, result); return result; },
@@ -95,6 +98,171 @@ test("native system-browser flow validates signed provider and returns only one-
   assert.equal((await f.controller.session(request("/session", "GET", undefined, { Authorization: `Bearer ${session.sessionToken}` }))).status, 401);
 });
 
+for (const [name, scope, requiresIssuer] of [
+  ["without scope", null, true],
+  ["with the documented scope list", "address openid profile email", true],
+  ["with a scope and no advertised issuer", "openid", false],
+  ["with a scope at the size limit", "a".repeat(1024), true],
+]) {
+  test(`signed native callback accepts the expected issuer ${name} without reflecting informational parameters`, async () => {
+    const issuer = "https://www.sandbox.paypal.com";
+    let forwarded;
+    const f = setup({
+      providerOptions: { metadata: { authorization_response_iss_parameter_supported: requiresIssuer } },
+      complete: async (...args) => { forwarded = new URL(args[1]); return provider.completeAuthorization(...args); },
+    });
+    const h = await handoff(f), a = await authorize(f, h);
+    const callback = new URL(`${config.origin}/api/auth/native${a.callback}`);
+    if (requiresIssuer) callback.searchParams.set("iss", issuer);
+    if (scope !== null) callback.searchParams.set("scope", scope);
+    const r = await f.controller.callback(new Request(callback, { headers: { Cookie: a.cookie } }));
+    assert.equal(r.status, 303); checks(r);
+    const destination = new URL(r.headers.get("location"));
+    assert.deepEqual([...destination.searchParams.keys()], ["code", "state"]);
+    assert.ok(protocol.parseNativeReturnUrl(destination.href, config.links, "android", state).code);
+    assert.deepEqual(forwarded.searchParams.getAll("iss"), requiresIssuer ? [issuer] : []);
+    assert.equal(forwarded.searchParams.has("scope"), false);
+    assert.ok(f.store.calls.includes("complete"));
+    assert.ok(f.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")));
+    assert.ok(f.fixture.requests.some(item => item.url.includes("/userinfo")));
+  });
+}
+
+test("malformed informational scope and issuer parameters fail before reservation or token exchange", async () => {
+  const f = setup(), h = await handoff(f), a = await authorize(f, h);
+  const issuer = encodeURIComponent("https://www.sandbox.paypal.com");
+  const invalid = [
+    "&scope=", "&scope=openid%00email", "&scope=openid%09email", "&scope=openid++email",
+    "&scope=openid%22email", "&scope=openid%5Cemail", "&scope=%C3%A9",
+    `&scope=${"a".repeat(1025)}`, "&scope=openid&scope=email", "&sc%6Fpe=openid&scope=email",
+    "&scope=openid&error=access_denied", `&scope=${"a".repeat(4096)}`,
+    "&iss=", "&iss=https%3A%2F%2Fexample.test%0A", `&iss=${"a".repeat(2049)}`,
+    `&iss=${issuer}&iss=${issuer}`, `&state=${a.providerState}`, "&code=second-code",
+    "&error=", "&error_description=fictional-detail", "&error_uri=https%3A%2F%2Fexample.test",
+  ];
+  const requestsBefore = f.fixture.requests.length;
+  for (const suffix of invalid) {
+    const r = await f.controller.callback(request(a.callback + suffix, "GET", undefined, { Cookie: a.cookie }));
+    assert.equal(r.status, 303, suffix); assert.equal(r.headers.get("location"), failureUrl, suffix);
+    assert.equal(r.headers.get("set-cookie"), null, suffix);
+    assert.equal(await r.text(), "", suffix);
+  }
+  const errorWithScope = new URL(`${config.origin}/api/auth/native/paypal/callback`);
+  errorWithScope.searchParams.set("state", a.providerState);
+  errorWithScope.searchParams.set("error", "access_denied");
+  errorWithScope.searchParams.set("scope", "openid");
+  const rejectedError = await f.controller.callback(new Request(errorWithScope, { headers: { Cookie: a.cookie } }));
+  assert.equal(rejectedError.headers.get("location"), failureUrl);
+  assert.equal(f.store.calls.includes("reserve"), false);
+  assert.equal(f.fixture.requests.length, requestsBefore);
+  const accepted = await f.controller.callback(request(a.callback, "GET", undefined, { Cookie: a.cookie }));
+  assert.ok(protocol.parseNativeReturnUrl(accepted.headers.get("location"), config.links, "android", state).code);
+});
+
+test("native issuer and signed identity checks cannot be bypassed by informational scope", async () => {
+  for (const scenario of ["wrong_issuer", "missing_required_issuer", "wrong_state", "bad_signature", "bad_nonce", "bad_subject"]) {
+    const f = setup({ providerOptions: {
+      metadata: { authorization_response_iss_parameter_supported: true },
+      badSignature: scenario === "bad_signature",
+      badNonce: scenario === "bad_nonce",
+      badSubject: scenario === "bad_subject",
+    } });
+    const h = await handoff(f), a = await authorize(f, h);
+    const callback = new URL(`${config.origin}/api/auth/native${a.callback}`);
+    callback.searchParams.set("scope", "openid");
+    callback.searchParams.set("returnUrl", "https://attacker.example.test/fictional");
+    callback.searchParams.set("account_type", "personal");
+    if (scenario !== "missing_required_issuer") callback.searchParams.set("iss", scenario === "wrong_issuer" ? "https://attacker.example.test" : "https://www.sandbox.paypal.com");
+    if (scenario === "wrong_state") callback.searchParams.set("state", token(9));
+    const r = await f.controller.callback(new Request(callback, { headers: { Cookie: a.cookie } }));
+    assert.equal(r.status, 303, scenario); assert.equal(r.headers.get("location"), failureUrl, scenario);
+    assert.equal(await r.text(), "", scenario); assert.equal(r.headers.get("set-cookie"), null, scenario);
+    assert.equal(f.store.calls.includes("complete"), false, scenario);
+    if (["wrong_issuer", "missing_required_issuer", "wrong_state"].includes(scenario)) assert.equal(f.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/token")), false, scenario);
+    else assert.ok(f.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/token")), scenario);
+    if (["bad_signature", "bad_subject"].includes(scenario)) assert.ok(f.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")), scenario);
+  }
+});
+
+test("unrecognized native callback extensions cannot change the signed identity or app destination", async () => {
+  let forwarded;
+  const f = setup({
+    providerOptions: { metadata: { authorization_response_iss_parameter_supported: true } },
+    complete: async (...args) => { forwarded = new URL(args[1]); return provider.completeAuthorization(...args); },
+  });
+  const h = await handoff(f), a = await authorize(f, h);
+  const callback = new URL(`${config.origin}/api/auth/native${a.callback}`);
+  callback.searchParams.set("iss", "https://www.sandbox.paypal.com");
+  callback.searchParams.set("scope", "openid");
+  callback.searchParams.set("returnUrl", "https://attacker.example.test/fictional-marker");
+  callback.searchParams.set("redirect_uri", "https://attacker.example.test/fictional-marker");
+  callback.searchParams.set("code_verifier", "fictional-wrong-verifier");
+  callback.searchParams.set("account_type", "personal");
+  callback.searchParams.set("dataScope", "fictional-marker");
+  callback.searchParams.set("State", token(9));
+  callback.searchParams.append("extension", "fictional-marker");
+  callback.searchParams.append("extension", "other-fictional-marker");
+  callback.searchParams.set("__proto__", "fictional-marker");
+  const r = await f.controller.callback(new Request(callback, { headers: { Cookie: a.cookie } }));
+  assert.equal(r.status, 303); checks(r);
+  const destination = new URL(r.headers.get("location"));
+  assert.equal(`${destination.origin}${destination.pathname}`, config.links.android);
+  assert.deepEqual([...destination.searchParams.keys()], ["code", "state"]);
+  const returned = protocol.parseNativeReturnUrl(destination.href, config.links, "android", state);
+  assert.deepEqual([...forwarded.searchParams.keys()].sort(), ["code", "iss", "state"]);
+  assert.equal(forwarded.searchParams.get("iss"), "https://www.sandbox.paypal.com");
+  assert.doesNotMatch(destination.href + await r.text(), /attacker|fictional-marker|personal/);
+  const result = await f.controller.exchange(jsonRequest("/exchange", { handoff: h.handoff, code: returned.code, state, codeVerifier: verifier }));
+  assert.equal(result.status, 200);
+  const identity = await result.json();
+  assert.equal(identity.accountType, "business");
+  assert.match(identity.dataScope, /^v1_[A-Za-z0-9_-]{43}$/);
+  assert.doesNotMatch(JSON.stringify(identity), /attacker|fictional-marker|synthetic-subject|synthetic-access/);
+  assert.ok(f.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")));
+  assert.ok(f.fixture.requests.some(item => item.url.includes("/userinfo")));
+});
+
+test("unsupported authorization response fields and oversized unknowns fail before reservation", async () => {
+  const f = setup(), h = await handoff(f), a = await authorize(f, h);
+  const requestsBefore = f.fixture.requests.length;
+  for (const name of ["response", "id_token", "access_token", "token", "token_type", "expires_in", "refresh_token"]) {
+    for (const value of ["", "fictional"]) {
+      const r = await f.controller.callback(request(`${a.callback}&${name}=${value}`, "GET", undefined, { Cookie: a.cookie }));
+      assert.equal(r.headers.get("location"), failureUrl, name);
+      assert.equal(await r.text(), "", name);
+    }
+  }
+  for (const suffix of ["&%69d_token=fictional", `&unknown=${"a".repeat(4096)}`]) {
+    const r = await f.controller.callback(request(a.callback + suffix, "GET", undefined, { Cookie: a.cookie }));
+    assert.equal(r.headers.get("location"), failureUrl, suffix.slice(0, 20));
+  }
+  assert.equal(f.store.calls.includes("reserve"), false);
+  assert.equal(f.fixture.requests.length, requestsBefore);
+});
+
+test("OAuth error details are discarded and duplicate recognized error fields fail closed", async () => {
+  const f = setup(), h = await handoff(f), a = await authorize(f, h);
+  const callback = new URL(`${config.origin}/api/auth/native/paypal/callback`);
+  callback.searchParams.set("state", a.providerState);
+  callback.searchParams.set("error", "access_denied");
+  callback.searchParams.set("error_description", "fictional-detail");
+  callback.searchParams.set("error_uri", "https://attacker.example.test/fictional-detail");
+  callback.searchParams.set("unrecognized", "fictional-detail");
+  for (const name of ["error", "error_description", "error_uri"]) {
+    const duplicate = new URL(callback); duplicate.searchParams.append(name, "fictional-duplicate");
+    const r = await f.controller.callback(new Request(duplicate, { headers: { Cookie: a.cookie } }));
+    assert.equal(r.headers.get("location"), failureUrl, name);
+    assert.equal(f.store.calls.includes("reserve"), false, name);
+  }
+  const requestsBefore = f.fixture.requests.length;
+  const r = await f.controller.callback(new Request(callback, { headers: { Cookie: a.cookie } }));
+  assert.equal(r.status, 303); assert.equal(r.headers.get("location"), failureUrl);
+  assert.equal(await r.text(), ""); assert.equal(r.headers.get("set-cookie"), null);
+  assert.doesNotMatch(JSON.stringify([...r.headers]), /fictional-detail|attacker/);
+  assert.equal(f.store.calls.includes("complete"), false);
+  assert.equal(f.fixture.requests.length, requestsBefore);
+});
+
 test("browser form binds cookie, handoff, context, origin and expiry", async () => {
   let clock = Date.now(); const f = setup({ now: () => clock }), h = await handoff(f), other = await handoff(f);
   const send = (form = h.form, cookie = h.cookie, origin = config.origin) => f.controller.authorizePost(request("/authorize", "POST", form, { Origin: origin, Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded" }));
@@ -124,9 +292,9 @@ test("strict body, query and bearer validation rejects malformed input before si
   assert.equal(f.store.calls.includes("create"), false); assert.equal(f.discovers(), 0);
 });
 
-test("callback rejects duplicates, unknown fields, browser mismatch and bad signed identity without leaking provider errors", async () => {
+test("callback rejects duplicates, conflicting errors, browser mismatch and bad signed identity without leaking provider errors", async () => {
   const f = setup(), h = await handoff(f), a = await authorize(f, h);
-  for (const suffix of [`&state=${a.providerState}`, "&returnUrl=https://evil.test", "&error=secret"]) {
+  for (const suffix of [`&state=${a.providerState}`, "&error=secret"]) {
     const r = await f.controller.callback(request(a.callback + suffix, "GET", undefined, { Cookie: a.cookie })); assert.equal(r.headers.get("location"), failureUrl); assert.doesNotMatch(await r.text(), /secret/);
   }
   assert.equal((await f.controller.callback(request(a.callback))).headers.get("location"), failureUrl);

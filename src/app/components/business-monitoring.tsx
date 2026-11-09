@@ -2,17 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ColDef } from "ag-grid-community";
-import { themeQuartz } from "ag-grid-community";
+import { colorSchemeDark, colorSchemeLight, themeQuartz } from "ag-grid-community";
 import { AllEnterpriseModule } from "ag-grid-enterprise";
 import { AgGridProvider, AgGridReact } from "ag-grid-react";
 import { assessExternalBusinessPlan, BUSINESS_PLAN_STORAGE_KEY, createDefaultPlan, indicatorsByPerspective, readBusinessPlan, saveBusinessPlan, type BusinessPlanDraft, type BusinessPlanRead, type BusinessPlanStorageState, type DraftView, type IndicatorId, type MonitoringPlan, type Perspective, type ReportingWindow } from "@/lib/business-plan-storage";
 import { LOCAL_DATA_RESET_SIGNAL } from "@/lib/portfolio-input";
-import { formatBusinessMinorAmount, type BusinessSnapshot } from "@/lib/business-snapshot";
+import { formatBusinessMinorAmount, type BusinessSnapshotReport } from "@/lib/business-snapshot";
 import { formatBusinessPercentage } from "@/lib/business-percentage";
+import { evaluateBusinessThresholds, MAX_REFUND_THRESHOLD_PCT } from "@/lib/business-thresholds";
 import BusinessSnapshotPanel from "./business-snapshot-panel";
 import PayPalActivityPanel from "./paypal-activity-panel";
+import type { PayPalActivitySummary } from "@/lib/paypal-activity-import";
 import styles from "./business-monitoring.module.css";
 import { usePrivateDataScope } from "./customer-session";
+import { useAppearance } from "./theme-preference";
 
 type PlannedAggregateRow = {
   period: string;
@@ -31,11 +34,6 @@ const sampleSegments = [
   { segment: "In-person sales", compactSegment: "In person", previous: { transactions: 176, grossVolume: 9_550, refundShare: 3.4 }, current: { transactions: 182, grossVolume: 10_125, refundShare: 3.1 } },
   { segment: "Other sales", compactSegment: "Other", previous: { transactions: 84, grossVolume: 3_750, refundShare: 4.2 }, current: { transactions: 91, grossVolume: 4_235, refundShare: 3.9 } },
 ];
-const gridTheme = themeQuartz.withParams({
-  accentColor: "#1769d2",
-  spacing: 8,
-});
-
 const allColumnDefs: ColDef<PlannedAggregateRow>[] = [
   { field: "period", headerName: "Period", minWidth: 100 },
   { field: "segment", headerName: "Broad segment", minWidth: 150 },
@@ -53,7 +51,7 @@ const allColumnDefs: ColDef<PlannedAggregateRow>[] = [
   },
   {
     field: "refundShare",
-    headerName: "Refund share",
+    headerName: "Refund ratio",
     minWidth: 125,
     valueFormatter: (params) => typeof params.value === "number" ? `${params.value.toFixed(1)}%` : "",
   },
@@ -189,14 +187,15 @@ function NoActivityOverlay() {
 }
 
 export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftRef: { current: BusinessPlanDraft | null }; onDraftChange: (pending: boolean) => void }) {
+  const { appearance } = useAppearance();
   const privateData = usePrivateDataScope();
   const localStorage = privateData.storage;
   const privateEvents = privateData.events;
   const [plan, setPlan] = useState<MonitoringPlan>(createDefaultPlan);
   const [showSampleData, setShowSampleData] = useState(false);
   const [hasImportedSnapshot, setHasImportedSnapshot] = useState(false);
-  const [importedSnapshot, setImportedSnapshot] = useState<BusinessSnapshot | null>(null);
-  const [hasPayPalReport, setHasPayPalReport] = useState(false);
+  const [importedSnapshot, setImportedSnapshot] = useState<BusinessSnapshotReport | null>(null);
+  const [paypalReport, setPayPalReport] = useState<PayPalActivitySummary | null>(null);
   const [compact, setCompact] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [storageState, setStorageState] = useState<BusinessPlanStorageState>("loading");
@@ -206,9 +205,22 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
   const storageStateRef = useRef<BusinessPlanStorageState>("loading");
   const planBaseline = useRef<string | null>(null);
   const pendingPlan = useRef(false);
+  const gridTheme = useMemo(() => {
+    const light = appearance === "light";
+    return themeQuartz.withPart(light ? colorSchemeLight : colorSchemeDark).withParams({
+      accentColor: light ? "#155eef" : "#0070e0",
+      backgroundColor: light ? "#ffffff" : "#151a20",
+      foregroundColor: light ? "#10213e" : "#f7fafc",
+      chromeBackgroundColor: light ? "#f2f6fb" : "#20262e",
+      borderColor: light ? "#e3e9f1" : "rgba(255, 255, 255, .14)",
+      spacing: 8,
+    });
+  }, [appearance]);
 
   const perspective = plan.perspective;
-  const hasReport = hasImportedSnapshot || hasPayPalReport;
+  const hasReport = hasImportedSnapshot || paypalReport !== null;
+  const importedData = importedSnapshot?.snapshot ?? null;
+  const paypalOnly = !importedData && paypalReport !== null;
   const currentView = plan.views[perspective];
   const currentIndicators = indicatorsByPerspective[perspective];
   const activityRows = useMemo(
@@ -216,26 +228,54 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
     [compact, currentView.windowDays, showSampleData],
   );
   const sampleSummary = useMemo(() => summarizeSampleRows(activityRows), [activityRows]);
-  const reportTransactions = importedSnapshot ? new Intl.NumberFormat("en-GB").format(importedSnapshot.periods.current.transactions) : showSampleData ? new Intl.NumberFormat("en-GB").format(sampleSummary.currentTransactions) : "—";
-  const reportGross = importedSnapshot ? formatBusinessMinorAmount(importedSnapshot.periods.current.grossMinor, importedSnapshot.currency) : showSampleData ? formatSampleCurrency(activityRows.filter((row) => row.period.startsWith("Selected") || row.period.startsWith("Now ")).reduce((total, row) => total + row.grossVolume, 0)) : "—";
-  const reportRefunds = importedSnapshot ? formatBusinessPercentage(importedSnapshot.summary.refundRatioPct) : showSampleData ? `${sampleSummary.currentRefundShare.toFixed(1)}%` : "—";
+  const reportTransactions = importedData ? new Intl.NumberFormat("en-US").format(importedData.periods.current.transactions) : paypalOnly ? new Intl.NumberFormat("en-US").format(paypalReport.current.included) : showSampleData ? new Intl.NumberFormat("en-US").format(sampleSummary.currentTransactions) : "—";
+  const reportGross = importedData ? formatBusinessMinorAmount(importedData.periods.current.grossMinor, importedData.currency) : showSampleData ? formatSampleCurrency(activityRows.filter((row) => row.period.startsWith("Selected") || row.period.startsWith("Now ")).reduce((total, row) => total + row.grossVolume, 0)) : "—";
+  const reportRefunds = importedData ? formatBusinessPercentage(importedData.summary.refundRatioPct) : showSampleData ? `${sampleSummary.currentRefundShare.toFixed(1)}%` : "—";
   const activityIndicator = perspective === "teams" ? "transactionVolume" : "activityTrend";
+  const sampleThresholdEvaluation = evaluateBusinessThresholds(
+    { transactionChangePct: sampleSummary.activityChange, refundRatioPct: sampleSummary.currentRefundShare },
+    { activityDropPct: currentView.activityDropPct, refundSharePct: currentView.refundSharePct },
+  );
   const sampleThresholds = [
     {
       id: "activity",
       label: "Activity drop",
       enabled: currentView.indicators.includes(activityIndicator),
-      crossed: sampleSummary.activityChange <= -currentView.activityDropPct,
+      crossed: sampleThresholdEvaluation.activityDrop.status === "notice",
       detail: `Sample activity changed ${sampleSummary.activityChange >= 0 ? "+" : ""}${sampleSummary.activityChange.toFixed(1)}%; threshold is a ${currentView.activityDropPct}% drop.`,
     },
     {
       id: "refundShare",
-      label: "Refund share",
+      label: "Refund ratio",
       enabled: currentView.indicators.includes("refundShare"),
-      crossed: sampleSummary.currentRefundShare >= currentView.refundSharePct,
-      detail: `Sample refund share is ${sampleSummary.currentRefundShare.toFixed(1)}%; threshold is ${currentView.refundSharePct}%.`,
+      crossed: sampleThresholdEvaluation.refundShare.status === "notice",
+      detail: `Sample refunds are ${sampleSummary.currentRefundShare.toFixed(1)}% of gross; threshold is ${currentView.refundSharePct}%.`,
     },
   ];
+  const reportThresholdEvaluation = importedData ? evaluateBusinessThresholds(importedData.summary, {
+    activityDropPct: currentView.activityDropPct,
+    refundSharePct: currentView.refundSharePct,
+  }) : null;
+  const reportThresholds = reportThresholdEvaluation ? [
+    {
+      id: "activity",
+      label: "Activity drop",
+      enabled: currentView.indicators.includes(activityIndicator),
+      result: reportThresholdEvaluation.activityDrop,
+      detail: reportThresholdEvaluation.activityDrop.status === "unavailable"
+        ? "No activity change is available because the previous period has zero transactions."
+        : `This report shows ${formatBusinessPercentage(reportThresholdEvaluation.activityDrop.observedPct, true)} activity change; the selected drop threshold is ${currentView.activityDropPct}%.`,
+    },
+    {
+      id: "refundShare",
+      label: "Refund ratio",
+      enabled: currentView.indicators.includes("refundShare"),
+      result: reportThresholdEvaluation.refundShare,
+      detail: reportThresholdEvaluation.refundShare.status === "unavailable"
+        ? "No refund ratio is available because current gross volume is zero."
+        : `This report shows refunds at ${formatBusinessPercentage(reportThresholdEvaluation.refundShare.observedPct)} of gross; the selected threshold is ${currentView.refundSharePct}%.`,
+    },
+  ] : [];
 
   const changeStorageState = useCallback((next: BusinessPlanStorageState) => {
     storageStateRef.current = next;
@@ -446,45 +486,41 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
         <div>
           <p className={styles.eyebrow}>PAYPAL BUSINESS</p>
           <h2 id="business-monitoring-title">Your business, in view.</h2>
-          <p className={styles.introText}>
-            Review your activity and compare the reports you choose to bring into this preview.
-          </p>
         </div>
         <span className={styles.connectionBadge}>
           <span className={styles.statusDot} aria-hidden="true" />
-          Account not connected
+          Not connected
         </span>
       </header>
 
       <div className={styles.connectionNotice} role="status">
         <span className={styles.noticeIcon} aria-hidden="true">i</span>
         <div className={styles.noticeCopy}>
-          <strong>No PayPal business account is connected.</strong>
           <p>{hasReport
-            ? "Your report is self-provided, unverified, and stays on this screen. It is not a live account balance."
+            ? "Self-provided · unverified · screen-only · live balance unavailable."
             : showSampleData
-              ? "The figures below are fictional examples and are not PayPal account activity."
-              : "Explore an example or choose an aggregate report. This preview does not retrieve live account data."}</p>
+              ? "Fictional sample · no account activity."
+              : "Preview only · no live account data."}</p>
         </div>
       </div>
 
       <section className={styles.accountOverview} aria-labelledby="business-overview-title">
         <div className={styles.overviewTop}>
-          <div><p id="business-overview-title">PAYPAL BALANCE</p><strong aria-label="Balance unavailable">—</strong><span>Account not connected</span></div>
-          <div className={styles.overviewSource}>{importedSnapshot ? "SELF-PROVIDED REPORT" : showSampleData ? "FICTIONAL EXAMPLE" : "ACCOUNT PREVIEW"}</div>
+          <div><p id="business-overview-title">PAYPAL BALANCE</p><strong aria-label="Balance unavailable">—</strong></div>
+          <div className={styles.overviewSource}>{importedData ? "AGGREGATE CSV · UNVERIFIED" : paypalOnly ? "PAYPAL EXPORT · UNVERIFIED" : showSampleData ? "FICTIONAL EXAMPLE" : "ACCOUNT PREVIEW"}</div>
         </div>
         <div className={styles.overviewMetrics}>
-          <article><span>Report activity</span><strong>{reportTransactions}</strong><small>{importedSnapshot ? "Transactions · current period" : showSampleData ? "Fictional transactions" : "Choose a report"}</small></article>
-          <article><span>Gross activity</span><strong>{reportGross}</strong><small>{importedSnapshot ? `${importedSnapshot.currency} · current period` : showSampleData ? "Fictional USD values" : "Not a balance"}</small></article>
-          <article><span>Refund ratio</span><strong>{reportRefunds}</strong><small>{importedSnapshot || showSampleData ? "Refunds ÷ gross activity" : "Choose a report"}</small></article>
+          <article><span>{paypalOnly ? "Included checkout rows" : "Report activity"}</span><strong>{reportTransactions}</strong><small>{importedData ? "Transactions · current period" : paypalOnly ? "Completed credit rows · current period" : showSampleData ? "Fictional transactions" : "Choose a report"}</small></article>
+          <article><span>Gross activity</span><strong>{reportGross}</strong><small>{importedData ? `${importedData.currency} · current period` : paypalOnly ? "Not calculated from this export" : showSampleData ? "Fictional USD values" : "Not a balance"}</small></article>
+          <article><span>Refund ratio</span><strong>{reportRefunds}</strong><small>{importedData || showSampleData ? "Refunds ÷ gross activity; may exceed 100%" : paypalOnly ? "Not calculated from this export" : "Choose a report"}</small></article>
         </div>
       </section>
 
       <nav className={styles.accountLinks} aria-label="Business tools">
-        <a href="https://www.paypal.com/uk/business" target="_blank" rel="noopener noreferrer"><span>Get paid</span><small>PayPal Business · UK info</small><b aria-hidden="true">↗</b></a>
+        <a href="https://www.paypal.com/us/business" target="_blank" rel="noopener noreferrer"><span>Get paid</span><small>PayPal Business · US info</small><b aria-hidden="true">↗</b></a>
         <a href="#business-import-title"><span>Activity reports</span><small>Compare periods</small><b aria-hidden="true">→</b></a>
         <a href="#paypal-activity-title" onClick={() => document.getElementById("paypal-activity-details")?.setAttribute("open", "")}><span>PayPal activity</span><small>Review an export</small><b aria-hidden="true">→</b></a>
-        <a href="https://www.paypal.com/uk/business/pos-system" target="_blank" rel="noopener noreferrer"><span>In-person sales</span><small>PayPal Point of Sale · UK info</small><b aria-hidden="true">↗</b></a>
+        <a href="https://www.paypal.com/us/business/pos-system" target="_blank" rel="noopener noreferrer"><span>In-person sales</span><small>PayPal Point of Sale · US info</small><b aria-hidden="true">↗</b></a>
       </nav>
 
       <div className={styles.viewHeader}>
@@ -523,8 +559,32 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
         </div>
       </div>
 
-      <BusinessSnapshotPanel perspective={perspective} onSnapshotChange={(active, snapshot) => { setHasImportedSnapshot(active); setImportedSnapshot(snapshot ?? null); if (active) setShowSampleData(false); }} />
-      <PayPalActivityPanel onReportChange={(active) => { setHasPayPalReport(active); if (active) setShowSampleData(false); }} />
+      <BusinessSnapshotPanel perspective={perspective} onSnapshotChange={(active, report) => { setHasImportedSnapshot(active); setImportedSnapshot(report ?? null); if (active) setShowSampleData(false); }} />
+      <PayPalActivityPanel onReportChange={(active, summary) => { setPayPalReport(active ? summary ?? null : null); if (active) setShowSampleData(false); }} />
+
+      {reportThresholdEvaluation && preferencesLoaded && (
+        <section className={`${styles.thresholdPreview} ${styles.reportThresholdPreview}`} aria-labelledby="report-threshold-title" role="status" aria-live="polite">
+          <div className={styles.thresholdPreviewHeading}>
+            <div>
+              <p className={styles.eyebrow}>{importedSnapshot?.provenance.trustState === "self-provided-unverified" ? "SELF-PROVIDED · UNVERIFIED" : "FICTIONAL EXAMPLE"}</p>
+              <h3 id="report-threshold-title">Local report check</h3>
+            </div>
+            <span>DEVICE ONLY · NO ALERTS</span>
+          </div>
+          <p className={styles.thresholdPreviewNote}>Compares your selected draft thresholds with this aggregate report only. It does not monitor future activity or verify the report source.</p>
+          <div className={styles.thresholdPreviewGrid}>
+            {reportThresholds.map((threshold) => (
+              <article className={styles.thresholdPreviewCard} key={threshold.id}>
+                <strong>{threshold.label}</strong>
+                <span className={!threshold.enabled || threshold.result.status === "unavailable" ? styles.thresholdUnavailable : threshold.result.status === "notice" ? styles.thresholdCrossed : styles.thresholdClear}>
+                  {!threshold.enabled ? "Not included" : threshold.result.status === "unavailable" ? "Unavailable" : threshold.id === "activity" ? threshold.result.status === "notice" ? "Drop threshold reached" : "No drop at selected level" : threshold.result.status === "notice" ? "Refund threshold reached" : "Below refund threshold"}
+                </span>
+                <small>{threshold.enabled ? threshold.detail : "Select this signal in report preferences to check its threshold."}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {showSampleData && (
         <div className={styles.sampleNotice} role="status" aria-live="polite">
@@ -536,7 +596,7 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
       {showSampleData && <section className={styles.sampleComparison} aria-labelledby="sample-comparison-title">
         <div><p className={styles.eyebrow}>FICTIONAL EXAMPLE · {currentView.windowDays}-DAY PERIODS</p><h3 id="sample-comparison-title">Activity over two periods</h3><p>Transaction counts from the sample below.</p></div>
         {([['Previous period', sampleSummary.previousTransactions], ['Current period', sampleSummary.currentTransactions]] as const).map(([label, value], index) => <div className={styles.sampleComparisonRow} key={label}>
-          <div><span>{label}</span><strong>{new Intl.NumberFormat("en-GB").format(value)}</strong></div>
+          <div><span>{label}</span><strong>{new Intl.NumberFormat("en-US").format(value)}</strong></div>
           <div className={styles.sampleTrack} aria-hidden="true"><span className={index ? styles.sampleCurrent : styles.samplePrevious} style={{ width: `${Math.max(sampleSummary.previousTransactions, sampleSummary.currentTransactions) ? value / Math.max(sampleSummary.previousTransactions, sampleSummary.currentTransactions) * 100 : 0}%` }} /></div>
         </div>)}
       </section>}
@@ -614,11 +674,11 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
               />
               <ThresholdControl
                 id={`${perspective}-refund-threshold`}
-                label="Refund share"
-                description="Draft condition: aggregate refund share reaches this level."
+                label="Refund ratio"
+                description="Draft condition: refunds reach this share of gross; ratios can exceed 100%."
                 value={currentView.refundSharePct}
                 min={1}
-                max={20}
+                max={MAX_REFUND_THRESHOLD_PCT}
                 step={1}
                 disabled={!preferencesLoaded || !currentView.indicators.includes("refundShare")}
                 onChange={(value) => updateCurrentView({ refundSharePct: value })}
@@ -713,7 +773,7 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
           <div className={styles.moreFields} aria-label={showSampleData ? "Additional sample aggregate fields" : "Additional planned aggregate fields"}>
             <span>{showSampleData ? "Also in sample" : "Also planned"}</span>
             <span>Gross volume</span>
-            <span>Refund share</span>
+            <span>Refund ratio</span>
             <span>Data freshness</span>
           </div>
         )}

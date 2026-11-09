@@ -10,7 +10,7 @@ const header = "Date,Time,TimeZone,Name,From Email Address,Status,Transaction Ev
 const id = (n) => `TEST${String(n).padStart(13, "0")}`;
 const row = (date, n, { time = "12:00:00", zone = "UTC", name = '"Invented, Person"', email = "invented@example.test", status = "Completed", code = "T0006", impact = "Credit" } = {}) =>
   `${date},${time},${zone},${name},${email},${status},${code},${impact},${id(n)}`;
-const options = { dateOrder: "dmy", windowDays: 7, endExclusive: "2026-11-06", coverageConfirmed: true, nowMs: Date.parse("2026-11-06T15:00:00Z") };
+const options = { dateOrder: "dmy", timeZone: "utc", windowDays: 7, endExclusive: "2026-11-06", coverageConfirmed: true, nowMs: Date.parse("2026-11-06T15:00:00Z") };
 const file = (...rows) => [header, ...rows].join("\n");
 const valid = () => file(row("23/10/2026", 1), row("30/10/2026", 2, { code: "T0007" }));
 
@@ -61,7 +61,7 @@ test("supports a BOM, reordered headers, CRLF and quoted multiline private field
 
 test("requires explicit coverage and an already completed UTC window", () => {
   for (const partial of [
-    { coverageConfirmed: false }, { coverageConfirmed: "yes" }, { dateOrder: "" },
+    { coverageConfirmed: false }, { coverageConfirmed: "yes" }, { dateOrder: "" }, { timeZone: "" },
     { windowDays: 14 }, { endExclusive: "2026-11-07" }, { endExclusive: "2026-02-30" }, { nowMs: Infinity }, { nowMs: 1e308 },
   ]) assert.match(mustFail(valid(), { ...options, ...partial }), /choose a date format/i);
 });
@@ -77,8 +77,64 @@ test("rejects missing, duplicated, malformed, empty, or oversized report data", 
 test("rejects dates, times, timezones and row shapes it cannot interpret", () => {
   assert.match(mustFail(file(row("31/02/2026", 1), row("30/10/2026", 2))), /date or time/i);
   assert.match(mustFail(file(row("23/10/2026", 1, { time: "24:00:00" }), row("30/10/2026", 2))), /date or time/i);
-  assert.match(mustFail(file(row("23/10/2026", 1, { zone: "PST" }), row("30/10/2026", 2))), /UTC or GMT/i);
+  assert.match(mustFail(file(row("23/10/2026", 1, { zone: "PST" }), row("30/10/2026", 2))), /time zone/i);
   assert.match(mustFail(`${header}\n${row("23/10/2026", 1)}\n${row("30/10/2026", 2)},extra`), /row shape/i);
+});
+
+test("converts explicitly chosen UK and Pacific wall times into the correct UTC reporting periods", () => {
+  const summer = { ...options, endExclusive: "2026-07-15", nowMs: Date.parse("2026-07-15T15:00:00Z") };
+  const london = summarizePayPalActivity(file(
+    row("01/07/2026", 1, { time: "01:00:00", zone: "BST" }),
+    row("08/07/2026", 2, { time: "00:30:00", zone: "BST" }),
+    row("08/07/2026", 3, { time: "01:00:00", zone: "BST" }),
+  ), { ...summer, timeZone: "london" });
+  assert.equal(london.ok, true);
+  assert.equal(london.summary.previous.included, 2);
+  assert.equal(london.summary.current.included, 1);
+  const pacific = summarizePayPalActivity(file(
+    row("30/06/2026", 4, { time: "17:00:00", zone: "PDT" }),
+    row("07/07/2026", 5, { time: "16:30:00", zone: "PDT" }),
+    row("07/07/2026", 6, { time: "17:00:00", zone: "PDT" }),
+  ), { ...summer, timeZone: "pacific" });
+  assert.equal(pacific.ok, true);
+  assert.equal(pacific.summary.previous.included, 2);
+  assert.equal(pacific.summary.current.included, 1);
+});
+
+test("rejects mismatched abbreviations, missing timezone choices and DST gaps or folds", () => {
+  const input = (date, time, zone) => file(row("23/10/2026", 1, { zone: "BST" }), row("30/10/2026", 2, { zone: "GMT" }), row(date, 3, { time, zone }));
+  for (const [date, time, zone] of [
+    ["25/10/2026", "01:30:00", "BST"], // London fall-back: two possible instants
+    ["29/03/2026", "01:30:00", "GMT"], // London spring-forward: no such instant
+    ["23/10/2026", "12:00:00", "GMT"], // wrong seasonal abbreviation
+    ["23/10/2026", "12:00:00", "CST"], // ambiguous abbreviation
+  ]) assert.match(mustFail(input(date, time, zone), { ...options, timeZone: "london" }), /time zone|daylight/i);
+  const pacificBase = file(row("23/10/2026", 1, { zone: "PDT" }), row("30/10/2026", 2, { zone: "PDT" }));
+  for (const [date, time, zone] of [
+    ["01/11/2026", "01:30:00", "PDT"],
+    ["08/03/2026", "02:30:00", "PST"],
+    ["23/10/2026", "12:00:00", "PST"],
+  ]) assert.match(mustFail(`${pacificBase}\n${row(date, 3, { time, zone })}`, { ...options, timeZone: "pacific" }), /time zone|daylight/i);
+});
+
+test("supports selected major US regions and checks seasonal labels rather than inferring a zone", () => {
+  const winter = { ...options, endExclusive: "2026-01-15", nowMs: Date.parse("2026-01-15T15:00:00Z") };
+  const summer = { ...options, endExclusive: "2026-07-15", nowMs: Date.parse("2026-07-15T15:00:00Z") };
+  for (const [timeZone, standard, daylight] of [
+    ["eastern", "EST", "EDT"], ["central", "CST", "CDT"], ["mountain", "MST", "MDT"],
+    ["arizona", "MST", "MST"], ["pacific", "PST", "PDT"], ["alaska", "AKST", "AKDT"], ["hawaii", "HST", "HST"],
+  ]) {
+    for (const [config, label, start, end] of [[winter, standard, "01/01/2026", "08/01/2026"], [summer, daylight, "01/07/2026", "08/07/2026"]]) {
+      const result = summarizePayPalActivity(file(row(start, 1, { zone: label }), row(end, 2, { zone: label })), { ...config, timeZone });
+      assert.equal(result.ok, true, `${timeZone}: ${label}`);
+      assert.equal(result.summary.previous.included, 1);
+      assert.equal(result.summary.current.included, 1);
+    }
+  }
+  assert.match(mustFail(file(row("01/07/2026", 1, { zone: "MDT" }), row("08/07/2026", 2, { zone: "MDT" })), { ...summer, timeZone: "arizona" }), /time zone/i);
+  assert.match(mustFail(valid(), { ...options, timeZone: "__proto__" }), /choose a date format/i);
+  const old = file(row("01/07/2006", 1, { zone: "BST" }), row("08/07/2006", 2, { zone: "BST" }));
+  assert.match(mustFail(old, { ...options, timeZone: "london" }), /time zone/i);
 });
 
 test("rejects unrecognized classifications, malformed event codes, and duplicate or invalid IDs", () => {

@@ -1,0 +1,28 @@
+$kind: http-request
+description: Search the US storefront; the response must report US and USD.
+url: '{{baseUrl}}/api/marketplace/search'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"query":"headphones","limit":2,"storefront":"US"}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns US storefront search results", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.storefront).to.eql("US");
+        pm.expect(body.currency).to.eql("USD");
+        pm.expect(body.products).to.be.an("array");
+        if (pm.variables.get("mockLocaleFixture") === "enabled") pm.expect(body.products[0].id).to.eql("fixture-US-USD-en");
+      });
+settings: {}
+order: 2200

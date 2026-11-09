@@ -1,0 +1,7 @@
+simulation: Fictional native PayPal callback regression
+version: 1
+routing: path
+mocks:
+  - name: paypal-native-oidc-fixture
+    routeKey: identity
+    path: postman/mocks/paypal-native-oidc-fixture

@@ -7,10 +7,11 @@ const require = createRequire(import.meta.url);
 const { NextRequest } = require("next/server");
 const configModule = load("src/lib/customer-auth/config.ts");
 const providerModule = load("src/lib/customer-auth/provider.ts", { "./config": configModule });
+const providerCallback = load("src/lib/customer-auth/provider-callback.ts");
 const storeModule = load("src/lib/customer-auth/store.ts");
 const { createAuthController, webSignInAdmissionVerified } = load("src/lib/customer-auth/controller.ts", {
   "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) },
-  "./config": configModule, "./provider": providerModule, "./store": storeModule,
+  "./config": configModule, "./provider": providerModule, "./provider-callback": providerCallback, "./store": storeModule,
 });
 const SESSION = "__Host-paypal-markets-session";
 const TRANSACTION = "__Host-paypal-markets-login";
@@ -30,7 +31,15 @@ async function harness(options = {}) {
   let providerAvailable = true;
   let activeConfig = config;
   let admission = true;
-  const controller = createAuthController({ webAdmission:()=>admission,
+  const factory = options.onCallback ? load("src/lib/customer-auth/controller.ts", {
+    "./request-budget": { consumeAuthRequestBudget: async () => ({ allowed: true, retryAfter: 60 }) },
+    "./config": configModule, "./provider-callback": providerCallback, "./store": storeModule,
+    "./provider": { ...providerModule, async completeAuthorization(...args) {
+      options.onCallback(new URL(args[1]));
+      return providerModule.completeAuthorization(...args);
+    } },
+  }).createAuthController : createAuthController;
+  const controller = factory({ webAdmission:()=>admission,
     config: () => activeConfig,
     store: () => store,
     provider: async () => { if (!providerAvailable) throw new Error("synthetic provider unavailable"); return client; },
@@ -75,6 +84,38 @@ test("same-origin enforcement blocks login and logout before provider or store o
   assert.equal(h.store.transactions.size, 0);
 });
 
+test("a rejected earlier transaction cookie fails start without a redirect or replacement cookie", async () => {
+  const h = await harness();
+  const previous = Buffer.alloc(32, 7).toString("base64url");
+  let previousHash;
+  h.store.createTransaction = async (_handle, _context, _transaction, _session, earlier) => {
+    previousHash = earlier;
+    throw new Error("synthetic expired transaction");
+  };
+  const response = await h.controller.start(request("/api/auth/paypal/start", {
+    method: "POST", origin: config.origin, cookies: { [TRANSACTION]: previous },
+  }));
+  assert.match(previousHash, /^[0-9a-f]{64}$/);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "sign_in_unavailable" });
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(response.cookies.get(TRANSACTION), undefined);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+});
+
+test("session issuance failure after a verified callback does not issue a cookie", async () => {
+  const h = await harness();
+  h.store.createSession = async () => { throw new Error("synthetic expired authority"); };
+  const { callback } = await signIn(h);
+  assert.equal(callback.status, 303);
+  assert.equal(callback.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+  assert.equal(callback.cookies.get(SESSION), undefined);
+  assert.equal(callback.headers.get("cache-control"), "no-store");
+  assert.equal(callback.headers.get("referrer-policy"), "no-referrer");
+  assert.deepEqual([...h.store.transactions.values()][0].login, { state: "", nonce: "", verifier: "" });
+});
+
 test("a successful synthetic login creates a protected revocable session without returning provider data", async () => {
   const h = await harness();
   assert.deepEqual(await (await h.controller.session(request("/api/auth/session"))).json(), { authenticated: false, loginAvailable: true });
@@ -105,6 +146,192 @@ test("a successful synthetic login creates a protected revocable session without
   assert.equal(logout.cookies.get(SESSION)?.maxAge, 0);
   const after = await h.controller.session(request("/api/auth/session", { cookies: { [SESSION]: session.value } }));
   assert.deepEqual(await after.json(), { authenticated: false, loginAvailable: true });
+});
+
+test("web callback ignores unrecognized extensions without changing its signed identity or destination", async () => {
+  let forwarded;
+  const h = await harness({ metadata: { authorization_response_iss_parameter_supported: true }, onCallback: value => { forwarded = value; } });
+  const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+  const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+  const transaction = start.cookies.get(TRANSACTION).value;
+  const query = new URLSearchParams({ code: "fixture-code", state, returnUrl: "https://attacker.example.test/fictional-marker", code_verifier: "fictional-wrong-verifier", account_type: "personal" });
+  query.set("scope", "address openid profile email");
+  query.set("iss", "https://www.sandbox.paypal.com");
+  query.append("extension", "fictional-marker"); query.append("extension", "other-fictional-marker");
+  const callback = await h.controller.callback(request(`/api/auth/paypal/callback?${query}`, { cookies: { [TRANSACTION]: transaction } }));
+  assert.deepEqual([...forwarded.searchParams.keys()].sort(), ["code", "iss", "state"]);
+  assert.equal(forwarded.searchParams.get("iss"), "https://www.sandbox.paypal.com");
+  assert.equal(callback.headers.get("location"), `${config.origin}/dashboard#account`);
+  assert.doesNotMatch(callback.headers.get("location") + await callback.text(), /attacker|fictional-marker|personal/);
+  const session = callback.cookies.get(SESSION);
+  assert.ok(session?.value);
+  const current = await h.controller.session(request("/api/auth/session", { cookies: { [SESSION]: session.value } }));
+  const identity = await current.json();
+  assert.equal(identity.authenticated, true); assert.equal(identity.accountType, "business");
+  assert.doesNotMatch(JSON.stringify(identity), /attacker|fictional-marker|synthetic-subject|synthetic-access/);
+  assert.ok(h.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")));
+  assert.ok(h.fixture.requests.some(item => item.url.includes("/userinfo")));
+});
+
+test("web rejects unsupported response fields, duplicate known parameters and malformed scope before token exchange", async () => {
+  const h = await harness();
+  const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+  const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+  const transaction = start.cookies.get(TRANSACTION).value;
+  const base = `/api/auth/paypal/callback?code=fixture-code&state=${state}`;
+  const requestsBefore = h.fixture.requests.length;
+  const invalid = [];
+  for (const name of ["access_token", "token_type", "expires_in", "refresh_token", "response", "id_token", "token"]) {
+    for (const value of ["", "fictional"]) invalid.push(`&${name}=${value}`);
+  }
+  invalid.push("&%69d_token=fictional", `&state=${state}`, "&code=second-code", "&error=", "&scope=", "&scope=openid%09email", `&scope=${"a".repeat(1025)}`, "&scope=openid&scope=email", "&iss=", "&iss=https%3A%2F%2Fexample.test%0A", `&iss=${"a".repeat(2049)}`, "&iss=x&iss=y", "&error_description=fictional", "&error_uri=fictional", `&unknown=${"a".repeat(4096)}`);
+  for (const suffix of invalid) {
+    const callback = await h.controller.callback(request(base + suffix, { cookies: { [TRANSACTION]: transaction } }));
+    assert.equal(callback.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`, suffix.slice(0, 30));
+    assert.equal(callback.cookies.get(SESSION), undefined, suffix.slice(0, 30));
+    assert.doesNotMatch(callback.headers.get("location") + await callback.text(), /fictional/, suffix.slice(0, 30));
+  }
+  assert.equal([...h.store.transactions.values()][0].status, "pending");
+  assert.equal(h.fixture.requests.length, requestsBefore);
+  const valid = await h.controller.callback(request(base, { cookies: { [TRANSACTION]: transaction } }));
+  assert.ok(valid.cookies.get(SESSION)?.value);
+});
+
+test("web issuer response checks remain active when extensions are present", async () => {
+  for (const scenario of ["wrong_issuer", "missing_required_issuer"]) {
+    const h = await harness({ metadata: { authorization_response_iss_parameter_supported: true } });
+    const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+    const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+    const query = new URLSearchParams({ code: "fixture-code", state, extension: "fictional-marker" });
+    if (scenario === "wrong_issuer") query.set("iss", "https://attacker.example.test");
+    const callback = await h.controller.callback(request(`/api/auth/paypal/callback?${query}`, { cookies: { [TRANSACTION]: start.cookies.get(TRANSACTION).value } }));
+    assert.equal(callback.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`, scenario);
+    assert.equal(callback.cookies.get(SESSION), undefined, scenario);
+    assert.equal(h.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/token")), false, scenario);
+  }
+});
+
+test("web error details are not reflected and duplicate recognized error fields fail closed", async () => {
+  const h = await harness();
+  const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+  const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+  const transaction = start.cookies.get(TRANSACTION).value;
+  const base = new URLSearchParams({ state, error: "access_denied", error_description: "fictional-detail", error_uri: "https://attacker.example.test/fictional-detail", extension: "fictional-detail" });
+  const requestsBefore = h.fixture.requests.length;
+  for (const name of ["error", "error_description", "error_uri"]) {
+    const duplicate = new URLSearchParams(base); duplicate.append(name, "fictional-duplicate");
+    const response = await h.controller.callback(request(`/api/auth/paypal/callback?${duplicate}`, { cookies: { [TRANSACTION]: transaction } }));
+    assert.equal(response.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`, name);
+    assert.equal([...h.store.transactions.values()][0].status, "pending", name);
+  }
+  const response = await h.controller.callback(request(`/api/auth/paypal/callback?${base}`, { cookies: { [TRANSACTION]: transaction } }));
+  assert.equal(response.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+  assert.equal(response.cookies.get(SESSION), undefined);
+  assert.doesNotMatch(response.headers.get("location") + await response.text(), /fictional|attacker/);
+  assert.equal([...h.store.transactions.values()][0].status, "processing");
+  assert.deepEqual([...h.store.transactions.values()][0].login, { state: "", nonce: "", verifier: "" });
+  assert.equal(h.fixture.requests.length, requestsBefore);
+});
+
+test("web callback extensions cannot bypass state or synthetic signature checks", async () => {
+  for (const scenario of ["wrong_state", "bad_signature"]) {
+    const h = await harness({ badSignature: scenario === "bad_signature" });
+    const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+    const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+    const transaction = start.cookies.get(TRANSACTION).value;
+    const query = new URLSearchParams({ code: "fixture-code", state: scenario === "wrong_state" ? "fictional-wrong-state" : state, returnUrl: "https://attacker.example.test/fictional-marker" });
+    const callback = await h.controller.callback(request(`/api/auth/paypal/callback?${query}`, { cookies: { [TRANSACTION]: transaction } }));
+    assert.equal(callback.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`, scenario);
+    assert.equal(callback.cookies.get(SESSION), undefined, scenario);
+    assert.doesNotMatch(callback.headers.get("location") + await callback.text(), /attacker|fictional-marker/, scenario);
+    if (scenario === "bad_signature") assert.ok(h.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")));
+  }
+});
+
+test("a late code or error callback cannot consume a newer web sign-in attempt", async () => {
+  for (const kind of ["code", "error"]) {
+    const h = await harness();
+    const first = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+    const stateA = h.fixture.acceptAuthorization(first.headers.get("location"));
+    const second = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin, cookies: { [TRANSACTION]: first.cookies.get(TRANSACTION).value } }));
+    const stateB = h.fixture.acceptAuthorization(second.headers.get("location"));
+    assert.notEqual(stateA, stateB);
+    const latest = second.cookies.get(TRANSACTION).value;
+    const requestsBefore = h.fixture.requests.length;
+    const lateParams = new URLSearchParams({ state: stateA, ...(kind === "code" ? { code: "fixture-code" } : { error: "access_denied" }) });
+    const late = await h.controller.callback(request(`/api/auth/paypal/callback?${lateParams}`, { cookies: { [TRANSACTION]: latest } }));
+    assert.equal(late.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`, kind);
+    assert.equal(late.headers.get("set-cookie"), null, kind);
+    assert.equal(h.fixture.requests.length, requestsBefore, kind);
+    assert.equal([...h.store.transactions.values()].at(-1).status, "pending", kind);
+    const valid = await h.controller.callback(request(`/api/auth/paypal/callback?code=fixture-code&state=${stateB}`, { cookies: { [TRANSACTION]: latest } }));
+    assert.equal(valid.headers.get("location"), `${config.origin}/dashboard#account`, kind);
+    assert.ok(valid.cookies.get(SESSION)?.value, kind);
+    assert.ok(h.fixture.requests.some(item => item.url.endsWith("/v1/oauth2/certs")), kind);
+    assert.ok(h.fixture.requests.some(item => item.url.includes("/userinfo")), kind);
+  }
+});
+
+test("a lost claim acknowledgement fails closed without assuming the transaction is reusable", async () => {
+  const h = await harness();
+  const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+  const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+  const transaction = start.cookies.get(TRANSACTION).value;
+  const consume = h.store.consumeTransaction.bind(h.store);
+  h.store.consumeTransaction = async (...args) => {
+    const claimed = await consume(...args);
+    if (claimed) throw Error("fictional lost acknowledgement");
+    return claimed;
+  };
+  const callback = () => h.controller.callback(request(`/api/auth/paypal/callback?code=fixture-code&state=${state}`, { cookies: { [TRANSACTION]: transaction } }));
+  const requestsBefore = h.fixture.requests.length;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await callback();
+    assert.equal(response.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+    assert.equal(response.cookies.get(SESSION), undefined);
+    assert.doesNotMatch(response.headers.get("location") + await response.text(), /acknowledgement|fixture-code/);
+  }
+  assert.equal([...h.store.transactions.values()][0].status, "processing");
+  assert.deepEqual([...h.store.transactions.values()][0].login, { state: "", nonce: "", verifier: "" });
+  assert.equal(h.fixture.requests.length, requestsBefore);
+});
+
+test("provider failure after a claim leaves no stored transaction secrets", async () => {
+  const h = await harness();
+  const start = await h.controller.start(request("/api/auth/paypal/start", { method: "POST", origin: config.origin }));
+  const state = h.fixture.acceptAuthorization(start.headers.get("location"));
+  h.setProviderAvailable(false);
+  const response = await h.controller.callback(request(`/api/auth/paypal/callback?code=fixture-code&state=${state}`, {
+    cookies: { [TRANSACTION]: start.cookies.get(TRANSACTION).value },
+  }));
+  assert.equal(response.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+  assert.equal(response.cookies.get(SESSION), undefined);
+  const row = [...h.store.transactions.values()][0];
+  assert.equal(row.status, "processing");
+  assert.deepEqual(row.login, { state: "", nonce: "", verifier: "" });
+});
+
+test("a lost session-write acknowledgement does not undo committed rotation or issue a second session", async () => {
+  const h = await harness();
+  const first = await signIn(h);
+  const oldHandle = first.callback.cookies.get(SESSION).value;
+  const issue = h.store.createSession.bind(h.store);
+  h.store.createSession = async (...args) => {
+    await issue(...args);
+    throw Error("fictional lost session acknowledgement");
+  };
+  const second = await signIn(h, oldHandle);
+  assert.equal(second.callback.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+  assert.equal(second.callback.cookies.get(SESSION), undefined);
+  assert.equal(h.store.sessions.size, 2);
+  assert.equal([...h.store.sessions.values()].filter((session) => !session.revoked).length, 1);
+  assert.equal((await (await h.controller.session(request("/api/auth/session", { cookies: { [SESSION]: oldHandle } }))).json()).authenticated, false);
+  const replay = await h.controller.callback(request(`/api/auth/paypal/callback?code=fixture-code&state=${second.state}`, {
+    cookies: { [SESSION]: oldHandle, [TRANSACTION]: second.transaction.value },
+  }));
+  assert.equal(replay.headers.get("location"), `${config.origin}/dashboard?auth=failed#account`);
+  assert.equal(replay.cookies.get(SESSION), undefined);
+  assert.equal(h.store.sessions.size, 2);
 });
 
 test("unavailable dependencies never turn an unverified cookie into a signed-out assertion", async () => {

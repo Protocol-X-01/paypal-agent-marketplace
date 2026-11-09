@@ -1,0 +1,9 @@
+version: 1
+name: paypal-business-first-page
+slug: paypal-business-first-page
+protocol: http
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
+interceptRequests: true

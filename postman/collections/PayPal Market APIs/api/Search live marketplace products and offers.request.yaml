@@ -1,5 +1,5 @@
 $kind: http-request
-description: Searches Channel3 after an explicit user action. The Channel3 key stays on the server; this endpoint returns catalog products and retailer links without creating a checkout or payment.
+description: Searches Channel3 after an explicit user action. Explicit GB or US storefronts select GBP or USD; omission uses the configured locale. Price bounds and common budget phrases are applied as a structured filter in the selected storefront currency. The Channel3 key stays on the server; no checkout or payment is created. A nextPageToken may be supplied as pageToken with the same query, storefront, price range and limit within 15 minutes; it is bound to the configured collection and locale. Each page is separately rate-limited. JSON request bodies are limited to 8192 UTF-8 bytes and a 3-second read deadline. At most eight search bodies per Node process can be read and validated simultaneously; excess requests receive a retryable 503. The app limits upstream responses to 2 MiB decoded bytes and rejects larger declared lengths; the provider request has an eight-second deadline. A present Origin must match Host or an allowed mobile-web origin.
 url: "{{baseUrl}}/api/marketplace/search"
 method: POST
 headers:
@@ -9,9 +9,26 @@ body:
   type: json
   content: |-
     {
-      "query": "string",
-      "limit": 6
+      "query": "headphones",
+      "limit": 6,
+      "storefront": "GB",
+      "priceRange": { "maxPrice": 150 }
     }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns UK storefront results", function () {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.storefront).to.eql("GB");
+        pm.expect(body.currency).to.eql("GBP");
+        pm.expect(body.products).to.be.an("array");
+        pm.expect(body.nextPageToken === null || (typeof body.nextPageToken === "string" && body.nextPageToken.length <= 6144)).to.eql(true);
+        if (pm.variables.get("mockLocaleFixture") === "enabled") pm.expect(body.products[0].id).to.eql("fixture-GB-GBP-en");
+      });
 settings: {}
 examples: ./.resources/Search live marketplace products and offers.resources/examples
 order: 2000

@@ -1,0 +1,281 @@
+simulation: Channel3 storefront regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: Synthetic local responses from Channel3 search and category browse.
+  unblocks: Repeatable checks that explicit UK and US choices and supported legacy defaults reach the provider request. The provider owner's mock was not searched because this work was restricted to local operations.
+assumptions:
+  - id: channel3-locale-config
+    status: supported
+    claim: Search and browse accept country, currency, and language inside config.
+    reason: Channel3's official integration skill documents per-call locale overrides and supported GB/GBP and US/USD codes.
+    verification: On 2026-11-06, four Postman requests exercised GB/GBP/en and US/USD/en search and browse against the local stand-in; all returned the expected synthetic locale-tagged products. The mock log recorded all provider requests. This does not establish live offer availability or conversion behavior.
+    source: https://github.com/channel3-ai/skills/blob/main/skills/channel3-api/SKILL.md ; tests/channel3_storefront_simulation.py
+    updated_at: '2026-11-06'
+  - id: legacy-locale
+    status: supported
+    claim: An omitted storefront should preserve supported configured country, currency, and language values.
+    reason: This is the application's backward-compatibility contract, not a provider guarantee.
+    verification: On 2026-11-06, omitted-storefront search and browse retained an intentionally mixed DE/GBP/de configuration. The fixture encoded the received values in a synthetic product identifier.
+    source: src/lib/channel3.ts ; tests/channel3_storefront_simulation.py
+    updated_at: '2026-11-06'
+  - id: live-regional-search-2026-11-06
+    status: supported
+    claim: >-
+      For the specific two search requests observed on 2026-11-06, Channel3
+      accepted the selected GB/GBP/en and US/USD/en locale configurations and
+      returned offers in the corresponding requested currencies.
+    reason: >-
+      One read-only synthetic product query per locale reached the real provider
+      through the application search route and adapter. This limited observation
+      does not guarantee other products, stock, prices, or future availability.
+    verification: >-
+      Both provider and in-process route responses were HTTP 200; each returned
+      three products and four offers. The website parser accepted all four
+      offers in each region; observed offer currencies were GBP and USD
+      respectively. A separate loopback-only Postman simulation also passed
+      both regional route checks and logged two mock requests. The simulation
+      used a temporary in-memory loopback transport adjustment and did not run
+      the Next.js server. The real searches used the unmodified HTTPS adapter.
+      Neither check exercised a hosted deployment, browser, mobile device,
+      curated browsing, retailer handoff, or a purchase.
+    source: >-
+      src/app/api/marketplace/search/route.ts ; src/lib/channel3.ts ;
+      src/lib/marketplace-storage.ts ; /tmp/paypal-region-sim-88om2mam.py ;
+      /tmp/paypal-channel3-live-rxb3x8zu.cjs (temporary files may expire).
+    updated_at: '2026-11-06'
+  - id: live-regional-audio-catalog-2026-11-06
+    status: supported
+    claim: >-
+      For the two audio-category browse requests observed on 2026-11-06,
+      Channel3 accepted GB/GBP/en and US/USD/en and returned offers in the
+      respective requested currencies.
+    reason: >-
+      One live read per region reached the provider through the application
+      catalog route and adapter. The observation is limited to the selected
+      category and time; it does not guarantee future stock, prices, or offers.
+    verification: >-
+      Both provider and in-process route responses were HTTP 200. GB returned
+      eight products and nine GBP offers; US returned eight products and eight
+      USD offers. The website parser accepted all observed products and offers.
+      A separate portable, loopback-only Postman bridge passed four regional
+      search and catalog checks, with two requests to each mock endpoint. The
+      bridge used an in-memory loopback transport adjustment and did not run
+      Next.js. The live checks used the unmodified HTTPS adapter. Hosted,
+      browser, phone, retailer handoff, and purchase behavior were not tested.
+    source: >-
+      src/app/api/marketplace/catalog/route.ts ; src/lib/channel3-catalog.ts ;
+      src/lib/channel3.ts ; src/lib/marketplace-storage.ts ;
+      tests/channel3_storefront_bridge_simulation.py ;
+      /tmp/paypal-channel3-live-catalog-y2ljx3nx.cjs (temporary file may expire).
+    updated_at: '2026-11-06'
+  - id: next-dev-https-proxy-20261106
+    status: supported
+    claim: >-
+      In the specified synthetic run, the copied Next development server routes
+      passed selected UK and US storefront values to the local Channel3 mock
+      using the unchanged HTTPS adapter, and returned generic 503 responses for
+      two modeled provider failures.
+    reason: >-
+      The actual Next dev/webpack HTTP runtime ran a source-matched route graph
+      in a loopback-only network namespace. A Postman proxy intercepted the
+      default Channel3 HTTPS hostname using its temporary CA; the app source and
+      HTTPS guard were not changed. The proxy is a stand-in, not Channel3.
+    verification: >-
+      On 2026-11-06, the Postman collection passed seven requests and seven
+      assertions for GB/GBP and US/USD search/catalog, invalid storefronts and
+      oversized search. Direct Next HTTP requests also checked configured
+      DE/GBP/de defaults, malformed JSON, duplicate storefront, untrusted
+      origin, and search/catalog synthetic provider failures. The proxy logged
+      six HTTP 200 and two modeled HTTP 501 provider responses, all matched to
+      the mock with zero passthrough. Selected working-tree and snapshot source
+      hashes matched before and after. This does not verify the complete site,
+      production server, hosted deployment, browser, device, real provider or
+      retailer handoff. The collection warning about missing Postman authorization
+      came from deliberately masked local settings; its assertions still passed.
+    source: >-
+      /home/protocol-x/Downloads/paypal-channel3-next-proxy-simulation.py ;
+      /home/protocol-x/Downloads/paypal-channel3-next-proxy-_r9nik0h.log
+    updated_at: '2026-11-06'
+  - id: next-dev-pid-tree-guard-stop-20261106
+    status: supported
+    claim: >-
+      A later PID-contained repository run stopped when its observed descendant
+      tree exceeded the configured 1,800 MiB RSS guard; it did not complete the
+      Postman collection.
+    reason: >-
+      Full-tree accounting included workers missed by the earlier prototype's
+      process-group check. The stop preserves the resource limit and is not a
+      finding that the route source is invalid.
+    verification: >-
+      The guard observed 2,232,256 KiB with 11 processes. The first three mock
+      calls had succeeded; selected source and fixture fingerprints still
+      matched. The PID namespace drained, both binds unmounted normally and the
+      scratch directory was removed. The earlier 7/7 prototype result remains
+      historical evidence but does not establish compliance with this guard.
+    source: >-
+      tests/channel3_storefront_simulation.py ;
+      /home/protocol-x/Downloads/paypal-channel3-next-proxy-tm73pvqo.log
+    updated_at: '2026-11-06'
+  - id: next-dev-lower-heap-guard-stop-20261106
+    status: supported
+    claim: >-
+      A lower-heap PID-contained repository run still exceeded the unchanged
+      1,800 MiB sampled descendant-tree RSS guard before completing the collection.
+    reason: >-
+      The test set smaller Node heaps and conservative thread defaults without
+      changing the application source or resource threshold. Aggregate RSS can
+      double-count shared pages and the guard samples once per second.
+    verification: >-
+      The peak of six observed samples was 2,079,604 KiB with 11 processes.
+      The first three mock calls succeeded, source and fixture fingerprints
+      matched, the private PID namespace drained, both binds unmounted normally,
+      and the scratch directory was removed. The main local health endpoint
+      returned HTTP 200 afterwards. This is a resource stop, not a route failure.
+    source: >-
+      tests/channel3_storefront_simulation.py ;
+      /home/protocol-x/Downloads/paypal-channel3-next-proxy-0klonguu.log
+    updated_at: '2026-11-06'
+  - id: app-upstream-body-limit-20261106
+    status: supported
+    claim: >-
+      In the isolated synthetic scenarios exercised, the copied Channel3
+      adapter accepted selected well-formed responses, including one at the
+      app-owned 2 MiB decoded-byte boundary, and returned the routes' generic
+      503 for the modeled oversize, malformed or stalled responses.
+    reason: >-
+      Focused stream tests exercised both actual route functions and the copied
+      adapter. A separate loopback-only HTTPS stand-in exercised real Node fetch,
+      including gzip expansion, redirects and an eight-second stalled body.
+    verification: >-
+      The unit tests covered exact-limit and split UTF-8 success, declared and
+      chunked overflow, cancellation, malformed UTF-8 and JSON, a missing body,
+      and a non-settling reader. The HTTPS stand-in exercised GB/US search and
+      browse plus declared, chunked, compressed, malformed and redirected
+      responses, and a stalled body returned 503 after approximately eight
+      seconds. A separate existing Postman bridge passed four GB/US happy-path
+      calls. These checks did not start Next.js or contact Channel3.
+    source: >-
+      src/lib/channel3.ts ; tests/channel3-response-limit.test.mjs ;
+      tests/channel3_response_https_simulation.py ;
+      tests/channel3_storefront_bridge_simulation.py
+    updated_at: '2026-11-06'
+  - id: channel3-response-ceiling-unknown
+    status: unknown
+    claim: All legitimate Channel3 responses for these requests fit inside the app-owned 2 MiB ceiling.
+    reason: >-
+      Existing synthetic examples are small, but they do not establish an
+      upstream maximum or the size distribution of real products and offers.
+    verification: >-
+      No provider request was made for this draft. The cap remains an app
+      policy; verify compatibility separately with authorized, representative
+      Channel3 responses before release. Content-Length may describe encoded
+      bytes, while the streamed cap measures decoded bytes.
+    source: >-
+      postman/collections/Channel3 Marketplace/Discovery ;
+      postman/collections/PayPal Market APIs/api ; src/lib/channel3.ts
+    updated_at: '2026-11-06'
+  - id: scoped-search-pagination-20261106
+    status: supported
+    claim: >-
+      The application's search continuation retains the same query, collection,
+      storefront and page size, and rejects a continuation used for a different
+      storefront before calling the modeled provider.
+    reason: >-
+      The app signs a short-lived continuation binding and repeats the selected
+      collection and locale on each request. The local mock requires a fictional
+      collection and returns the target only on its second page.
+    verification: >-
+      On 2026-11-06 the isolated loopback Postman bridge invoked the actual route
+      functions against the synthetic provider. Both pages passed, a cross-region
+      continuation returned 400. One maintained Postman search request passed
+      against the actual route via a loopback HTTP bridge, and the mock recorded
+      five search and two browse requests. Focused fictional tests also cover query, collection and page-size
+      changes, a tampered cursor, repeated provider cursors and bounded website
+      and mobile rechecks. No live Channel3 request or Next server was exercised.
+    source: >-
+      tests/channel3_storefront_bridge_simulation.py ;
+      tests/channel3-catalog-pagination.test.mjs ;
+      tests/marketplace-storefront-component.test.mjs ;
+      apps/mobile/tests/shop-storefront-screen.test.cjs ;
+      https://github.com/channel3-ai/skills/blob/main/skills/channel3-api/references/api-reference.md
+    updated_at: '2026-11-06'
+  - id: live-us-search-continuation-20261106
+    status: supported
+    claim: >-
+      For one US storefront search observed on 2026-11-06, the local development
+      route returned a continuation, accepted it for the same search, and rejected
+      its reuse for the GB storefront.
+    reason: >-
+      The response identified Channel3 and matched the requested query and
+      US/USD storefront. The locally configured HTTPS base classified as the
+      official Channel3 host; the source routes the request to that adapter.
+      The running process's effective collection value and upstream traffic were
+      not independently captured, so collection membership is not established.
+    verification: >-
+      Three bounded local HTTP requests used the generic query bags and limit 24.
+      The initial page returned 24 products and a continuation; the next page
+      returned 24 distinct product IDs with no overlap with the first page. Both
+      responses were HTTP 200 and contained the no-store directive. Reusing the
+      first continuation with GB returned HTTP 400; that error response did not
+      contain an explicit no-store directive. The route and adapter source hashes
+      were unchanged during the test. No customer data, purchase or provider
+      write was involved. Results may vary with ranking, stock or time; no
+      browser, phone, hosted release or individual product membership was checked.
+    source: >-
+      src/app/api/marketplace/search/route.ts ; src/lib/channel3.ts ;
+      /home/protocol-x/Downloads/paypal-channel3-live-pagination-tt7sfy2m/results.json
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree; src/lib/channel3.ts SHA-256 81e01f2785e152de7729ca17c94f09493aee4e184dad65d0ffd3feb2e607e70e)
+    cli: 1.84.0
+  - id: dirty-local-snapshot-live-regions
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree;
+      src/lib/channel3.ts SHA-256 090d5821b000f4b8497f3124d8fc6d8e2249479806f0fb996e5a0262e39636cb;
+      search route SHA-256 53017f5c1cf78a301f741c209230f2f4e17514fe92af86c6504f1653f6583562;
+      storefront SHA-256 ef2324dc8ca59053bf51005b37c4c4d66167c1cbb3b500e89c05d9847f254627;
+      website product parser SHA-256 0d71314e2489daaab587a93724922d7d208ad0c05f240e4023cbac90342653eb).
+    cli: 1.84.0
+  - id: dirty-local-snapshot-live-curated
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree;
+      catalog route SHA-256 486c86e8267d2bae971d6129186058585e834c66874a3e2655a241eeac551209;
+      curated sections SHA-256 7da09ea01b6b25ac037991a436c42bc22644c0f668cb1b2449bfa846fc13dfa5;
+      region bridge SHA-256 31012e75aadaa5275d8a9fb1e830dc6d7b93e593f666a180cfe1ec2db535b41c;
+      shared provider and parser fingerprints are in dirty-local-snapshot-live-regions).
+    cli: 1.84.0
+  - id: dirty-local-snapshot-next-dev-proxy
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree;
+      complete selected source hashes are in the saved transcript;
+      transcript SHA-256 b060b71d2ef65946e595d17689a9568428f002c58610887f2a34e429d512b355;
+      runner SHA-256 d0429bbe18d20f3ebc269c423421b7ccb58c36049969989261feaf3da2fdb55e;
+      mock SHA-256 2a2a3fc6c97a7625706252feeda2bbd7addd71e6ecea4413ce882c72fb37ed04).
+    cli: 1.84.0
+  - id: dirty-local-snapshot-next-lower-heap-guard-stop
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree;
+      selected application, fixture and helper hashes are in the saved transcript;
+      runner SHA-256 0ed3dabb1a71b5321a2762df09fd4bcfec0cdfcaca34b14955dbbe3eec5ad553;
+      transcript SHA-256 7c123840b720703a43037bf8a0561fd82789c5d1962b873ccb5efb7dacae1588).
+    cli: 1.84.0
+  - id: isolated-channel3-body-limit-draft
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty source copied to an
+      isolated draft; draft src/lib/channel3.ts SHA-256
+      e1047cdc1b595c2468f9c107aebe7df5005b1cbe28781a8c21e0bb0faaa2a4cf).
+    cli: 1.84.0
+  - id: live-us-search-pagination
+    date: '2026-11-06'
+    commit: >-
+      1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree;
+      search route SHA-256 6ef4d604527ee8471281221b7df872116ce70664efb4b90710a936a4abec8b8a;
+      Channel3 adapter SHA-256 be6d1ac3270d8cb63e29d7b59af8a7d39c58a0b0b2f087ae0c7751e844f07564).
+    cli: 1.84.0

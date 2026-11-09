@@ -1,0 +1,31 @@
+$kind: http-request
+description: Synthetic local-only receiver regression; no real signature or payment.
+url: '{{baseUrl}}/api/webhooks/paypal'
+method: POST
+headers:
+  - key: Content-Type
+    value: 'application/json'
+  - key: paypal-transmission-id
+    value: 'fixture-delivery'
+  - key: paypal-transmission-time
+    value: '2026-11-06T00:00:00Z'
+  - key: paypal-cert-url
+    value: 'https://api-m.sandbox.paypal.com/v1/notifications/certs/TEST-CERT'
+  - key: paypal-auth-algo
+    value: 'SHA256withRSA'
+  - key: paypal-transmission-sig
+    value: 'fixture-signature'
+body:
+  type: text
+  content: |-
+    {
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns HTTP 400 for 05 malformed json", function () {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.json().error).to.eql("bad payload");
+      });
+settings: {}
+order: 5000

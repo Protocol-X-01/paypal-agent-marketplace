@@ -30,6 +30,7 @@ SOURCE_FILES = (
     "src/lib/channel3-catalog.ts",
     "src/lib/channel3-rate-limit.ts",
     "src/lib/mobile-web-cors.ts",
+    "src/lib/request-limits.ts",
     "src/app/api/marketplace/search/route.ts",
     "src/app/api/marketplace/catalog/route.ts",
 )
@@ -40,6 +41,8 @@ SOURCE_FILES = (
 # HTTPS-only. All other imports, including rate limiting and CORS, are real.
 BRIDGE = r"""
 const fs = require('node:fs');
+const http = require('node:http');
+const { spawn } = require('node:child_process');
 const root = process.env.PAYPAL_STOREFRONT_REPO;
 const ts = require(root + '/node_modules/typescript');
 const { createRequire } = require('node:module');
@@ -62,19 +65,22 @@ providerSource = providerSource.replace(guard,
   'if (baseUrl.protocol !== "http:" || baseUrl.hostname !== "127.0.0.1") throw new Error("Simulation requires loopback");');
 const provider = load(providerSource, { 'server-only': {}, '@/lib/channel3-storefront': storefront });
 const catalog = load(source('src/lib/channel3-catalog.ts'));
-const limiter = load(source('src/lib/channel3-rate-limit.ts'));
+const requestLimits = load(source('src/lib/request-limits.ts'), { 'server-only': {} });
+const limiter = load(source('src/lib/channel3-rate-limit.ts'), { './request-limits': requestLimits });
 const cors = load(source('src/lib/mobile-web-cors.ts'), { 'server-only': {} });
 const aliases = {
   '@/lib/channel3': provider,
   '@/lib/channel3-storefront': storefront,
   '@/lib/channel3-catalog': catalog,
   '@/lib/channel3-rate-limit': limiter,
+  '@/lib/request-limits': requestLimits,
   '@/lib/mobile-web-cors': cors,
 };
 const search = load(source('src/app/api/marketplace/search/route.ts'), aliases);
 const browse = load(source('src/app/api/marketplace/catalog/route.ts'), aliases);
 const { NextRequest } = nativeRequire('next/server');
 (async () => {
+  process.env.CHANNEL3_COLLECTION_ID = 'fixture-collection';
   for (const [country, currency] of [['GB', 'GBP'], ['US', 'USD']]) {
     for (const operation of ['search', 'catalog']) {
       const request = operation === 'search'
@@ -94,6 +100,53 @@ const { NextRequest } = nativeRequire('next/server');
       if (!ok) process.exitCode = 1;
     }
   }
+  const makePagedRequest = (pageToken, storefront = 'GB') => new NextRequest('http://localhost:3000/api/marketplace/search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: 'paged headphones', limit: 1, storefront, ...(pageToken ? { pageToken } : {}) }),
+  });
+  const first = await search.POST(makePagedRequest());
+  const firstBody = await first.json();
+  const second = await search.POST(makePagedRequest(firstBody.nextPageToken));
+  const secondBody = await second.json();
+  const mismatch = await search.POST(makePagedRequest(firstBody.nextPageToken, 'US'));
+  const pagedOk = first.status === 200 && firstBody.products?.[0]?.id === 'fixture-first'
+    && typeof firstBody.nextPageToken === 'string' && firstBody.nextPageToken !== 'fixture-page-two'
+    && second.status === 200 && secondBody.products?.[0]?.id === 'fixture-target'
+    && secondBody.nextPageToken === null && mismatch.status === 400;
+  console.log(`${pagedOk ? 'PASS' : 'FAIL'} scoped search continuation and cross-region rejection`);
+  if (!pagedOk) process.exitCode = 1;
+
+  // Run the maintained Postman request against the real route function, behind
+  // a loopback-only Node HTTP bridge. This is not the Next.js HTTP server.
+  const app = http.createServer(async (incoming, outgoing) => {
+    try {
+      const chunks = [];
+      for await (const chunk of incoming) chunks.push(chunk);
+      if (incoming.method !== 'POST' || incoming.url !== '/api/marketplace/search') {
+        outgoing.writeHead(404).end(); return;
+      }
+      const request = new NextRequest(`http://127.0.0.1:${app.address().port}${incoming.url}`, {
+        method: 'POST', headers: incoming.headers, body: Buffer.concat(chunks),
+      });
+      const response = await search.POST(request);
+      outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+      outgoing.end(Buffer.from(await response.arrayBuffer()));
+    } catch { outgoing.writeHead(500).end(); }
+  });
+  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${app.address().port}`;
+  const command = spawn('postman', [
+    'collection', 'run', root + '/postman/collections/PayPal Market APIs',
+    '-i', 'Search live marketplace products and offers', '--env-var', `baseUrl=${baseUrl}`,
+    '--env-var', 'mockLocaleFixture=enabled', '--no-report-events',
+  ], { stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS} --max-old-space-size=256` } });
+  const exitCode = await new Promise((resolve, reject) => {
+    command.once('error', reject);
+    command.once('exit', resolve);
+  });
+  await new Promise((resolve) => app.close(resolve));
+  console.log(`${exitCode === 0 ? 'PASS' : 'FAIL'} Postman search collection request against route bridge`);
+  if (exitCode !== 0) process.exitCode = 1;
 })().catch(() => { console.error('FAIL route bridge'); process.exitCode = 1; });
 """
 
@@ -173,11 +226,11 @@ def main():
                 return 1
             events = [event for event in isolation.events(mocklog) if event.get("event") == "request"]
             paths = [event.get("path") for event in events]
-            mock_ok = len(events) == 4 and all(
+            mock_ok = len(events) == 7 and all(
                 event.get("method") == "POST" and event.get("routeKey") == "channel3" and event.get("statusCode") == 200
                 for event in events
-            ) and paths.count("/v1/search") == 2 and paths.count("/v1/browse") == 2
-            print(f'{"PASS" if mock_ok else "FAIL"} mock recorded 2 search and 2 browse requests', flush=True)
+            ) and paths.count("/v1/search") == 5 and paths.count("/v1/browse") == 2
+            print(f'{"PASS" if mock_ok else "FAIL"} mock recorded 5 search and 2 browse requests', flush=True)
             stable = before == hashes()
             print(f'{"PASS" if stable else "FAIL"} source files remained unchanged during the run', flush=True)
             return 0 if mock_ok and stable else 1

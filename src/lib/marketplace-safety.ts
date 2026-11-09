@@ -18,6 +18,14 @@ export function safeMarketplaceUrl(value: unknown): string | null {
   }
 }
 
+/** An offer may link to its listed retailer or Channel3's affiliate host. */
+export function safeMarketplaceOfferUrl(value: unknown, retailerDomain: string): string | null {
+  const url = safeMarketplaceUrl(value);
+  if (!url) return null;
+  const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
+  return hostname.replace(/^www\./, "") === retailerDomain || hostname === "buy.trychannel3.com" ? url : null;
+}
+
 /** Restrict the initial image URL to Channel3's image host. */
 export function safeMarketplaceImageUrl(value: unknown): string | null {
   const url = safeMarketplaceUrl(value);
@@ -115,18 +123,29 @@ export function primaryMarketplaceImage(value: unknown): string | null {
 type OfferCandidate = { domain: string; url: string | null };
 type ProductCandidate = { id: string; offers: readonly OfferCandidate[] };
 export const VERIFIED_OFFER_LIFETIME_MS = 5 * 60 * 1000;
+// This is the existing application storage boundary, not a Channel3 limit.
+export const MAX_PRODUCT_ID_LENGTH = 300;
+
+/** Keep an entire opaque identifier, or reject it; never normalize or truncate it. */
+export function isUsableProductId(value: unknown): value is string {
+  return typeof value === "string" && value.length <= MAX_PRODUCT_ID_LENGTH && value.trim().length > 0 && !/\p{Cc}/u.test(value);
+}
 
 export function isFreshVerifiedOffer(verifiedAt: number, now: number): boolean {
   return Number.isFinite(verifiedAt) && Number.isFinite(now) && now >= verifiedAt && now - verifiedAt < VERIFIED_OFFER_LIFETIME_MS;
 }
 
-/** Recheck both product identity and retailer hostname before a handoff. */
-export function matchCurrentOffer<T extends ProductCandidate>(products: readonly T[], productId: string, retailerDomain?: string): { product: T | null; url: string | null } {
-  const product = products.find((candidate) => candidate.id === productId) ?? null;
+/** Recheck the exact product and merchant before accepting its direct or Channel3 affiliate URL. */
+export function matchCurrentOffer<T extends ProductCandidate>(products: readonly T[], productId: string, retailerDomain?: string, preferredUrl?: string): { product: T | null; url: string | null } {
+  if (!isUsableProductId(productId)) return { product: null, url: null };
+  const product = products.find((candidate) => isUsableProductId(candidate.id) && candidate.id === productId) ?? null;
   if (!product || !retailerDomain) return { product, url: null };
-  const matches = product.offers.filter((candidate) => {
-    const url = safeMarketplaceUrl(candidate.url);
-    return url !== null && candidate.domain === retailerDomain && new URL(url).hostname.toLowerCase().replace(/^www\./, "").replace(/\.$/, "") === retailerDomain;
+  const matches = product.offers.flatMap((candidate) => {
+    const url = candidate.domain === retailerDomain ? safeMarketplaceOfferUrl(candidate.url, retailerDomain) : null;
+    return url ? [url] : [];
   });
-  return { product, url: matches.length === 1 ? safeMarketplaceUrl(matches[0].url) : null };
+  const preferred = safeMarketplaceUrl(preferredUrl);
+  if (preferred && matches.includes(preferred)) return { product, url: preferred };
+  const uniqueUrls = [...new Set(matches)];
+  return { product, url: uniqueUrls.length === 1 ? uniqueUrls[0] : null };
 }

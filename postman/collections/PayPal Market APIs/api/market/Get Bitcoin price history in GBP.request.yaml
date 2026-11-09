@@ -1,0 +1,51 @@
+$kind: http-request
+description: >-
+  Returns Bitcoin historical market series in pounds sterling. If the chart
+  endpoint is rate-limited, the 7-day series may be a price-only sparkline
+  fallback with estimated sample times.
+url: '{{baseUrl}}/api/market/chart/:coinId?days=7&currency=GBP'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: days
+    value: '7'
+  - key: currency
+    value: GBP
+pathVariables:
+  - key: coinId
+    value: bitcoin
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("GBP Bitcoin chart is available", function () {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.headers.get("Content-Type")).to.match(/application\/json/i);
+      });
+      pm.test("historical series retain the requested currency", function () {
+        const body = pm.response.json();
+        pm.expect(body.coinId).to.eql("bitcoin");
+        pm.expect(body.currency).to.eql("GBP");
+        pm.expect(body.days).to.eql(7);
+        pm.expect(body.provider).to.eql("CoinGecko");
+        pm.expect(Number.isNaN(Date.parse(body.retrievedAt))).to.eql(false);
+        pm.expect(body.seriesSource).to.be.oneOf(["market_chart", "market_overview_sparkline"]);
+        pm.expect(body.availableMetrics).to.be.an("array").that.includes("price");
+        ["prices", "marketCaps", "volumes"].forEach(function (field) {
+          pm.expect(body[field], field).to.be.an("array");
+          body[field].forEach(function (point) {
+            pm.expect(Number.isInteger(point.timestamp)).to.eql(true);
+            pm.expect(Math.abs(point.timestamp)).to.be.at.most(8640000000000000);
+            pm.expect(Number.isFinite(point.value) && point.value >= 0).to.eql(true);
+          });
+        });
+        if (body.seriesSource === "market_overview_sparkline") {
+          pm.expect(body.availableMetrics).to.eql(["price"]);
+          pm.expect(body.marketCaps).to.be.empty;
+          pm.expect(body.volumes).to.be.empty;
+        }
+      });
+settings: {}
+order: 2200

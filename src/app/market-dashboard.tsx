@@ -11,17 +11,18 @@ import {
   type AgChartOptions,
   type AgLineSeriesOptions,
 } from "ag-charts-community";
-import { TRACKED_COINS, type TrackedCoin } from "@/lib/market-assets";
+import { hasDistinctTrackedCoinIds, TRACKED_COINS, type TrackedCoin } from "@/lib/market-assets";
 import { isMarketCurrency, type MarketCurrency } from "@/lib/market-currency";
 import { chartPercentageChange, chronologicalChartPoints, visibleChartDomain } from "@/lib/chart-scale";
 import { chartViewportAction, chartViewportWheelZoom, FULL_CHART_VIEWPORT, visibleChartPoints, type ChartViewport, type ChartViewportAction } from "@/lib/chart-viewport";
+import { marketChartColorsFor, marketChartThemeFor } from "@/lib/market-chart-theme";
 import { agChartPlotBounds } from "@/lib/chart-wheel";
 import type { ChartDays, ChartPoint, MarketChart, MarketQuote, MarketQuotes } from "@/lib/market-data";
-import { formatMarketMoney as money, formatMarketRetrievalTime, formatUsdtPrice } from "@/lib/market-format";
-import { candleSelectionIdentity } from "@/lib/web-candle-data";
+import { formatChartAxisTime, formatChartSampleTime, formatMarketMoney as money, formatMarketProviderUpdateTime, formatMarketRetrievalTime, formatPortfolioMoney, formatUsdtPrice } from "@/lib/market-format";
+import { candleSelectionIdentity, preferredIntradayDays, supportsIntradayWindow, type CandleIntervalChoice } from "@/lib/web-candle-data";
 import { selectMarketHeadline } from "@/lib/market-headline";
 import { calculatePriceIndicators, hasPriceIndicators, indicatorSegments, lineIndicatorOverlays, needsCandleHistory, type LineIndicatorOverlay } from "@/lib/price-indicators";
-import { calculatePortfolio, type PortfolioSummary } from "@/lib/portfolio-summary";
+import { calculateHoldingValue, calculatePortfolio, type PortfolioSummary } from "@/lib/portfolio-summary";
 import { draftsForHoldings, handleResetStorageEvent, hasUnfinishedHoldings, LOCAL_DATA_RESET_SIGNAL, mayClearStorageWarning, parseHoldingDraft, previewHoldings, readStoredHoldings, readStoredWatchlist as parseStoredWatchlist, sameHoldings, saveBrowserSnapshot, type HoldingDrafts } from "@/lib/portfolio-input";
 import type { BusinessPlanDraft } from "@/lib/business-plan-storage";
 import { dashboardLocation, initialAccountExperience, type AccountExperience, type DashboardSection } from "@/lib/account-experience";
@@ -47,6 +48,7 @@ import InsightPanel from "../../packages/ai-insights/ui/InsightPanel";
 import PortfolioAllocation from "./components/portfolio-allocation";
 import PersonalAccountingLite from "./components/personal-accounting-lite";
 import AccountExperienceSwitch from "./components/account-experience-switch";
+import { useAppearance } from "./components/theme-preference";
 
 const STORAGE_KEY = "paypal-markets-manual-holdings-v1";
 const WATCHLIST_KEY = "paypal-markets-watchlist-v1";
@@ -73,6 +75,7 @@ const chartMetrics: Array<{ id: ChartMetric; label: string }> = [
   { id: "marketCap", label: "Market cap" },
   { id: "volume", label: "24h volume" },
 ];
+const CHART_DATA_PAGE_SIZE = 100;
 const metricChartModules = [AreaSeriesModule, CrossLinesModule, LineSeriesModule, NumberAxisModule, TimeAxisModule];
 
 function compactMoney(value: number | null | undefined, currency: MarketCurrency) {
@@ -89,12 +92,18 @@ function chartValue(value: number, metric: ChartMetric, currency: MarketCurrency
   return metric === "price" ? money(value, currency, precisePrice ? 4 : 0) : compactMoney(value, currency);
 }
 
+function preferredIntradayWindow(interval: CandleIntervalChoice): 1 | 7 {
+  return interval !== "auto" ? preferredIntradayDays(interval) : 1;
+}
+
 function portfolioStatus(portfolio: PortfolioSummary, loading: boolean, currency: MarketCurrency, inputMessage = "") {
   if (inputMessage) return inputMessage;
   if (!portfolio.positions.length) return "No quantities entered";
-  if (portfolio.total === null) return loading ? "Updating prices…" : "Price unavailable for one or more holdings";
-  if (portfolio.dailyChange === null) return "24h change unavailable";
-  return `${money(Math.abs(portfolio.dailyChange), currency)} ${portfolio.dailyChange >= 0 ? "up" : "down"} in the last 24h`;
+  if (portfolio.total === null) return loading ? "Updating prices…" : "A price or estimate is unavailable for one or more holdings";
+  if (portfolio.dailyChange === null) return "24h price movement unavailable";
+  if (portfolio.dailyChange === 0) return "No net 24h price movement on current quantities";
+  const amount = formatPortfolioMoney(Math.abs(portfolio.dailyChange), currency);
+  return `24h price movement on current quantities: ${amount} ${portfolio.dailyChange > 0 ? "up" : "down"}`;
 }
 
 function percent(value: number | null | undefined) {
@@ -107,7 +116,7 @@ function timestamp(value: string | undefined) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     timeZoneName: "short",
@@ -118,7 +127,7 @@ function fullTimestamp(value: string | number | null) {
   if (value === null) return "time unavailable";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "time unavailable";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-US", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -171,7 +180,10 @@ function Sparkline({ values, down = false, label, stablecoin = false }: { values
 
 type MetricChartDatum = { timestamp: Date; value: number };
 
-function MetricChart({ points, label, metric, days, currency, precisePrice = false, stablecoin = false, overlays = [], alignRsi = false, fullPoints, viewport, onViewportChange }: { points: ChartPoint[]; down: boolean; label: string; metric: ChartMetric; days: ChartDays; currency: MarketCurrency; precisePrice?: boolean; stablecoin?: boolean; overlays?: LineIndicatorOverlay[]; alignRsi?: boolean; fullPoints: ChartPoint[]; viewport: ChartViewport; onViewportChange: (next: ChartViewport) => void }) {
+function MetricChart({ points, label, metric, days, currency, precisePrice = false, stablecoin = false, overlays = [], alignRsi = false, approximateTime = false, fullPoints, viewport, onViewportChange }: { points: ChartPoint[]; down: boolean; label: string; metric: ChartMetric; days: ChartDays; currency: MarketCurrency; precisePrice?: boolean; stablecoin?: boolean; overlays?: LineIndicatorOverlay[]; alignRsi?: boolean; approximateTime?: boolean; fullPoints: ChartPoint[]; viewport: ChartViewport; onViewportChange: (next: ChartViewport) => void }) {
+  const { appearance } = useAppearance();
+  const chartTheme = marketChartThemeFor(appearance);
+  const chartColors = marketChartColorsFor(appearance);
   const dataFont = useMarketChartFont();
   const plotRef = useRef<HTMLDivElement | null>(null);
   usePlotWheelZoom({ elementRef: plotRef, view: viewport, getBounds: () => agChartPlotBounds(plotRef.current), project: (view, factor, ratio) => chartViewportWheelZoom(fullPoints, view, factor, ratio), onChange: (next) => onViewportChange(next) });
@@ -181,21 +193,37 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
       .map((point) => ({ timestamp: new Date(point.timestamp), value: point.value })),
     [points],
   );
+  const firstPoint = data[0];
+  const lastPoint = data[data.length - 1];
+  const dataScopeSignature = JSON.stringify([
+    label, metric, days, currency, data.length,
+    firstPoint?.timestamp.getTime(), firstPoint?.value,
+    lastPoint?.timestamp.getTime(), lastPoint?.value,
+  ]);
+  const [chartDataOpen, setChartDataOpen] = useState(false);
+  const [chartDataPageState, setChartDataPageState] = useState({ signature: dataScopeSignature, page: 0 });
   const values = data.map((point) => point.value);
-  const color = "#00CCFF";
+  const pageCount = Math.max(1, Math.ceil(data.length / CHART_DATA_PAGE_SIZE));
+  const requestedPage = chartDataPageState.signature === dataScopeSignature ? chartDataPageState.page : 0;
+  const pageIndex = Math.min(requestedPage, pageCount - 1);
+  const pageStart = pageIndex * CHART_DATA_PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + CHART_DATA_PAGE_SIZE, data.length);
+  const pageData = chartDataOpen ? data.slice(pageStart, pageEnd) : [];
+  const color = appearance === "light" ? "#155eef" : "#00CCFF";
   const overlayValues = overlays.flatMap((overlay) => overlay.segments.flatMap((segment) => segment.map((point) => point.value)));
   const domain = visibleChartDomain([...values, ...overlayValues], stablecoin);
   const technical = overlays.length > 0 || alignRsi;
   const overlaySeries: AgLineSeriesOptions<MetricChartDatum>[] = overlays.flatMap((overlay) => overlay.segments.map((segment, index) => ({
     type: "line", id: `${overlay.id}-${index}`, data: segment.map((point) => ({ timestamp: new Date(point.timestamp), value: point.value })),
-    xKey: "timestamp", yKey: "value", yName: `${overlay.label} · candle close`, stroke: overlay.color, strokeWidth: 2,
+    xKey: "timestamp", yKey: "value", yName: `${overlay.label} · candle close`, stroke: appearance === "light" ? chartColors[overlay.id] : overlay.color, strokeWidth: 2,
     marker: { enabled: segment.length === 1, size: 4 }, connectMissingData: false,
     tooltip: { renderer: ({ datum }) => ({
-      heading: new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(datum.timestamp) + " UTC",
+      heading: formatChartSampleTime(datum.timestamp),
       data: [{ label: `${overlay.label} · candle close`, value: money(datum.value, currency, precisePrice ? 6 : 0) }],
     }) },
   })));
   const options: AgChartOptions<MetricChartDatum> = {
+    theme: chartTheme,
     data,
     background: { visible: false },
     animation: { enabled: false },
@@ -207,15 +235,15 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
         position: "bottom",
         ...(technical && data.length >= 2 ? { min: data[0].timestamp, max: data[data.length - 1].timestamp, nice: false, thickness: TECHNICAL_TIME_AXIS_HEIGHT } : {}),
         label: {
-          format: days === 1 ? "%H:%M" : days === 365 ? "%b %y" : "%d %b",
-          color: "#526781",
+          formatter: ({ value }) => formatChartAxisTime(value, days),
+          color: chartColors.axisText,
           fontFamily: dataFont,
           fontSize: 11,
           minSpacing: 56,
         },
         gridLine: { enabled: false },
         tick: { enabled: false },
-        line: { stroke: "#e9edf5" },
+        line: { stroke: chartColors.axisLine },
       },
       y: {
         type: "number",
@@ -226,11 +254,11 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
         ...(alignRsi ? { thickness: TECHNICAL_AXIS_GUTTER } : {}),
         label: {
           formatter: ({ value }) => chartValue(Number(value), metric, currency, precisePrice),
-          color: "#526781",
+          color: chartColors.axisText,
           fontFamily: dataFont,
           fontSize: 11,
         },
-        gridLine: { style: [{ stroke: "#dfe7f2", strokeWidth: 1, lineDash: [4, 7] }] },
+        gridLine: { style: [{ stroke: chartColors.gridLine, strokeWidth: 1, lineDash: [4, 7] }] },
         crossLines: stablecoin
           ? [{
               type: "line",
@@ -238,7 +266,7 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
               stroke: "#d59b3c",
               strokeWidth: 1.5,
               lineDash: [6, 5],
-              label: { text: "$1.00", position: "right", color: "#a57322", fontSize: 9 },
+              label: { text: "$1.00", position: "right", color: appearance === "light" ? "#8a641f" : "#f2cb76", fontSize: 9 },
             }]
           : undefined,
       },
@@ -255,10 +283,7 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
       marker: { enabled: false },
       tooltip: {
         renderer: ({ datum }) => ({
-          heading: new Intl.DateTimeFormat("en-GB", days === 1
-            ? { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }
-            : { day: "2-digit", month: "short", year: days === 365 ? "numeric" : undefined },
-          ).format(datum.timestamp),
+          heading: formatChartSampleTime(datum.timestamp, approximateTime),
           data: [{ label, value: chartValue(datum.value, metric, currency, precisePrice) }],
         }),
       },
@@ -275,8 +300,34 @@ function MetricChart({ points, label, metric, days, currency, precisePrice = fal
     ? `${label}. USD stablecoin chart with a $1.00 peg reference. From ${chartValue(values[0], metric, currency, precisePrice)} to ${chartValue(values[values.length - 1], metric, currency, precisePrice)}.`
     : `${label}. From ${chartValue(values[0], metric, currency, precisePrice)} to ${chartValue(values[values.length - 1], metric, currency, precisePrice)}.`;
   return (
-    <div ref={plotRef} className="metric-chart" role="img" aria-label={`${description} The vertical scale follows ${overlays.length ? "the price and candle-close indicators" : "the visible data"}${domain && domain.min > 0 ? " and starts above zero" : ""}. Scroll over the plot to zoom; buttons are available below.`}>
-      <AgCharts className="ag-market-chart" modules={metricChartModules} options={options} />
+    <div className="metric-chart" role="group" aria-label={`${label} line chart`}>
+      <div ref={plotRef} className="metric-chart-plot" role="img" aria-label={`${description} Times are in UTC.${approximateTime ? " Sample times are estimated." : ""} The vertical scale follows ${overlays.length ? "the price and candle-close indicators" : "the visible data"}${domain && domain.min > 0 ? " and starts above zero" : ""}. Scroll over the plot to zoom; buttons are available below.`}>
+        <AgCharts className="ag-market-chart" modules={metricChartModules} options={options} />
+      </div>
+      <details className="metric-chart-data" onToggle={(event) => setChartDataOpen(event.currentTarget.open)}>
+        <summary>View chart data ({data.length} visible points)</summary>
+        {chartDataOpen && (
+          <div className="metric-chart-data-panel">
+            <div className="metric-chart-pagination">
+              <button type="button" aria-label={`Previous ${CHART_DATA_PAGE_SIZE} samples`} disabled={pageIndex === 0} onClick={() => setChartDataPageState({ signature: dataScopeSignature, page: Math.max(0, pageIndex - 1) })}>Previous</button>
+              <span aria-live="polite" aria-atomic="true">Samples {pageStart + 1}–{pageEnd} of {data.length}</span>
+              <button type="button" aria-label={`Next ${CHART_DATA_PAGE_SIZE} samples`} disabled={pageIndex >= pageCount - 1} onClick={() => setChartDataPageState({ signature: dataScopeSignature, page: Math.min(pageCount - 1, pageIndex + 1) })}>Next</button>
+            </div>
+            <div className="metric-chart-data-table" tabIndex={0} aria-label={`Visible data points for ${label}`}>
+              <table>
+                <caption>{label}; sample times in UTC{approximateTime ? " (estimated)" : ""}.</caption>
+                <thead><tr><th scope="col">Sample time</th><th scope="col">{chartMetrics.find((item) => item.id === metric)?.label ?? "Value"} ({currency})</th></tr></thead>
+                <tbody>{pageData.map((point, index) => (
+                  <tr key={`${point.timestamp.getTime()}-${pageStart + index}`}>
+                    <td>{formatChartSampleTime(point.timestamp, approximateTime)}</td>
+                    <td>{chartValue(point.value, metric, currency, precisePrice)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </details>
     </div>
   );
 }
@@ -298,9 +349,10 @@ async function requestOverview(currency: MarketCurrency, signal: AbortSignal): P
   const response = await fetch(`/api/market/quotes?currency=${encodeURIComponent(currency)}`, { cache: "no-store", signal });
   if (!response.ok) throw new Error("Market prices could not be refreshed.");
   const data = (await response.json()) as MarketQuotes;
-  if (data.currency !== currency || data.provider !== "CoinGecko" || !Array.isArray(data.coins)) {
+  if (data.currency !== currency || data.provider !== "CoinGecko") {
     throw new Error("Market prices did not match the selected currency.");
   }
+  if (!hasDistinctTrackedCoinIds(data.coins)) throw new Error("Market prices included duplicate or unsupported assets.");
   return data;
 }
 
@@ -311,6 +363,8 @@ export default function MarketDashboard({ aiInsightsAvailable = false }: { aiIns
 }
 
 function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorkspaceProps) {
+  const { appearance } = useAppearance();
+  const chartColors = marketChartColorsFor(appearance);
   const aiInsightsAvailable = useContext(MarketInsightAvailability);
   const session = useCustomerSession();
   const privateData = usePrivateDataScope();
@@ -335,6 +389,10 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
   const [intradayDays, setIntradayDays] = usePublicChartControl(publicChart, onPublicChartChange, "intradayDays");
   const lineHistoryEnabled = chartMetric !== "price" || priceStyle !== "candles";
   const [chartViewport, setChartViewport] = usePublicChartControl(publicChart, onPublicChartChange, "viewport");
+  function chooseCandleInterval(next: CandleIntervalChoice) {
+    if (next !== "auto" && !supportsIntradayWindow(next, intradayDays)) setIntradayDays(preferredIntradayWindow(next));
+    setCandleInterval(next);
+  }
   const [loadingMarket, setLoadingMarket] = useState(true);
   const [marketFailure, setMarketFailure] = useState<{ currency: MarketCurrency; message: string } | null>(null);
   const [overviewRefresh, setOverviewRefresh] = useState(0);
@@ -811,7 +869,9 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
     ? `${headline.updatedAt ? `CoinGecko data as of ${fullTimestamp(headline.updatedAt)}` : "CoinGecko asset update time unavailable"} · snapshot retrieved ${fullTimestamp(headline.retrievedAt)}`
     : headline.source === "chart"
       ? `${chartSeriesSource === "market_overview_sparkline" ? "Estimated chart sample" : "Chart sample"} ${fullTimestamp(headline.sampleAt)} · chart retrieved ${fullTimestamp(headline.retrievedAt)}`
-      : "Market value unavailable";
+      : (marketLoading || chartIsLoading)
+        ? `Loading ${selectedMetricLabel.toLowerCase()}…`
+        : "Market value unavailable";
   const selectedIsStablecoin = selectedId === "paypal-usd";
   const preciseStablecoinPrice = selectedChartMetric === "price" && selectedIsStablecoin;
   const stablecoinPriceChart = !minuteCandles && preciseStablecoinPrice && currency === "USD";
@@ -828,13 +888,13 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
   const minuteLast = minuteHistory?.candles.at(-1);
   const displayedChange = minuteCandles ? minuteHistory ? chartPercentageChange(minuteHistory.candles.map((candle) => ({ timestamp: candle.timestamp, value: candle.close }))) : null : chartChange;
   const displayedRangeLabel = minuteCandles ? `${intradayDays}-day candle window` : selectedRangeLabel;
-  const displayedProvenance = minuteCandles ? minuteLast ? `Last closed candle ${fullTimestamp(minuteLast.timestamp)} · retrieved ${fullTimestamp(minuteHistory?.retrievedAt ?? null)}` : "Complete minute history unavailable until loaded" : headlineProvenance;
+  const displayedProvenance = minuteCandles ? minuteLast ? `Last closed candle ${fullTimestamp(minuteLast.timestamp)} · retrieved ${fullTimestamp(minuteHistory?.retrievedAt ?? null)}` : "Complete Binance history unavailable until loaded" : headlineProvenance;
   const indicatorValues = useMemo(() => candleHistory ? calculatePriceIndicators(candleHistory) : null, [candleHistory]);
   const indicatorStart = displayedChartSeries[0]?.timestamp;
   const indicatorEnd = displayedChartSeries[displayedChartSeries.length - 1]?.timestamp;
   const indicatorWindow = indicatorStart !== undefined && indicatorEnd !== undefined && indicatorStart < indicatorEnd ? { start: indicatorStart, end: indicatorEnd } : null;
   const lineOverlays = selectedChartMetric === "price" && priceStyle === "line" && timestampedPriceLine && candleHistory?.source === "CoinGecko" && indicatorValues && indicatorWindow
-    ? lineIndicatorOverlays(candleHistory, indicatorValues, priceIndicators, indicatorWindow) : [];
+    ? lineIndicatorOverlays(candleHistory, indicatorValues, priceIndicators, indicatorWindow, chartColors) : [];
   const lineRsiSegments = priceIndicators.rsi && timestampedPriceLine && candleHistory?.source === "CoinGecko" && indicatorValues && indicatorWindow
     ? indicatorSegments(candleHistory, indicatorValues.rsi, indicatorWindow) : [];
 
@@ -971,15 +1031,6 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
           <div>
             <p className="eyebrow">{tab === "account" ? "YOUR ACCOUNT WORKSPACE" : "CLEAR PRICES. REAL MARKET CONTEXT."}</p>
             <h1>{tab === "account" ? "Your plans, in perspective." : tab === "shop" ? "Discover something good." : tab === "portfolio" ? "Your portfolio view." : tab === "settings" ? "Your data, your choice." : tab === "markets" ? "Explore the market." : "A clearer view of crypto."}</h1>
-            <p className="page-subtitle">
-              {tab === "account"
-                ? "Explore personal scenarios or review a permitted Business report, with a clear view of where each figure comes from."
-                : tab === "settings" ? "Manage the information you save in this browser." : tab === "shop"
-                ? "Find products, compare retailer offers, and build your collections."
-                : tab === "portfolio"
-                  ? "Track quantities you enter yourself, with market reference prices."
-                  : "Market metrics and charting, alongside the wallet you already use."}
-            </p>
           </div>
           {tab !== "account" && <div className={tab === "overview" || tab === "markets" ? "updated-badge market-updated-badge" : "updated-badge"} aria-live="polite">
             <span className="live-pulse" />
@@ -1076,7 +1127,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
                   </div></div>}
                 </div>
 
-                {selectedChartMetric === "price" && priceStyle === "candles" && <CandleFeedControls coinId={selectedId} interval={candleInterval} days={intradayDays} onIntervalChange={setCandleInterval} onDaysChange={setIntradayDays} />}
+                {selectedChartMetric === "price" && priceStyle === "candles" && <CandleFeedControls coinId={selectedId} interval={candleInterval} days={intradayDays} onIntervalChange={chooseCandleInterval} onDaysChange={setIntradayDays} />}
 
                 <div className="chart-legend-row"><span className="chart-kind"><span className={displayedChange !== null && displayedChange < 0 ? "chart-kind-dot down" : "chart-kind-dot"} style={selectedChartMetric !== "price" || priceStyle === "line" ? { background: "#00CCFF" } : undefined} /> {selectedMetricLabel}{minuteCandles ? " · USDT" : stablecoinPriceChart ? <span className="peg-reference"> · $1.00 peg reference</span> : null}</span>{selectedChartMetric === "price" && <PriceIndicatorControls indicators={priceIndicators} onChange={setPriceIndicators} history={candleHistory} />}</div>
                 {selectedChartMetric === "price" && priceStyle === "line" && indicatorEnabled && <LineIndicatorStatus request={candleRequest} indicators={priceIndicators} values={indicatorValues} window={indicatorWindow} approximateLine={chartMatches && chartSeriesSource === "market_overview_sparkline"} lineAvailable={timestampedPriceLine} precisePrice={selectedIsStablecoin} onCandles={() => setPriceStyle("candles")} />}
@@ -1084,7 +1135,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
                 {selectedChartMetric === "price" && priceStyle === "candles" ? <div className="candle-frame"><CandleHistoryPanel key={`${candleSelectionIdentity({ coinId: selectedId, currency, days, intraday: intradaySelection })}:${chartRefresh}`} coinId={selectedId} currency={currency} days={days} intraday={intradaySelection} precisePrice={selectedIsStablecoin} request={candleRequest} indicators={priceIndicators} onIndicatorsChange={setPriceIndicators} showIndicatorControls={false} viewSnapshot={candleView} onViewSnapshotChange={setCandleView} /></div> : <><div className="chart-frame">
                   {chartIsLoading ? <div className="chart-empty" role="status">Loading {selectedMetricLabel.toLowerCase()} history…</div> :
                     chartError ? <div className="chart-empty" role="status">{chartError}</div> :
-                      <MetricChart points={displayedChartSeries} down={(chartChange ?? 0) < 0} label={chartLabel} metric={selectedChartMetric} days={days} currency={currency} precisePrice={preciseStablecoinPrice} stablecoin={stablecoinPriceChart} overlays={lineOverlays} alignRsi={selectedChartMetric === "price" && priceIndicators.rsi && timestampedPriceLine && Boolean(candleHistory)} fullPoints={chartSeries} viewport={chartViewport} onViewportChange={setChartViewport} />}
+                      <MetricChart points={displayedChartSeries} down={(chartChange ?? 0) < 0} label={chartLabel} metric={selectedChartMetric} days={days} currency={currency} precisePrice={preciseStablecoinPrice} stablecoin={stablecoinPriceChart} overlays={lineOverlays} alignRsi={selectedChartMetric === "price" && priceIndicators.rsi && timestampedPriceLine && Boolean(candleHistory)} approximateTime={chartSeriesSource === "market_overview_sparkline"} fullPoints={chartSeries} viewport={chartViewport} onViewportChange={setChartViewport} />}
                 </div>
                 {selectedChartMetric === "price" && priceIndicators.rsi && timestampedPriceLine && candleHistory && indicatorValues && indicatorWindow && <PriceLineRsi segments={lineRsiSegments} window={indicatorWindow} days={days} />}
                 {chartMatches && chartSeriesSource === "market_overview_sparkline" && (
@@ -1093,9 +1144,8 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
                   </p>
                 )}
                 <div className="chart-scale"><span>Visible low {chartValues.length ? chartValue(Math.min(...chartValues), selectedChartMetric, currency, preciseStablecoinPrice) : "—"}</span><span>Visible high {chartValues.length ? chartValue(Math.max(...chartValues), selectedChartMetric, currency, preciseStablecoinPrice) : "—"}</span></div>
-                <p className="chart-scale-note">Scale follows visible data{lineOverlays.length > 0 ? " and candle-close averages" : ""}{visibleDomain && visibleDomain.min > 0 ? " · starts above zero" : ""}</p>
+                <p className="chart-scale-note">Times in UTC · Scale follows visible data{lineOverlays.length > 0 ? " and candle-close averages" : ""}{visibleDomain && visibleDomain.min > 0 ? " · starts above zero" : ""}</p>
                 <ChartZoomControls viewport={chartViewport} points={chartSeries} visiblePoints={displayedChartSeries} onAction={changeChartViewport} />
-                <p className="chart-scale-note">Scroll over the plot to zoom at the pointer. Page scrolling resumes at the zoom limits.</p>
                 <div className="chart-footer">
                   <span>Source: <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a></span>
                   <span>Chart retrieved {timestamp(chartMatches ? chart?.retrievedAt : undefined)}</span>
@@ -1109,8 +1159,8 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
                   <div className="card-heading-row"><div><p className="eyebrow light-eyebrow">YOUR CRYPTO PORTFOLIO</p><h2>Track what you hold</h2></div><span className="sparkle-badge" aria-hidden="true">✳</span></div>
                   {!privateData.ready ? <><p className="portfolio-total empty-total">—</p><p className="portfolio-delta muted-text">Saved holdings stay hidden until your session is verified.</p></> : portfolio.positions.length ? (
                     <>
-                      <p className={portfolio.total === null ? "portfolio-total empty-total" : "portfolio-total"}>{money(portfolio.total, currency)}</p>
-                      <p className={portfolio.dailyChange === null ? "portfolio-delta muted-text" : portfolio.dailyChange >= 0 ? "portfolio-delta positive-text" : "portfolio-delta negative-text"}>
+                      <p className={portfolio.total === null ? "portfolio-total empty-total" : "portfolio-total"}>{formatPortfolioMoney(portfolio.total, currency)}</p>
+                      <p className={portfolio.dailyChange === null || portfolio.dailyChange === 0 ? "portfolio-delta muted-text" : portfolio.dailyChange > 0 ? "portfolio-delta positive-text" : "portfolio-delta negative-text"}>
                         {portfolioStatus(portfolio, marketLoading, currency, portfolioInputMessage)}
                       </p>
                     </>
@@ -1123,7 +1173,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
 
                 <article className="wallet-note">
                   <span className="wallet-note-icon" aria-hidden="true">↗</span>
-                  <div><p className="wallet-note-title">Your wallet stays yours</p><p>Use Venmo for wallet and payment activity. This view adds market context and charts.</p></div>
+                  <div><strong className="wallet-note-title">Your wallet stays yours</strong></div>
                 </article>
               </aside>
             </section>
@@ -1172,14 +1222,15 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
           </>
         )}
 
-        <footer className="disclosure">
+        <footer className="disclosure"><details><summary>About this view</summary><p>
           {tab === "account" ? businessView
             ? "This Business preview uses fictional examples or your locally provided report. A PayPal account is not connected; live reporting requires authorized account access and a verified data source."
             : "Personal planning uses hypothetical amounts and an optional manually entered portfolio estimate. It does not read a cash balance, transfer money, or change an account."
             : tab === "settings" ? "Your saved information is local to this browser. This concept has no connected payment account." : tab === "shop"
             ? "Product prices and availability can change. Channel3 links open the retailer, where you can review the current offer and complete checkout."
             : "Crypto market information is for reference only. Tracked assets reflect PayPal's published crypto list; availability varies by region and account. Portfolio values use amounts entered manually on this device and do not represent Venmo balances or a connected wallet."}
-        </footer>
+          {tab === "portfolio" && " The 24h price movement assumes the same quantities throughout; it does not use transaction history."}
+        </p></details></footer>
       </div>
 
     </SiteShell>
@@ -1214,16 +1265,17 @@ function PortfolioPanel({
   currency: MarketCurrency;
 }) {
   const quotesById = new Map(coins.map((coin) => [coin.id, coin]));
+  const hasNoHoldings = portfolio.positions.length === 0;
   return (
     <section className="portfolio-page">
-      <div className="portfolio-summary">
-        <div><p className="eyebrow light-eyebrow">MANUAL PORTFOLIO VIEW</p><h2>Holdings estimate</h2><p>Enter quantities to see an estimate using current market prices.</p></div>
-        <div className="portfolio-summary-value"><span>Total value · {currency}</span><strong>{money(portfolio.total, currency)}</strong><small className={portfolio.dailyChange === null ? undefined : portfolio.dailyChange >= 0 ? "positive-text" : "negative-text"}>{portfolioStatus(portfolio, loading, currency, inputMessage)}</small></div>
+      <div className={hasNoHoldings ? "portfolio-summary portfolio-summary--empty" : "portfolio-summary"}>
+        <div><p className="eyebrow light-eyebrow">MANUAL PORTFOLIO VIEW</p><h2>Holdings estimate</h2>{hasNoHoldings && <a className="portfolio-empty-link" href="#portfolio-holdings" aria-controls="portfolio-holdings">Add quantities <span aria-hidden="true">↓</span></a>}</div>
+        <div className="portfolio-summary-value"><span>Total value · {currency}</span><strong>{formatPortfolioMoney(portfolio.total, currency)}</strong><small className={portfolio.dailyChange === null || portfolio.dailyChange === 0 ? undefined : portfolio.dailyChange > 0 ? "positive-text" : "negative-text"}>{portfolioStatus(portfolio, loading, currency, inputMessage)}</small></div>
       </div>
       <PortfolioAllocation portfolio={portfolio} currency={currency} inputMessage={inputMessage} loading={loading} />
-      <div className="manual-holdings-card">
+      <div id="portfolio-holdings" className="manual-holdings-card">
         <div className="section-heading"><div><p className="eyebrow">EDIT HOLDINGS</p><h2>Crypto quantities</h2></div><span className="local-badge">Saved on this device</span></div>
-        <p id="holding-quantity-help" className="data-caption">Use a period for decimals. Complete, valid quantities up to 1,000,000,000,000 save when you leave the field or press Enter.</p>
+        <p id="holding-quantity-help" className="data-caption">Use a period for decimals. Quantities up to 1,000,000,000,000 save when you leave the field or press Enter. If a quantity would be rounded, shorten it before saving.</p>
         {TRACKED_COINS.map((id) => {
           const asset = ASSET_DETAILS[id];
           const coin = quotesById.get(id);
@@ -1233,11 +1285,13 @@ function PortfolioPanel({
           const amount = amounts[id];
           const value = drafts[id] ?? (amount === undefined ? "" : String(amount));
           const draft = parseHoldingDraft(value);
-          const rowValue = draft.kind === "valid" && amount && price !== null ? amount * price : null;
-          return <label className="holding-row" key={id}>
-            <span className="holding-asset"><AssetMark id={id} /><span><strong>{name}</strong><small>{symbol}{id === "paypal-usd" ? " · USD stablecoin" : ""} · {price === null ? loading ? "Loading price…" : "Price unavailable" : `${money(price, currency, id === "paypal-usd" ? 4 : 0)} each`}</small></span></span>
-            <span className="holding-input-wrap"><input type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={value} onChange={(event) => updateAmount(id, event.target.value)} onBlur={() => commitAmount(id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} readOnly={!editable} aria-invalid={draft.kind === "invalid"} aria-describedby="holding-quantity-help" aria-label={`Amount of ${name} to include in your manual portfolio`} placeholder="0" /><span>{symbol}</span></span>
-            <strong className="holding-value">{rowValue !== null && Number.isFinite(rowValue) ? money(rowValue, currency) : "—"}</strong>
+          const rowValue = draft.kind === "valid" && amount !== undefined ? calculateHoldingValue(amount, price) : null;
+          const precisionError = draft.kind === "invalid" && draft.reason === "precision";
+          const providerUpdate = coin ? formatMarketProviderUpdateTime(coin.lastUpdated) : null;
+          return <label className={precisionError ? "holding-row holding-row--precision-error" : "holding-row"} key={id}>
+            <span className="holding-asset"><AssetMark id={id} /><span><strong>{name}</strong><small>{symbol}{id === "paypal-usd" ? " · USD stablecoin" : ""} · {price === null ? loading ? "Loading price…" : "Price unavailable" : `${money(price, currency, id === "paypal-usd" ? 4 : 0)} each`}</small>{providerUpdate && <small className="holding-quote-time">CoinGecko update: {providerUpdate === "time unavailable" ? providerUpdate : <><span className="holding-quote-part">{providerUpdate.slice(0, 10)}</span>{" "}<span className="holding-quote-part">{providerUpdate.slice(11)}</span></>}</small>}{precisionError && <small id={`holding-precision-${id}`} className="holding-precision-error">This quantity would be rounded and cannot be saved. Shorten it to continue.</small>}</span></span>
+            <span className="holding-input-wrap"><input type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={value} onChange={(event) => updateAmount(id, event.target.value)} onBlur={() => commitAmount(id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} readOnly={!editable} aria-invalid={draft.kind === "invalid"} aria-describedby={`holding-quantity-help${precisionError ? ` holding-precision-${id}` : ""}`} aria-label={`Amount of ${name} to include in your manual portfolio`} placeholder="0" /><span>{symbol}</span></span>
+            <strong className="holding-value">{rowValue !== null && Number.isFinite(rowValue) ? formatPortfolioMoney(rowValue, currency) : "—"}</strong>
           </label>;
         })}
         {!coins.length && <div className="list-loading">{loading ? "Updating market prices…" : "Prices are unavailable. Your quantities remain editable."}</div>}

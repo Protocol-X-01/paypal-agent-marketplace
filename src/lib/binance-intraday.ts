@@ -1,4 +1,5 @@
 import 'server-only';
+import { acquireClientSlotForAddress } from './request-limits';
 
 // Binance's market-data-only origin; this module has no account or order path.
 const KLINES_URL = 'https://data-api.binance.vision/api/v3/klines';
@@ -10,7 +11,7 @@ const SYMBOLS = {
   litecoin: 'LTCUSDT',
   'bitcoin-cash': 'BCHUSDT',
 } as const;
-const INTERVAL_MINUTES = { '3m': 3, '5m': 5, '15m': 15 } as const;
+const INTERVAL_MINUTES = { '3m': 3, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440 } as const;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_CLOCK_SKEW_MS = 30_000;
 const CACHE_MS = 15_000;
@@ -21,6 +22,9 @@ const MAX_CONCURRENT = 4;
 export type IntradayCoin = keyof typeof SYMBOLS;
 export type IntradayInterval = keyof typeof INTERVAL_MINUTES;
 export type IntradayDays = 1 | 7;
+const SUPPORTED_DAYS: Record<IntradayInterval, readonly IntradayDays[]> = {
+  '3m': [1], '5m': [1], '15m': [1, 7], '30m': [1, 7], '1h': [1, 7], '4h': [1, 7], '1d': [7],
+};
 export type IntradayErrorKind = 'rate_limited' | 'invalid_response' | 'unavailable' | 'data_gap';
 
 export class IntradayError extends Error {
@@ -43,7 +47,7 @@ export interface IntradayHistory {
   source: 'Binance Spot';
   quote: 'USDT';
   interval: IntradayInterval;
-  intervalMinutes: 3 | 5 | 15;
+  intervalMinutes: (typeof INTERVAL_MINUTES)[IntradayInterval];
   days: IntradayDays;
   timestampKind: 'close';
   observedAt: string;
@@ -60,6 +64,10 @@ export function isIntradayCoin(value: string): value is IntradayCoin {
 
 export function isIntradayInterval(value: string): value is IntradayInterval {
   return Object.prototype.hasOwnProperty.call(INTERVAL_MINUTES, value);
+}
+
+export function isSupportedIntradayWindow(interval: IntradayInterval, days: IntradayDays): boolean {
+  return SUPPORTED_DAYS[interval].includes(days);
 }
 
 function parsePrice(value: unknown): number {
@@ -254,20 +262,30 @@ export function createBinanceIntradayClient(options: ClientOptions = {}) {
     }
   }
 
-  async function get(coinId: IntradayCoin, interval: IntradayInterval, days: IntradayDays): Promise<IntradayHistory> {
+  async function get(
+    coinId: IntradayCoin,
+    interval: IntradayInterval,
+    days: IntradayDays,
+    address = 'unknown',
+  ): Promise<IntradayHistory> {
     // Defensive checks also protect non-route callers from unsupported windows.
     if (!isIntradayCoin(coinId) || !isIntradayInterval(interval) || (days !== 1 && days !== 7) ||
-        (days === 7 && interval !== '15m')) throw new IntradayError('unavailable');
+        !isSupportedIntradayWindow(interval, days)) throw new IntradayError('unavailable');
     const key = `${coinId}:${interval}:${days}`;
     const time = now();
     const cached = cache.get(key);
     if (cached && time >= cached.createdAt && time - cached.createdAt < CACHE_MS) return cached.value;
     const ongoing = pending.get(key);
     if (ongoing) return ongoing;
+    const releaseClientSlot = acquireClientSlotForAddress(address, 'binance-intraday', 2);
+    if (!releaseClientSlot) throw new IntradayError('rate_limited', 1);
     const promise = load(coinId, interval, days).then((value) => {
       cache.set(key, { value, createdAt: now() });
       return value;
-    }).finally(() => { pending.delete(key); });
+    }).finally(() => {
+      pending.delete(key);
+      releaseClientSlot();
+    });
     pending.set(key, promise);
     return promise;
   }

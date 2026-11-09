@@ -1,0 +1,25 @@
+$kind: http-request
+url: '{{baseUrl}}/api/market/intraday/:coinId?interval=1d&days=1'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: interval
+    value: 1d
+  - key: days
+    value: '1'
+pathVariables:
+  - key: coinId
+    value: bitcoin
+settings: {}
+order: 23100
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Rejects a single-day window for daily candles", function () {
+        pm.response.to.have.status(400);
+        const body = pm.response.json();
+        pm.expect(body.error.code).to.eql("unsupported_window");
+      });

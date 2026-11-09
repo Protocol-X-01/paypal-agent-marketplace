@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "PayPal Markets",
+    "slug": "paypal-markets-mobile",
+    "version": "0.1.0",
+    "icon": "./assets/branding/market-icon.png",
+    "orientation": "default",
+    "scheme": "paypalmarkets",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.protocolx.paypalmarkets",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.protocolx.paypalmarkets",
+      "adaptiveIcon": {
+        "backgroundColor": "#001C64",
+        "foregroundImage": "./assets/branding/market-foreground.png",
+        "monochromeImage": "./assets/branding/market-monochrome.png"
+      }
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/branding/market-favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
+      "./plugins/with-unsigned-android-release.cjs",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

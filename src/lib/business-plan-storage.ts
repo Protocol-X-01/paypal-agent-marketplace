@@ -1,3 +1,5 @@
+import { MAX_REFUND_THRESHOLD_PCT, MIN_REFUND_THRESHOLD_PCT } from "./business-thresholds";
+
 export const BUSINESS_PLAN_STORAGE_KEY = "paypal-business-monitoring-plan-v1";
 
 export type Perspective = "teams" | "leadership";
@@ -30,13 +32,13 @@ export type BusinessPlanDraft = { plan: MonitoringPlan; baseline: string | null 
 export const indicatorsByPerspective: Record<Perspective, IndicatorOption[]> = {
   teams: [
     { id: "transactionVolume", label: "Payment activity", description: "Included transaction count by period" },
-    { id: "refundShare", label: "Refund share", description: "Refund amount relative to gross volume" },
+    { id: "refundShare", label: "Refund ratio", description: "Refund amount relative to gross volume; may exceed 100%" },
     { id: "dataFreshness", label: "Data freshness", description: "Source update time when available" },
     { id: "customerAccounts", label: "Active customer accounts", description: "Requires an approved customer activity definition and company feed", gated: true },
   ],
   leadership: [
     { id: "activityTrend", label: "Payment activity trend", description: "Included transaction change between periods" },
-    { id: "refundShare", label: "Refund share", description: "Refund amount relative to gross volume" },
+    { id: "refundShare", label: "Refund ratio", description: "Refund amount relative to gross volume; may exceed 100%" },
     { id: "customerAccounts", label: "Active customer accounts", description: "Requires an approved customer activity definition and company feed", gated: true },
     { id: "repeatActivity", label: "Customer retention", description: "Requires an approved identity and cohort definition", gated: true },
   ],
@@ -84,7 +86,7 @@ function parseDraftView(value: unknown, perspective: Perspective): DraftView | n
     typeof value.activityDropPct !== "number" || !Number.isInteger(value.activityDropPct) ||
     value.activityDropPct < 5 || value.activityDropPct > 50 || value.activityDropPct % 5 !== 0 ||
     typeof value.refundSharePct !== "number" || !Number.isInteger(value.refundSharePct) ||
-    value.refundSharePct < 1 || value.refundSharePct > 20
+    value.refundSharePct < MIN_REFUND_THRESHOLD_PCT || value.refundSharePct > MAX_REFUND_THRESHOLD_PCT
   ) {
     return null;
   }

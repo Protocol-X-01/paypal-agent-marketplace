@@ -1,0 +1,31 @@
+$kind: http-request
+description: >-
+  Browse the US storefront; the response must report US and USD. Curated
+  browsing requires the shared CHANNEL3_COLLECTION_ID on the server and returns
+  503 when it is missing or invalid.
+url: '{{baseUrl}}/api/marketplace/catalog?section=audio&storefront=US'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: section
+    value: audio
+  - key: storefront
+    value: US
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns US curated products", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.section).to.eql("audio");
+        pm.expect(body.storefront).to.eql("US");
+        pm.expect(body.currency).to.eql("USD");
+        pm.expect(body.products).to.be.an("array");
+        if (pm.variables.get("mockLocaleFixture") === "enabled") pm.expect(body.products[0].id).to.eql("fixture-US-USD-en");
+      });
+settings: {}
+order: 2300

@@ -49,6 +49,11 @@ function simulation(handler) {
     const localRequire = (name) => {
       if (name === 'server-only') return {};
       if (name === 'next/server') return { NextResponse };
+      if (name === '@/lib/request-limits') return {
+        getTrustedClientAddress: () => 'fixture-client',
+        takeClientRequestLimit: () => ({ allowed: true, retryAfterSeconds: 0 }),
+      };
+      if (name === './request-limits') return { acquireClientSlotForAddress: () => () => {} };
       if (name.startsWith('@/')) return load(`src/${name.slice(2)}.ts`);
       throw new Error(`Unexpected dependency: ${name}`);
     };

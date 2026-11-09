@@ -1,0 +1,20 @@
+$kind: http-request
+description: Reject an unsupported curated storefront before provider work.
+url: '{{baseUrl}}/api/marketplace/catalog?section=audio&storefront=FR'
+method: GET
+queryParams:
+  - key: section
+    value: audio
+  - key: storefront
+    value: FR
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("rejects an unsupported catalog storefront", function () {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.json().error).to.be.a("string");
+      });
+settings: {}
+order: 2500

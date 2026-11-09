@@ -1,0 +1,23 @@
+$kind: http-request
+description: Rejects a currency outside the supported display-currency list.
+url: '{{baseUrl}}/api/market/quotes?currency=XYZ'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: currency
+    value: XYZ
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("unsupported quote currency is rejected", function () {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.headers.get("Content-Type")).to.match(/application\/json/i);
+        const body = pm.response.json();
+        pm.expect(body.error.code).to.eql("unsupported_currency");
+        pm.expect(body.error.message).to.be.a("string").and.not.empty;
+      });
+settings: {}
+order: 1300

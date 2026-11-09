@@ -1,0 +1,27 @@
+$kind: http-request
+name: Reject a foreign-origin fictional report
+description: This deliberately foreign origin must not reach the OpenAI provider.
+url: '{{baseUrl}}/api/ai/report-insight'
+method: POST
+headers:
+  - key: Origin
+    value: https://foreign.example.test
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {"days":7,"account":"All","market":"All"}
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Foreign-origin request is rejected or disabled", function () {
+        pm.expect([403, 503]).to.include(pm.response.code);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+      });
+order: 1000

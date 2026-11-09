@@ -12,6 +12,7 @@ import {
 import styles from "./paypal-activity-panel.module.css";
 
 type DateOrder = "" | PayPalActivityOptions["dateOrder"];
+type TimeZone = "" | PayPalActivityOptions["timeZone"];
 type WindowChoice = "" | "7" | "30";
 
 function excluded(period: PayPalActivityPeriod) {
@@ -21,15 +22,16 @@ function excluded(period: PayPalActivityPeriod) {
 function PeriodCard({ title, period }: { title: string; period: PayPalActivityPeriod }) {
   return <article className={styles.period}>
     <span>{title}</span>
-    <strong>{new Intl.NumberFormat("en-GB").format(period.included)}</strong>
+    <strong>{new Intl.NumberFormat("en-US").format(period.included)}</strong>
     <small>Included checkout credit rows</small>
     <p>{period.startDate} to before {period.endExclusive} UTC</p>
-    <p>{new Intl.NumberFormat("en-GB").format(excluded(period))} other rows excluded</p>
+    <p>{new Intl.NumberFormat("en-US").format(excluded(period))} other rows excluded</p>
   </article>;
 }
 
-export default function PayPalActivityPanel({ onReportChange }: { onReportChange: (active: boolean) => void }) {
+export default function PayPalActivityPanel({ onReportChange }: { onReportChange: (active: boolean, summary?: PayPalActivitySummary | null) => void }) {
   const [dateOrder, setDateOrder] = useState<DateOrder>("");
+  const [timeZone, setTimeZone] = useState<TimeZone>("");
   const [windowDays, setWindowDays] = useState<WindowChoice>("");
   const [endExclusive, setEndExclusive] = useState("");
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
@@ -44,20 +46,28 @@ export default function PayPalActivityPanel({ onReportChange }: { onReportChange
     return () => { window.clearTimeout(timer); revision.current += 1; };
   }, []);
 
-  const ready = Boolean(dateOrder && windowDays && endExclusive && todayUtc && endExclusive <= todayUtc && privacyConfirmed && coverageConfirmed);
+  const ready = Boolean(dateOrder && timeZone && windowDays && endExclusive && todayUtc && endExclusive <= todayUtc && privacyConfirmed && coverageConfirmed);
   function clearReport() {
     revision.current += 1;
     setReading(false);
     setSummary(null);
     setError("");
-    onReportChange(false);
+    onReportChange(false, null);
+  }
+
+  function changeCriteria(change: () => void) {
+    clearReport();
+    setCoverageConfirmed(false);
+    change();
   }
 
   async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
-    if (!file || !dateOrder || !windowDays || !ready) return;
+    if (!file || !dateOrder || !timeZone || !windowDays || !ready) return;
     const current = ++revision.current;
+    // The coverage confirmation applies to this file only, including failed reads.
+    setCoverageConfirmed(false);
     setError("");
     if (file.size > PAYPAL_ACTIVITY_MAX_BYTES) {
       setError("The file is too large. Choose one CSV of at most 4 MiB.");
@@ -70,6 +80,7 @@ export default function PayPalActivityPanel({ onReportChange }: { onReportChange
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       const result = summarizePayPalActivity(text, {
         dateOrder,
+        timeZone,
         windowDays: Number(windowDays) as 7 | 30,
         endExclusive,
         coverageConfirmed,
@@ -77,7 +88,7 @@ export default function PayPalActivityPanel({ onReportChange }: { onReportChange
       });
       if (!result.ok) { setError(result.error); return; }
       setSummary(result.summary);
-      onReportChange(true);
+      onReportChange(true, result.summary);
     } catch {
       if (current === revision.current) setError("The file could not be read as a UTF-8 CSV. Please choose it again.");
     } finally {
@@ -93,28 +104,34 @@ export default function PayPalActivityPanel({ onReportChange }: { onReportChange
         <p className={styles.privacy}><strong>Your export may contain customer names, email addresses and other personal information.</strong> The app reads the file in this browser, without uploading or saving it. Your browser or operating system may retain its own copies. Use only business-wide activity you are authorized to review; avoid very small customer groups.</p>
         <div className={styles.requirements}>
           <strong>Before you choose a file</strong>
-          <p>Use one UTF-8 PayPal Activity Download CSV with <code>Transaction Event Code</code> and <code>Balance Impact</code> included. Dates must use two-digit day and month fields, and times must use 24-hour <code>HH:MM:SS</code>. This preview supports English status/impact values and rows marked <code>UTC</code> or <code>GMT</code> only. It cannot read split or ZIP exports.</p>
+          <p>Use one UTF-8 PayPal Activity Download CSV with <code>Transaction Event Code</code> and <code>Balance Impact</code> included. Dates must use two-digit day and month fields, and times must use 24-hour <code>HH:MM:SS</code>. This preview supports English status and impact values. It cannot read split or ZIP exports.</p>
           <p>It counts only <code>T0006</code> and <code>T0007</code> rows marked <code>Completed</code> and <code>Credit</code>. Other rows are excluded. Amounts, refunds, unique customers and retention are not calculated.</p>
         </div>
         <div className={styles.fields}>
           <label>Date format in the export
-            <select value={dateOrder} disabled={reading} onChange={(event) => { clearReport(); setDateOrder(event.target.value as DateOrder); }}>
-              <option value="">Choose a format</option><option value="dmy">Day / month / year (UK)</option><option value="mdy">Month / day / year (US)</option>
+            <select value={dateOrder} disabled={reading} onChange={(event) => changeCriteria(() => setDateOrder(event.target.value as DateOrder))}>
+              <option value="">Choose a format</option><option value="mdy">Month / day / year (US)</option><option value="dmy">Day / month / year (UK)</option>
+            </select>
+          </label>
+          <label>Time zone used by the export
+            <select value={timeZone} disabled={reading} onChange={(event) => changeCriteria(() => setTimeZone(event.target.value as TimeZone))}>
+              <option value="">Choose the report time zone</option><option value="eastern">Eastern · EST / EDT</option><option value="central">Central · CST / CDT</option><option value="mountain">Mountain · MST / MDT</option><option value="arizona">Arizona (Phoenix) · MST</option><option value="pacific">Pacific · PST / PDT</option><option value="alaska">Alaska (Anchorage) · AKST / AKDT</option><option value="hawaii">Hawaii · HST</option><option value="utc">UTC / GMT</option><option value="london">UK · GMT / BST</option>
             </select>
           </label>
           <label>Length of each period
-            <select value={windowDays} disabled={reading} onChange={(event) => { clearReport(); setWindowDays(event.target.value as WindowChoice); }}>
+            <select value={windowDays} disabled={reading} onChange={(event) => changeCriteria(() => setWindowDays(event.target.value as WindowChoice))}>
               <option value="">Choose a period</option><option value="7">7 days</option><option value="30">30 days</option>
             </select>
           </label>
           <label>First day after the current period, in UTC
-            <input type="date" max={todayUtc || undefined} value={endExclusive} disabled={reading} onChange={(event) => { clearReport(); setEndExclusive(event.target.value); }} />
+            <input type="date" max={todayUtc || undefined} value={endExclusive} disabled={reading} onChange={(event) => changeCriteria(() => setEndExclusive(event.target.value))} />
           </label>
         </div>
-        <p className={styles.hint}>The current period ends just before this day; the previous period is the same length immediately before it. Both must be complete.</p>
+        <p className={styles.hint}>Choose the export&apos;s actual time zone, not your device time zone; rows must use the shown abbreviations. Regional times before 2007, and ambiguous or missing daylight-saving times, are rejected. The periods use UTC: an export in local time may need extra dates at either end to cover both periods completely.</p>
         {endExclusive && todayUtc && endExclusive > todayUtc && <p className={styles.error} role="alert">Choose a date no later than today in UTC so the period is complete.</p>}
         <label className={styles.check}><input type="checkbox" checked={privacyConfirmed} disabled={reading} onChange={(event) => { clearReport(); setPrivacyConfirmed(event.target.checked); }} /> <span>I understand the file may contain personal information, and I am authorized to use it here.</span></label>
-        <label className={styles.check}><input type="checkbox" checked={coverageConfirmed} disabled={reading} onChange={(event) => { clearReport(); setCoverageConfirmed(event.target.checked); }} /> <span>I confirm this single file covers both complete UTC periods and is not one part of a split export.</span></label>
+        <label className={styles.check}><input type="checkbox" checked={coverageConfirmed} disabled={reading} onChange={(event) => setCoverageConfirmed(event.target.checked)} /> <span>I confirm this single file covers both complete UTC periods and is not one part of a split export.</span></label>
+        <p className={styles.hint}>Confirm coverage again for each export and after changing the date format, time zone or periods.</p>
         <div className={styles.actions}>
           <label className={`${styles.fileButton} ${!ready || reading ? styles.disabled : ""}`}>
             <span>{reading ? "Reading export…" : summary ? "Choose another export" : "Choose PayPal CSV"}</span>
@@ -131,7 +148,7 @@ export default function PayPalActivityPanel({ onReportChange }: { onReportChange
           <p>Counts reflect only the chosen event types, status and balance impact. They are report rows, not unique customers or complete sales. Coverage is based on your confirmation; the app cannot verify it.</p>
           <div className={styles.periods}><PeriodCard title="Previous period" period={summary.previous} /><PeriodCard title="Current period" period={summary.current} /></div>
           <p className={styles.change}>Included row change: <strong>{summary.changePct === null ? "Unavailable — previous included count is zero" : formatBusinessPercentage(summary.changePct, true)}</strong></p>
-          <p className={styles.coverage}>{new Intl.NumberFormat("en-GB").format(summary.rowsInFile)} rows read; {new Intl.NumberFormat("en-GB").format(summary.outsidePeriods)} outside the selected periods. Exclusions include other event types, statuses and non-credit rows. No individual rows, names, email addresses, IDs or amounts are shown.</p>
+          <p className={styles.coverage}>{new Intl.NumberFormat("en-US").format(summary.rowsInFile)} rows read; {new Intl.NumberFormat("en-US").format(summary.outsidePeriods)} outside the selected periods. Exclusions include other event types, statuses and non-credit rows. No individual rows, names, email addresses, IDs or amounts are shown.</p>
           <p className={styles.coverage}>The preview clears when you leave Business or choose Clear PayPal preview.</p>
         </div>}
       </div>

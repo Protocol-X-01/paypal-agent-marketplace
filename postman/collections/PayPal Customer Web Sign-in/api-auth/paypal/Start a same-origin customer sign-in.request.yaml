@@ -1,6 +1,7 @@
 $kind: http-request
 name: Reject a cross-origin sign-in
-description: Web-only edge and callback-redaction acknowledgements gate new issuance; missing flags block start503 and sanitize callbacks303 before consumption, while session validation and logout remain available and loginAvailable is false. These are operator acknowledgements, not verified controls. Shared global per-operation request limits may return 429 with Retry-After (1-60 seconds); unavailable budget storage returns 503. Neither confirms signed-out state or clears cookies. Disabled behavior is unchanged. A deliberately foreign origin cannot start a sign-in; a disabled service may instead report unavailable.
+description: >-
+  Web-only edge and callback-redaction acknowledgements gate new issuance; missing flags block start503 and sanitize callbacks303 before consumption, while session validation and logout remain available and loginAvailable is false. These are operator acknowledgements, not verified controls. Shared global per-operation request limits may return 429 with Retry-After (1-60 seconds); unavailable budget storage returns 503. A supplied earlier transaction cookie must still resolve to a valid transaction in the same context or start fails closed with 503. These failures do not confirm signed-out state or clear cookies. This request tests only that a deliberately foreign origin cannot start a sign-in; a disabled service may instead report unavailable.
 url: "{{baseUrl}}/api/auth/paypal/start"
 method: POST
 headers:

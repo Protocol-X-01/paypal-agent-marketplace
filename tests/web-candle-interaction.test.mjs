@@ -429,6 +429,7 @@ test("RSI uses the same explicit price time window and fixed gutters with a sepa
     assert.equal(options.axes.x.max.getTime(), window.end);
     assert.equal(options.axes.x.nice, false);
     assert.equal(options.axes.x.thickness, 32);
+    assert.equal(options.axes.x.label.formatter({ value: Date.UTC(2026, 10, 6, 12, 5) }), "06 Nov");
     assert.equal(options.axes.y.thickness, 92);
     assert.equal(options.axes.y.min, 0);
     assert.equal(options.axes.y.max, 100);
@@ -436,7 +437,7 @@ test("RSI uses the same explicit price time window and fixed gutters with a sepa
     assert.ok(options.series.every((series) => series.connectMissingData === false));
     const datum = options.series[0].data.at(-1);
     const tooltip = options.series[0].tooltip.renderer({ datum });
-    assert.match(tooltip.heading, /UTC/);
+    assert.equal(tooltip.heading, "2026-10-05 20:00:00 UTC");
     assert.equal(tooltip.data[0].value, "100.00");
   } finally {
     app.close();

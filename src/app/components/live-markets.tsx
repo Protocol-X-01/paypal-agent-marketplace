@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { MarketCoin, MarketOverview, TrackedCoin } from "@/lib/market-data";
+import { hasDistinctTrackedCoinIds } from "@/lib/market-assets";
 import { formatMarketRetrievalTime } from "@/lib/market-format";
 import styles from "../home.module.css";
 
@@ -25,7 +26,7 @@ export function MarketSnapshotProvider({ children }: { children: ReactNode }) {
         return response.json() as Promise<MarketOverview>;
       })
       .then((data) => {
-        if (!Array.isArray(data.coins)) throw new Error("Market data unavailable");
+        if (!hasDistinctTrackedCoinIds(data.coins)) throw new Error("Market data unavailable");
         if (!controller.signal.aborted) {
           setSnapshot({
             coins: data.coins,

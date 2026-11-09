@@ -13,8 +13,8 @@ async function loadTypeScript(relativePath) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
 
-const { calculatePortfolio } = await loadTypeScript("../src/lib/portfolio-summary.ts");
-const { formatMarketMoney } = await loadTypeScript("../src/lib/market-format.ts");
+const { calculateHoldingValue, calculatePortfolio } = await loadTypeScript("../src/lib/portfolio-summary.ts");
+const { formatMarketMoney, formatPortfolioMoney, formatMarketProviderUpdateTime } = await loadTypeScript("../src/lib/market-format.ts");
 
 const tracked = ["bitcoin", "ethereum"];
 const holdings = { bitcoin: 2, ethereum: 3 };
@@ -68,9 +68,40 @@ test("withholds non-finite valuations", () => {
   assert.equal(result.dailyChange, null);
 });
 
+test("withholds positive valuations that underflow instead of displaying zero", () => {
+  assert.equal(calculateHoldingValue(1e-320, 0.00001), null);
+  assert.equal(calculateHoldingValue(1e-320, 0), 0);
+  assert.equal(calculateHoldingValue(2, 50), 100);
+  const result = calculatePortfolio({ bitcoin: 1e-320 }, new Map([["bitcoin", quote(0.00001, 0)]]), tracked);
+  assert.equal(result.positions[0].value, null);
+  assert.equal(result.total, null);
+  assert.equal(result.dailyChange, null);
+});
+
+test("withholds a nonzero 24h movement that underflows while retaining the holding value", () => {
+  const result = calculatePortfolio({ bitcoin: 1e-320 }, new Map([["bitcoin", quote(1, 0.001)]]), tracked);
+  assert.equal(result.total, 1e-320);
+  assert.equal(result.dailyChange, null);
+});
+
 test("retains PYUSD unit-price precision across currencies without changing normal totals", () => {
   assert.equal(formatMarketMoney(1.000043, "USD", 4), "$1.000043");
   assert.equal(formatMarketMoney(0.79, "GBP", 4), "£0.7900");
   assert.equal(formatMarketMoney(151.23, "JPY", 4), "¥151.2300");
   assert.equal(formatMarketMoney(1, "USD"), "$1.00");
+});
+
+test("portfolio display distinguishes tiny positive values from zero", () => {
+  assert.equal(formatPortfolioMoney(1e-9, "USD"), "Less than $0.000001");
+  assert.equal(formatPortfolioMoney(1e-9, "GBP"), "Less than £0.000001");
+  assert.equal(formatPortfolioMoney(0, "USD"), "$0.00");
+  assert.equal(formatPortfolioMoney(null, "USD"), "—");
+  assert.equal(formatPortfolioMoney(1, "USD"), "$1.00");
+});
+
+test("formats provider update separately from retrieval and rejects ambiguous timestamps", () => {
+  assert.equal(formatMarketProviderUpdateTime("2026-11-06T12:34:56.123456Z"), "2026-11-06 12:34:56 UTC");
+  for (const value of [null, undefined, "", "0", "2026-11-06", "2026-02-30T12:34:56Z", "2026-11-06T12:34:56+01:00"]) {
+    assert.equal(formatMarketProviderUpdateTime(value), "time unavailable");
+  }
 });

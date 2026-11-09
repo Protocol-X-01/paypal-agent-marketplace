@@ -1,0 +1,6 @@
+$kind: collection
+description: A narrow, local test contract for a future authorized PayPal Business reporting adapter. This is not an app endpoint and does not establish merchant access, complete pagination, credit/debit direction, sales, refunds or customer metrics. The example data are fictional. The response schema includes only the fields needed for an inspection and permits other fields because transaction_info itself may contain sensitive information.
+variables:
+  - key: baseUrl
+    value: http://127.0.0.1:0/paypal
+    description: Override with the local synthetic simulation URL only.

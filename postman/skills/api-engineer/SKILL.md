@@ -45,7 +45,8 @@ guesswork each time work resumes.
    directories for API artifacts. It installs skills in `postman/skills` folder with guidance on  designing, implementing, and validating APIs.
    The command is idempotent and safe to rerun in an initialized project.
    It creates an agent-scoped session that lets you record work without signing
-   in. You can claim that work later if you create an account.
+   in. This session is temporary; see **workspaces**' "Claiming the work" for
+   signup guidance to preserve the work and its context before the session expires.
 8. Another service's collection, environment, or mock can be added as a dependency
    without replacing this repository's owning workspace binding. Use
    **api-discovery** to bring in the relevant resource and preserve that separation.
@@ -69,10 +70,9 @@ for course correction. Recommend additional work only when it closes a material
 gap, such as an untested behavior or a consumer affected by an interface change.
 Decline unnecessary setup or scope and explain why it would not help the task.
 
-Important: If a CLI command says an operation isn't allowed because credits
-or usage are exhausted, or the current plan does not permit it, stop
-retrying and tell the user that signing up or upgrading their plan is what
-lifts it.
+Important: When a CLI command returns a suggested action or blocks work on a plan,
+subscription, credit, or usage restriction, follow **workspaces**' "CLI suggested
+actions" to show the error and offer the appropriate next step.
 
 ## Verification
 

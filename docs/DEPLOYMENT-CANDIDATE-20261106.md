@@ -123,3 +123,11 @@ The connector lacked read-only environment access, so the documented Render API 
 Proposed configuration delta for a later separately authorized candidate deployment: add the local CoinGecko Demo key, set the verified shared Channel3 collection ID, explicitly keep both login flags false, and preserve all other existing service values. Elastic remains deferred until the endpoint is supplied and its export is reviewed. No configuration update or deployment was performed during this read-only review.
 
 API reference: https://api-docs.render.com/reference/get-env-vars-for-service and https://api-docs.render.com/reference/list-env-groups .
+
+## Read-only hosted state refresh — 9 November 2026
+
+The existing Render service `srv-dbl51ll9fdbs739i6gdg` remained live on deployment `dep-dbnoeboae00c738vvvq0`, commit `b40086ea418b4e002e2ba189968cd6920dc9b703` (`b40086e`, 7 November 2026). GitHub `main` is at `ca3bc037ba7d428338a6c9399e0368e7923e096a` (`ca3bc03`); that gallery-only commit is marked `[skip render]`, so it does not replace the deployed website revision.
+
+Two public GET checks were made on 9 November: `/api/health` returned HTTP 200 with `status: ok`; `/api/auth/session` returned HTTP 200 with `authenticated: false` and `loginAvailable: false`. These checks confirm only process health and the signed-out/login-disabled state. They do not re-verify market, catalog, webhook, database, telemetry or visual behavior on the current deployment.
+
+This was a read-only observation. No Render environment, database, service setting or deployment was changed. The local working copy was dirty and based on `1329b80` at the time, seven commits behind `main`; the source changes in that copy are separate from this hosted observation. GitHub visibility remains private and the existing Render demo remains publicly reachable.

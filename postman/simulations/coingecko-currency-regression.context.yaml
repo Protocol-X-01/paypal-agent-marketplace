@@ -1,0 +1,46 @@
+simulation: CoinGecko currency regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: Synthetic local responses from the CoinGecko market and chart APIs.
+  unblocks: Repeatable local regression checks of currency-aware market routes and selected failure handling. The provider owner's mock was not searched because this work was restricted to local operations.
+assumptions:
+  - id: markets-target-currency
+    status: supported
+    claim: The documented markets endpoint accepts a vs_currency parameter.
+    reason: The provider's endpoint reference documents the parameter. This does not establish particular live prices or availability.
+    verification: On 2026-11-06, the isolated dirty-local snapshot sent a GBP request to the synthetic markets endpoint and returned the fixture value. The provider's endpoint reference was also read.
+    source: https://docs.coingecko.com/reference/coins-markets ; tests/market_currency_simulation.py
+    updated_at: '2026-11-06'
+  - id: chart-target-currency
+    status: supported
+    claim: The documented historical-chart endpoint accepts a vs_currency parameter.
+    reason: The provider's endpoint reference documents the parameter. This does not establish particular live prices or availability.
+    verification: On 2026-11-06, the isolated dirty-local snapshot sent a GBP request to the synthetic chart endpoint and returned the fixture values. The provider's endpoint reference was also read.
+    source: https://docs.coingecko.com/reference/coins-id-market-chart ; tests/market_currency_simulation.py
+    updated_at: '2026-11-06'
+  - id: empty-provider-list
+    status: unknown
+    claim: A real market request for tracked assets can return an empty list.
+    reason: The simulation deliberately injects an empty list; it provides no evidence about the real provider's frequency or conditions for returning one.
+    verification: On 2026-11-06, the isolated dirty-local snapshot returned 502 upstream_invalid_response for synthetic EUR quotes. An earlier snapshot before the cache-boundary fix had returned 503 for the same injected response.
+    source: postman/mocks/coingecko-currency-regression/default.js ; tests/market_currency_simulation.py ; src/lib/market-data.ts
+    updated_at: '2026-11-06'
+  - id: provider-429-retry-after
+    status: unknown
+    claim: All real provider 429 responses include Retry-After.
+    reason: The local stand-in deliberately provides headers and cannot establish whether the real provider always does so.
+    verification: On 2026-11-06, the isolated dirty-local snapshot returned the synthetic 37-second header for a 30-day AUD chart and the synthetic 29-second header for CHF quotes; a 7-day AUD chart used a price-only fallback.
+    source: postman/mocks/coingecko-currency-regression/default.js ; tests/market_currency_simulation.py ; src/lib/market-data.ts
+    updated_at: '2026-11-06'
+  - id: invalid-history-values
+    status: supported
+    claim: In this local simulation, the chart route rejects synthetic negative price, market-cap and volume points and a fractional millisecond timestamp.
+    reason: Four intentionally malformed fictional provider responses each produced the existing generic 502 invalid-response result; valid fictional GBP history still succeeded.
+    verification: On 2026-11-06, the isolated Next.js route used the Postman mock, which logged all 13 expected provider calls; the final resource-guarded run passed. The stand-in does not establish how often the real provider returns invalid values.
+    source: postman/mocks/coingecko-currency-regression/default.js ; tests/market_currency_simulation.py ; /home/protocol-x/Downloads/paypal-history-validation-final-bc9yzz61/simulation.log
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree; src/lib/market-data.ts SHA-256 dc4d504497f9d801ef8efdff7d7a95ae32b143bd3df33bc0ea44cc6d1ba57281)
+    cli: 1.84.0

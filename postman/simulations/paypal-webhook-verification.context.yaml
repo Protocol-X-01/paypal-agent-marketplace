@@ -1,0 +1,26 @@
+simulation: PayPal webhook verification regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: A local fictional PayPal OAuth and webhook signature-verification service.
+  unblocks: Repeatable receiver and adapter checks without credentials, payment actions, or live provider requests. The provider owner's mock was not searched because the CLI is in a temporary signed-out session.
+assumptions:
+  - id: webhook-verification-response
+    status: supported
+    claim: In the local fictional cases, the receiver embeds the original event bytes and expected headers in the verification request and acknowledges a modeled SUCCESS response without processing the event.
+    reason: The mock compares raw event bytes, transmission headers, webhook ID, and synthetic authorization before returning its modeled response. This supports the local code path only; it cannot establish actual PayPal signature validity.
+    verification: On 2026-11-06, the real receiver and adapter handled the fictional success case through the local HTTP stand-in, which accepted the original event bytes including spacing and a literal Unicode escape. The receiver returned HTTP 200 with received true and processed false. A real signed sandbox delivery is still required.
+    source: https://developer.paypal.com/api/rest/webhooks/rest/ ; src/lib/paypal.ts ; tests/paypal-webhook-simulation.py ; postman/mocks/paypal-webhook-verification/default.js
+    updated_at: '2026-11-06'
+  - id: failure-and-timeout-behavior
+    status: supported
+    claim: In the modeled local cases, rejected verification, malformed input, upstream failure, and a response delayed beyond the adapter deadline receive non-success responses.
+    reason: The Postman collection checked the receiver's HTTP status and error bodies, and mock counters confirmed malformed requests never reached the fictional provider. The mock does not model cryptographic verification or payment processing.
+    verification: >-
+      On 2026-11-06, nine fictional Postman requests passed: success returned 200; rejection and malformed inputs returned 400; unsupported content type returned 415; upstream failure and an intentionally delayed response returned 503. The mock recorded one OAuth call and exactly four expected verification attempts. This does not verify live PayPal retry or delivery behavior.
+    source: src/app/api/webhooks/paypal/route.ts ; postman/specs/paypal-webhooks.yaml ; tests/paypal-webhook-simulation.py ; postman/collections/PayPal Webhook Verification/
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty tree; adapter SHA-256 17d740ae4503a53d4b26b5122eccd9ce4757610c3341bd996d64b4b0e6b0b80d; receiver SHA-256 9ff55c6884ea0fb70f895ab56cd61da43cdbfe22afa0bd5431ec300235e95ad9)
+    cli: 1.84.0

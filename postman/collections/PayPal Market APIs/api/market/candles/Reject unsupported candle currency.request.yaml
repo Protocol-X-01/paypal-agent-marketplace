@@ -1,0 +1,12 @@
+$kind: http-request
+description: Local rejection check; validation finishes before any provider request.
+url: '{{baseUrl}}/api/market/candles/bitcoin?days=7&currency=XYZ'
+method: GET
+order: 3000
+scripts:
+- type: afterResponse
+  language: text/javascript
+  code: "pm.test(\"Invalid candle request is rejected\", function () {\n  pm.response.to.have.status(400);\n\
+    \  pm.expect(pm.response.json().error.code).to.eql(\"unsupported_currency\");\n\
+    \  pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\");\n\
+    });"

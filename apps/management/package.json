@@ -1,0 +1,27 @@
+{
+  "name": "paypal-management-concept",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../node_modules/next/dist/bin/next dev --webpack --hostname 127.0.0.1 --port 3002",
+    "build": "node ../../node_modules/next/dist/bin/next build --webpack",
+    "start": "node ../../node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3002",
+    "lint": "node ../../node_modules/eslint/bin/eslint.js . --max-warnings 0",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "typescript": "^5"
+  }
+}

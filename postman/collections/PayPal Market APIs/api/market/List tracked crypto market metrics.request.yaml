@@ -1,9 +1,26 @@
 $kind: http-request
-description: Returns tracked Bitcoin, Ethereum, Solana, Chainlink, Litecoin, Bitcoin Cash, and PayPal USD market metrics with provider timestamps. Values are quoted in USD; PYUSD is a separate stablecoin asset.
+description: >-
+  Returns tracked Bitcoin, Ethereum, Solana, Chainlink, Litecoin, Bitcoin Cash,
+  and PayPal USD market metrics with provider timestamps. Values are quoted in
+  USD; PYUSD is a separate stablecoin asset. CoinGecko Demo credentials are
+  required. Provider calls are capped at 24 per rolling 60-second window per
+  application process; this budget is not shared across service instances. A
+  429 response includes a Retry-After header.
 url: "{{baseUrl}}/api/market/coins"
 method: GET
 headers:
   Accept: application/json
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("market snapshot contains distinct tracked coin IDs", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.coins).to.be.an("array").that.is.not.empty;
+        pm.expect(body.coins.length).to.be.at.most(7);
+        pm.expect(new Set(body.coins.map(function (coin) { return coin.id; })).size).to.eql(body.coins.length);
+      });
 settings: {}
 examples: ./.resources/List tracked crypto market metrics.resources/examples
 order: 1000

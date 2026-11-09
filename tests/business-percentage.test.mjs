@@ -56,7 +56,7 @@ test("percentage formatting preserves tiny changes, true zero and unavailable va
 test("both PayPal Activity previews label tiny changes as included report rows", async () => {
   for (const [value, expected] of [[0.01, "Increase under 0.1%"], [-0.01, "Decrease under 0.1%"], [0, "0.0%"], [null, "Unavailable — previous included count is zero"]]) {
     const web = (await load("../src/app/components/paypal-activity-panel.tsx", {
-      react: hooks({ 5: summary(value) }),
+      react: hooks({ 6: summary(value) }),
       "react/jsx-runtime": jsx,
       "@/lib/paypal-activity-import": { PAYPAL_ACTIVITY_MAX_BYTES: 4194304 },
       "@/lib/business-percentage": webPercentage,
@@ -64,7 +64,7 @@ test("both PayPal Activity previews label tiny changes as included report rows",
     })).default({ onReportChange() {} });
 
     const native = (await load("../apps/mobile/src/components/paypal-activity-panel.tsx", {
-      react: hooks({ 0: true, 6: summary(value) }),
+      react: hooks({ 0: true, 7: summary(value) }),
       "react/jsx-runtime": jsx,
       "react-native": { AppState: {}, Keyboard: {}, Platform: { OS: "android" }, Pressable: "Pressable", StyleSheet: { create: (styles) => styles }, Switch: "Switch", Text: "Text", TextInput: "TextInput", View: "View" },
       "expo-clipboard": {},
@@ -73,7 +73,7 @@ test("both PayPal Activity previews label tiny changes as included report rows",
       "@/lib/business-percentage": nativePercentage,
       "@/lib/paypal-activity-clipboard": { canReadActivityClipboard: () => false, usableEndDate: () => false },
       "@/lib/report-lifecycle": { watchReportLifecycle() {} },
-    })).PayPalActivityPanel();
+    })).PayPalActivityPanel({ onReportChange() {} });
     for (const tree of [web, native]) {
       assert.ok(text(tree).includes(`Included row change: ${expected}`));
       assert.match(text(tree), /not unique customers/i);

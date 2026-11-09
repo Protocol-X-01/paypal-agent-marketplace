@@ -1,0 +1,4 @@
+$kind: collection
+name: Local provider redirect checks
+variables:
+  baseUrl: /

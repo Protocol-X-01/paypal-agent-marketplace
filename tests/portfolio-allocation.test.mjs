@@ -50,7 +50,7 @@ function createComponent() {
     react: { useState: () => [selected, (value) => { selected = value; }] },
     "react/jsx-runtime": { jsx: element, jsxs: element, Fragment: Symbol("Fragment") },
     "@/lib/portfolio-allocation": web,
-    "@/lib/market-format": { formatMarketMoney: (value, currency) => `${currency} ${value}` },
+    "@/lib/market-format": { formatPortfolioMoney: (value, currency) => `${currency} ${value}` },
     "./portfolio-allocation.module.css": { __esModule: true, default: {} },
   }).default;
   return (portfolio) => Component({ portfolio, currency: "GBP", inputMessage: "", loading: false });

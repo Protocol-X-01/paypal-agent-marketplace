@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { storefrontCurrency, type Storefront } from "@/lib/channel3-storefront";
+import type { MarketplacePriceRange } from "@/lib/marketplace-price-range";
 
 const DEFAULT_BASE = "https://api.trychannel3.com";
 // App-owned response ceiling, not a Channel3 provider limit. Fetch exposes
@@ -68,6 +69,7 @@ interface SearchOpts {
   mode?: "default" | "keyword" | "agentic";
   pageToken?: string;
   locale?: Channel3Locale;
+  priceRange?: MarketplacePriceRange;
 }
 
 export type Channel3Locale = { country: string; currency: string; language: string };
@@ -81,8 +83,8 @@ export function getChannel3Locale(storefront?: Storefront): Channel3Locale {
   if (storefront) return { country: storefront, currency: storefrontCurrency(storefront), language: "en" };
   const locale = {
     language: process.env.CHANNEL3_LANGUAGE || "en",
-    country: process.env.CHANNEL3_COUNTRY || "GB",
-    currency: process.env.CHANNEL3_CURRENCY || "GBP",
+    country: process.env.CHANNEL3_COUNTRY || "US",
+    currency: process.env.CHANNEL3_CURRENCY || "USD",
   };
   if (!supportedLanguages.has(locale.language) || !supportedCountries.has(locale.country) || !supportedCurrencies.has(locale.currency)) {
     throw new Error("Channel3 default locale is not supported");
@@ -90,16 +92,24 @@ export function getChannel3Locale(storefront?: Storefront): Channel3Locale {
   return locale;
 }
 
-/** Optional for older installations; a configured collection never falls back. */
+/** Optional for text search; curated browse uses the required getter below. */
 export function getChannel3CollectionId(): string | undefined {
   const value = process.env.CHANNEL3_COLLECTION_ID;
   if (value === undefined) return undefined;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new Error("Channel3 collection configuration is invalid");
   return value;
 }
+export function getRequiredChannel3CollectionId(): string {
+  const value = getChannel3CollectionId();
+  if (value === undefined) throw new Error("Channel3 curated collection is not configured");
+  return value;
+}
 function collectionConfig() {
   const collection = getChannel3CollectionId();
   return collection === undefined ? {} : { collection_id: collection };
+}
+function requiredCollectionConfig() {
+  return { collection_id: getRequiredChannel3CollectionId() };
 }
 
 async function readChannel3Json(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -224,7 +234,11 @@ function filters(includeUsed?: boolean) {
 }
 
 export function search(opts: SearchOpts) {
-  const { imageUrl, base64Image, pageToken, locale = getChannel3Locale(), ...rest } = opts;
+  const { imageUrl, base64Image, pageToken, locale = getChannel3Locale(), priceRange, ...rest } = opts;
+  const price = priceRange ? {
+    ...(priceRange.minPrice === undefined ? {} : { min_price: priceRange.minPrice }),
+    ...(priceRange.maxPrice === undefined ? {} : { max_price: priceRange.maxPrice }),
+  } : undefined;
   return call("/v1/search", {
     query: rest.query,
     image_url: imageUrl,
@@ -236,7 +250,7 @@ export function search(opts: SearchOpts) {
       ...locale,
       ...collectionConfig(),
     },
-    ...(rest.includeUsed ? { filters: filters(true) } : {}),
+    ...((price || rest.includeUsed) ? { filters: { ...(price ? { price } : {}), ...(rest.includeUsed ? filters(true) : {}) } } : {}),
   });
 }
 
@@ -244,12 +258,12 @@ export function browseCatalog(selection: { categoryId?: string; websiteId?: stri
   if ((!selection.categoryId && !selection.websiteId) || ![12, 24].includes(limit)) throw new Error("Invalid catalog selection");
   return call("/v1/browse", {
     filters: { ...(selection.categoryId ? { category_ids: [selection.categoryId] } : {}), ...(selection.websiteId ? { website_ids: [selection.websiteId] } : {}), conditions: ["new"], availability: ["InStock"] },
-    limit, config: { ...locale, ...collectionConfig() }, ...(pageToken ? { page_token: pageToken } : {}),
+    limit, config: { ...locale, ...requiredCollectionConfig() }, ...(pageToken ? { page_token: pageToken } : {}),
   });
 }
 
 export function browseCategory(categoryId: string, limit = 8, locale = getChannel3Locale()) {
-  return call("/v1/browse", { filters: { category_ids: [categoryId], conditions: ["new"], availability: ["InStock"] }, limit, config: { ...locale, ...collectionConfig() } });
+  return call("/v1/browse", { filters: { category_ids: [categoryId], conditions: ["new"], availability: ["InStock"] }, limit, config: { ...locale, ...requiredCollectionConfig() } });
 }
 
 function catalogMac(payload: string): string {

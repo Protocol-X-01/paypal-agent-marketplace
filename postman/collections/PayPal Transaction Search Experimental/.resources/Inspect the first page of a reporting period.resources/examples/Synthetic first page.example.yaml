@@ -1,0 +1,19 @@
+$kind: http-example
+name: Synthetic first page
+request:
+  method: GET
+  url: '{{baseUrl}}/v1/reporting/transactions?start_date=2026-01-01T00%3A00%3A00Z&end_date=2026-01-08T00%3A00%3A00Z&fields=transaction_info&balance_affecting_records_only=Y&page=1&page_size=100'
+  headers:
+    - key: Authorization
+      value: Bearer synthetic-reporting-token
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {"transaction_details":[{"transaction_info":{"transaction_event_code":"T0006","transaction_status":"S"}},{"transaction_info":{"transaction_event_code":"T1107","transaction_status":"S"}}],"page":1,"total_pages":1,"total_items":2}
+order: 1000

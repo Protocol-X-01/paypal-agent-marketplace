@@ -1,0 +1,11 @@
+{
+  "name": "@paypal-markets/decode-uri-component-compat",
+  "version": "0.5.1",
+  "private": true,
+  "description": "CommonJS adapter for the official patched decoder",
+  "main": "index.cjs",
+  "dependencies": {
+    "upstream-decoder": "npm:decode-uri-component@0.5.1"
+  },
+  "license": "UNLICENSED"
+}

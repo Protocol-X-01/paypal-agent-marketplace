@@ -23,6 +23,7 @@ const Switch = (await load("../src/app/components/account-experience-switch.tsx"
 const Shell = (await load("../src/app/components/site-shell.tsx", {
   "react/jsx-runtime": jsx, "next/link": { __esModule: true, default: "Link" }, "@/lib/market-currency": currency, "@/lib/market-format": format,
   "./site-shell.module.css": { __esModule: true, default: {} },
+  "./theme-preference": { useAppearance: () => ({ appearance: "dark", toggleAppearance() {} }) },
 })).default;
 function nodes(value) {
   if (value === null || value === undefined || typeof value !== "object") return [];

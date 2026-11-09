@@ -1,19 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { getChannel3Locale, search } from "@/lib/channel3";
+import { decodeCatalogPageToken, encodeCatalogPageToken, getChannel3CollectionId, getChannel3Locale, search } from "@/lib/channel3";
+import { intersectPriceRanges, MAX_MARKETPLACE_PRICE, parseNaturalPriceIntent } from "@/lib/marketplace-price-range";
 import { takeChannel3RateLimit } from "@/lib/channel3-rate-limit";
+import { acquireClientSlot } from "@/lib/request-limits";
 import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from "@/lib/mobile-web-cors";
 
 const inputSchema = z.object({
   query: z.string().trim().min(2).max(120),
   limit: z.number().int().min(1).max(24).optional(),
   storefront: z.enum(["GB", "US"]).optional(),
+  priceRange: z.object({
+    minPrice: z.number().finite().min(0).max(MAX_MARKETPLACE_PRICE).optional(),
+    maxPrice: z.number().finite().min(0).max(MAX_MARKETPLACE_PRICE).optional(),
+  }).strict().superRefine((range, context) => {
+    if (range.minPrice === undefined && range.maxPrice === undefined) {
+      context.addIssue({ code: "custom", path: ["minPrice"], message: "Provide at least one price bound." });
+    }
+    if (range.minPrice !== undefined && range.maxPrice !== undefined && range.minPrice > range.maxPrice) {
+      context.addIssue({ code: "custom", path: ["maxPrice"], message: "Maximum price must not be below minimum price." });
+    }
+  }).optional(),
+  pageToken: z.string().min(1).max(6144).optional(),
 });
 
 const MAX_SEARCH_BODY_BYTES = 8 * 1024;
 const BODY_READ_TIMEOUT_MS = 3_000;
 const MAX_CONCURRENT_SEARCH_BODY_READS = 8;
 const BODY_READ_RETRY_AFTER_SECONDS = 5;
+const PRICE_ONLY_PROVIDER_QUERY = "products";
 
 const globalForSearch = globalThis as typeof globalThis & {
   __channel3SearchBodyReadsInFlight?: number;
@@ -38,7 +53,9 @@ type BodyReadResult =
   | { ok: false; reason: "bad-request" | "timeout" | "too-large" };
 
 function json(request: NextRequest, body: unknown, init?: ResponseInit): NextResponse {
-  return withMobileWebCors(request, NextResponse.json(body, init));
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return withMobileWebCors(request, response);
 }
 
 function rejectRequest(request: NextRequest, error: string, status: number, headers?: HeadersInit) {
@@ -102,7 +119,16 @@ export async function POST(request: NextRequest) {
     return rejectRequest(request, "Request origin is not allowed.", 403);
   }
 
+  const releaseClientSlot = acquireClientSlot(request, "marketplace-search-body", 2);
+  if (!releaseClientSlot) {
+    return rejectRequest(request, "Search is temporarily busy. Please try again shortly.", 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": String(BODY_READ_RETRY_AFTER_SECONDS),
+    });
+  }
+
   if (!tryAcquireBodyReadSlot()) {
+    releaseClientSlot();
     return rejectRequest(request, "Search is temporarily busy. Please try again shortly.", 503, {
       "Cache-Control": "no-store",
       "Retry-After": String(BODY_READ_RETRY_AFTER_SECONDS),
@@ -132,16 +158,33 @@ export async function POST(request: NextRequest) {
     const parsed = inputSchema.safeParse(body);
     if (!parsed.success) {
       const invalidStorefront = parsed.error.issues.some((issue) => issue.path[0] === "storefront");
-      return rejectRequest(request, invalidStorefront ? "Choose the GB or US storefront." : "Enter a search phrase between 2 and 120 characters.", 400);
+      const invalidPriceRange = parsed.error.issues.some((issue) => issue.path[0] === "priceRange");
+      const invalidPageToken = parsed.error.issues.some((issue) => issue.path[0] === "pageToken");
+      return rejectRequest(request, invalidStorefront ? "Choose the GB or US storefront." : invalidPriceRange ? "Enter a valid price range in your storefront currency." : invalidPageToken ? "Restart this search to load more products." : "Enter a search phrase between 2 and 120 characters.", 400);
     }
     input = parsed.data;
   } finally {
     // Provider latency must not hold a body-reading slot after validation.
     releaseBodyReadSlot();
+    releaseClientSlot();
   }
 
   const query = input.query;
   const limit = input.limit ?? 6;
+  let locale: ReturnType<typeof getChannel3Locale>;
+  try {
+    locale = getChannel3Locale(input.storefront);
+  } catch {
+    return json(request, { error: "The product catalog is temporarily unavailable. Please try again later." }, { status: 503 });
+  }
+  const intent = parseNaturalPriceIntent(query, locale.currency);
+  if (intent.error) return json(request, { error: intent.error }, { status: 400 });
+  const mergedPriceRange = intersectPriceRanges(input.priceRange, intent.range);
+  if (!mergedPriceRange.valid) {
+    return json(request, { error: "The selected price range conflicts with the budget in your search." }, { status: 400 });
+  }
+  const priceRange = mergedPriceRange.range;
+  const providerQuery = intent.range ? intent.query || PRICE_ONLY_PROVIDER_QUERY : query;
   if (!takeChannel3RateLimit(request)) {
     return json(
       request,
@@ -151,8 +194,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const locale = getChannel3Locale(input.storefront);
-    const result = await search({ query, limit, mode: "default", locale });
+    const binding = JSON.stringify({ kind: "search", query, providerQuery, priceRange, collectionId: getChannel3CollectionId() ?? null, locale, limit });
+    const providerToken = input.pageToken === undefined ? undefined : decodeCatalogPageToken(input.pageToken, binding);
+    if (providerToken === null) return json(request, { error: "Restart this search to load more products." }, { status: 400 });
+    const result = await search({ query: providerQuery, limit, mode: "default", locale, pageToken: providerToken, ...(priceRange ? { priceRange } : {}) });
+    if (providerToken && result.next_page_token === providerToken) throw new Error("Channel3 repeated its continuation");
+    const nextPageToken = result.next_page_token ? encodeCatalogPageToken(result.next_page_token, binding) : null;
     const retrievedAt = new Date().toISOString();
 
     return json(
@@ -162,9 +209,10 @@ export async function POST(request: NextRequest) {
         storefront: locale.country,
         currency: locale.currency,
         query,
+        priceRange,
         retrievedAt,
         products: result.products.slice(0, limit),
-        nextPageToken: result.next_page_token ?? null,
+        nextPageToken,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PayPal Agent Marketplace Market Data API
-  version: 0.4.0
+  version: 0.5.0
   description: >-
     Public crypto market metrics and chart data for the mobile marketplace
     experience. Provider credentials remain on the server. These endpoints do
@@ -48,7 +48,13 @@ paths:
         stablecoin asset; it is not the USD quote currency. CoinGecko Demo
         credentials are required. Provider calls are capped at 24 per rolling
         60-second window per application process, below the 30-call/minute Demo
-        limit; this budget is not shared across service instances.
+        limit; this budget is not shared across service instances. The app
+        also caps requests at 12 per rolling 60 seconds per detected client
+        address across CoinGecko-backed market routes. This request limit is
+        process-local. The app
+        accepts up to 2 MiB of decoded provider quote data; this is an
+        application safeguard, not a CoinGecko size guarantee. A declared
+        Content-Length above the limit is rejected even when encoded.
       responses:
         "200":
           description: Market metrics for tracked coins
@@ -69,7 +75,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: The per-process provider budget or upstream provider rate limit was reached
+          description: The per-client request budget, per-process provider budget, or upstream provider rate limit was reached
           headers:
             Retry-After:
               description: Seconds to wait before retrying
@@ -81,7 +87,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
-          description: The upstream market provider returned an invalid response
+          description: The upstream market provider returned an invalid or oversized response
           content:
             application/json:
               schema:
@@ -104,7 +110,10 @@ paths:
         wallet, payment, or settlement currency is changed. The existing
         USD-only /api/market/coins response remains available for older clients.
         Provider calls share the same per-process Demo rate budget as the
-        other market endpoints.
+        other market endpoints. Requests share the 12-per-60-second per-client
+        budget across CoinGecko-backed routes. The app accepts up to 2 MiB of decoded provider
+        quote data; this is an application safeguard, not a provider guarantee.
+        A declared Content-Length above the limit is rejected even when encoded.
       parameters:
         - name: currency
           in: query
@@ -138,7 +147,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: The per-process provider budget or upstream provider rate limit was reached
+          description: The per-client request budget, per-process provider budget, or upstream provider rate limit was reached
           headers:
             Retry-After:
               description: Seconds to wait before retrying
@@ -150,7 +159,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
-          description: The upstream market provider returned an invalid response
+          description: The upstream market provider returned an invalid or oversized response
           content:
             application/json:
               schema:
@@ -179,10 +188,16 @@ paths:
         can fall back to the cached 7-day market sparkline. In that response,
         `seriesSource` and `availableMetrics` identify the price-only fallback.
         CoinGecko does not provide timestamps with these sparkline values, so
-        fallback sample times are spread evenly across the 7-day window.
+        fallback sample times are spread approximately evenly across the 7-day
+        window and rounded to whole milliseconds. The app accepts up to 4 MiB
+        of decoded provider chart data; fallback quotes use a separate 2 MiB
+        limit. These are application safeguards, not provider guarantees; a
+        declared Content-Length above the limit is rejected even when encoded.
         CoinGecko Demo credentials are required. Provider calls are capped at
         24 per rolling 60-second window per application process, below the
         30-call/minute Demo limit; this budget is not shared across instances.
+        Requests share the 12-per-60-second per-client budget across
+        CoinGecko-backed market routes. This request limit is process-local.
       parameters:
         - name: coinId
           in: path
@@ -232,7 +247,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: The per-process provider budget or upstream provider rate limit was reached
+          description: The per-client request budget, per-process provider budget, or upstream provider rate limit was reached
           headers:
             Retry-After:
               description: Seconds to wait before retrying
@@ -244,7 +259,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
-          description: The upstream market provider returned an invalid response
+          description: The upstream market provider returned an invalid or oversized response
           content:
             application/json:
               schema:
@@ -277,6 +292,8 @@ paths:
         the returned closes and describe periods as candle counts. Only days
         and currency are accepted as query parameters, once each. The shared
         per-process provider budget is 24 calls per rolling 60 seconds.
+        Requests share the 12-per-60-second per-client budget across
+        CoinGecko-backed market routes. This request limit is process-local.
         Upstream JSON is limited to 1048576 decoded bytes, 1000 candles and an
         eight-second request/body deadline. No prices or candles are invented
         when credentials, provider access or validation fail.
@@ -318,7 +335,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: Shared provider budget or provider rate limit reached
+          description: Per-client request budget, shared provider budget, or provider rate limit reached
           headers:
             Retry-After:
               schema:
@@ -368,20 +385,37 @@ paths:
         production. Native clients may omit Origin. Credentialed CORS is disabled.
         The request body is limited to 8192 bytes
         (8 KiB) and must finish streaming within 3 seconds. Oversized and timed-out
-        bodies are rejected before JSON parsing and provider rate limiting. At most
-        eight search bodies per Node process can be read and validated at once;
+        bodies are rejected before JSON parsing. Search and catalog requests share
+        a limit of eight requests per rolling 60 seconds per detected client
+        address. At most two search bodies per detected address and eight per
+        Node process can be read and validated at once;
         requests beyond that capacity receive a retryable 503 before their body
         is read. This capacity limit is per process, not shared across instances.
-        Valid searches are additionally rate-limited by the service.
         An explicit GB or US storefront selects GBP or USD respectively.
         Omitting it retains the configured Channel3 locale; the response reports
         the country and currency actually requested from Channel3. Each offer's
-        own currency remains authoritative. Channel3's response is limited by
+        own currency remains authoritative. Explicit priceRange values and
+        common budget phrases in query (for example, "under 150") are applied
+        as structured price filters in that currency. A query made up only of
+        a recognized budget phrase is allowed: the provider receives the
+        generic term "products" with the structured filter. Currency symbols or
+        codes in a budget phrase must match the selected storefront. Channel3's
+        response is limited by
         this application to 2097152 decoded bytes (2 MiB); a declared
         Content-Length above that limit is also rejected, including when it
         describes encoded bytes. Provider headers and body must arrive within
         the existing eight-second request deadline. This is an app limit, not a
         claim about Channel3's maximum response size.
+        When CHANNEL3_COLLECTION_ID is configured, searches remain scoped to
+        that collection without an unscoped fallback. A continuation token is
+        application-wrapped, expires after 15 minutes, and is bound to the
+        exact search query, effective price range, collection, locale, and page
+        size. A changed selection requires a new search without a token. Each continuation is
+        a separate rate-limited request. Provider ranking and catalog contents
+        can change between pages, so exhausting a bounded search does not prove
+        that a product is absent from the collection.
+        All responses, including validation errors and preflights, carry
+        Cache-Control: no-store.
       requestBody:
         required: true
         description: JSON request body, limited to 8192 UTF-8 bytes (8 KiB); the body must finish reading within 3 seconds.
@@ -398,6 +432,13 @@ paths:
                   type: string
                   minLength: 2
                   maxLength: 120
+                  description: >-
+                    Product search text or a supported price-only phrase.
+                    Common budget phrases such as "under 150" are removed from
+                    the provider query and applied as a structured price filter
+                    in the resolved storefront currency. If no product text
+                    remains, the provider query uses the generic term "products"
+                    with the structured filter.
                 limit:
                   type: integer
                   minimum: 1
@@ -405,6 +446,13 @@ paths:
                   default: 6
                 storefront:
                   $ref: "#/components/schemas/MarketplaceStorefront"
+                priceRange:
+                  $ref: "#/components/schemas/MarketplacePriceRange"
+                pageToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 6144
+                  description: Application-wrapped continuation from a search with identical query, storefront, limit, and effective price range.
       responses:
         "200":
           description: Live Channel3 search results
@@ -413,7 +461,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceSearchResponse"
         "400":
-          description: Request JSON, the search query, or the storefront is invalid
+          description: Request JSON, query, storefront, or storefront-currency price range is invalid
           content:
             application/json:
               schema:
@@ -511,10 +559,14 @@ paths:
         rejected, including when it describes encoded bytes. Provider headers
         and body must arrive within the existing eight-second request deadline.
         This is an app limit, not a Channel3 maximum.
-        When CHANNEL3_COLLECTION_ID is configured, provider search and browse
-        are scoped to that collection. Invalid configuration or an unavailable
-        provider collection returns 503; there is no unscoped fallback.
-        Catalog continuations bind the configured collection as well as selections.
+        Curated browsing always requires CHANNEL3_COLLECTION_ID to contain a
+        valid shared collection ID. Missing or invalid configuration returns
+        503 before calling Channel3. A configured collection is always applied
+        to browse requests; there is no unscoped fallback. Explicit text search
+        remains a separate path and can omit the collection. Catalog
+        continuations bind the required collection as well as selections.
+        All responses, including validation errors and preflights, carry
+        Cache-Control: no-store.
       parameters:
         - name: section
           in: query
@@ -575,10 +627,10 @@ paths:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
           description: >-
-            Channel3 browse or its default locale is not configured correctly,
-            the provider is temporarily unavailable, or its response exceeds
-            the app's limit, times out, contains malformed UTF-8 or JSON, or
-            has an invalid product shape.
+            The shared Channel3 collection, browse configuration, or default
+            locale is missing or invalid; the provider is temporarily
+            unavailable; or its response exceeds the app's limit, times out,
+            contains malformed UTF-8 or JSON, or has an invalid product shape.
           content:
             application/json:
               schema:
@@ -648,6 +700,10 @@ components:
         coins:
           type: array
           minItems: 1
+          maxItems: 7
+          description: >-
+            At most one record per tracked coin ID. A response may contain a
+            subset of the watchlist; duplicate IDs from the provider are rejected.
           items:
             $ref: "#/components/schemas/MarketQuote"
     MarketQuote:
@@ -708,6 +764,11 @@ components:
           format: date-time
         coins:
           type: array
+          minItems: 1
+          maxItems: 7
+          description: >-
+            At most one record per tracked coin ID. A response may contain a
+            subset of the watchlist; duplicate IDs from the provider are rejected.
           items:
             $ref: "#/components/schemas/MarketCoin"
     MarketCoin:
@@ -790,8 +851,9 @@ components:
           description: >-
             market_chart indicates full historical data. market_overview_sparkline
             indicates the cached price-only fallback; its sample timestamps are
-            evenly spaced across the 7-day window because the upstream values
-            do not include per-point timestamps.
+            approximately evenly spaced across the 7-day window and rounded to
+            whole milliseconds because the upstream values do not include
+            per-point timestamps.
         availableMetrics:
           type: array
           minItems: 1
@@ -875,7 +937,9 @@ components:
         timestamp:
           type: integer
           format: int64
-          description: Unix timestamp in milliseconds
+          minimum: -8640000000000000
+          maximum: 8640000000000000
+          description: Unix timestamp in whole milliseconds within the JavaScript Date range
         value:
           type: number
           minimum: 0
@@ -898,10 +962,26 @@ components:
       type: string
       enum: [GB, US]
       description: GB selects GBP; US selects USD. The country affects available offers.
+    MarketplacePriceRange:
+      type: object
+      additionalProperties: false
+      description: Price limits in the resolved storefront currency, intersected with any budget phrase in query.
+      properties:
+        minPrice:
+          type: number
+          minimum: 0
+          maximum: 100000000
+        maxPrice:
+          type: number
+          minimum: 0
+          maximum: 100000000
+      anyOf:
+        - required: [minPrice]
+        - required: [maxPrice]
     MarketplaceSearchResponse:
       type: object
       additionalProperties: false
-      required: [provider, storefront, currency, query, retrievedAt, products, nextPageToken]
+      required: [provider, storefront, currency, query, priceRange, retrievedAt, products, nextPageToken]
       properties:
         provider:
           type: string
@@ -914,6 +994,11 @@ components:
           description: Effective requested currency; each offer's own currency remains authoritative.
         query:
           type: string
+        priceRange:
+          anyOf:
+            - $ref: "#/components/schemas/MarketplacePriceRange"
+            - type: "null"
+          description: Effective structured price limits applied to the provider request, or null when no price filter is active.
         retrievedAt:
           type: string
           format: date-time
@@ -923,6 +1008,7 @@ components:
             $ref: "#/components/schemas/MarketplaceProduct"
         nextPageToken:
           type: [string, "null"]
+          description: Opaque application-wrapped continuation, or null when the provider supplies none.
     MarketplaceCatalogResponse:
       type: object
       additionalProperties: false

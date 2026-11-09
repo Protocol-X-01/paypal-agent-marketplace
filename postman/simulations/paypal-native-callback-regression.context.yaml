@@ -1,0 +1,32 @@
+simulation: Fictional native PayPal callback regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: A locally scripted OpenID Connect provider with fictional keys, identity and credentials.
+  unblocks: Exercise the current native and web callbacks and provider adapter over loopback HTTP without contacting PayPal or enabling customer login.
+assumptions:
+  - id: documented-callback-scope
+    status: supported
+    claim: PayPal's published login-button guide shows a successful authorization response containing a scope parameter.
+    reason: This is supported by the published example; the example does not establish exactly what every PayPal environment returns.
+    verification: On 2026-11-06 the guide's authorization-code example included a space-separated scope value. No actual customer or sandbox consent flow was performed.
+    source: https://developer.paypal.com/log-in/build-button/
+    updated_at: '2026-11-06'
+  - id: fictional-callback-verification
+    status: supported
+    claim: The tested local native and web controllers accept fictional signed responses with the expected issuer, including scope or unrecognized extensions, and reject the simulated invalid cases before a token exchange.
+    reason: The actual controller and OpenID provider adapter were source-hashed and exercised with a stateful Postman stand-in; this establishes caller behavior only under the fixture's assumptions.
+    verification: On 2026-11-07 an isolated run accepted five signed fictional responses, rejected eight invalid or stale callbacks, and observed exactly five token, JWKS and userinfo requests. A delayed web callback did not consume the newer fictional attempt. Scope, issuer and ignored extensions were not reflected into the fixed return links. The stand-in's issuer metadata required an issuer parameter. Evidence is under /home/protocol-x/Downloads/paypal-native-callback-sim-cvol44hw/. Later local runs also checked the rejected fictional web session-issuance path with a claim-scrubbing in-memory store; each observed six token, JWKS and userinfo requests. Evidence is under /home/protocol-x/Downloads/paypal-native-callback-sim-6mtieam7/ and /home/protocol-x/Downloads/paypal-native-callback-sim-su4_0gw0/. The later native-claim-tag version additionally models clearing native provider values on reservation; evidence is /home/protocol-x/Downloads/paypal-native-callback-sim-8ahoxm8o/, /home/protocol-x/Downloads/paypal-native-callback-sim-3868secd/ and the latest source-matched run /home/protocol-x/Downloads/paypal-native-callback-sim-7i96bk8s/. These runs model the store and do not prove PostgreSQL behavior.
+    source: tests/paypal-native-callback-simulation.py ; tests/paypal-native-callback-simulation-driver.cjs ; postman/mocks/paypal-native-oidc-fixture/default.js
+    updated_at: '2026-11-07'
+  - id: actual-paypal-native-oidc
+    status: unknown
+    claim: PayPal's sandbox supports this exact native authorization flow, including issuer metadata, PKCE, token verification and user consent.
+    reason: The local stand-in cannot prove the real provider's metadata, callback shape or behavior. Sign-in remains disabled pending a real, consented sandbox and device check.
+    verification: No real PayPal identity endpoint, customer credentials, device or consent was used in this simulation. The owner's published mock was not searched because the Postman CLI is in a temporary local session.
+    source: docs/CUSTOMER-NATIVE-AUTH.md ; https://developer.paypal.com/log-in/build-button/
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-07'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty worktree; exact source hashes are recorded with the run)
+    cli: 1.84.0

@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Clear crypto market prices and charts with a manual portfolio view.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f5f7fb",
-    theme_color: "#ffffff",
+    background_color: "#05070b",
+    theme_color: "#05070b",
     icons: [
       {
         src: "/favicon.ico",

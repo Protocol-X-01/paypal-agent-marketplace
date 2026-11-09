@@ -24,8 +24,8 @@ response:
     content: |-
       {
         "error": {
-          "code": "upstream_invalid_response",
-          "message": "string"
+          "code": "market_data_unavailable",
+          "message": "Market data is temporarily unavailable. Please try again shortly."
         }
       }
 order: 4000

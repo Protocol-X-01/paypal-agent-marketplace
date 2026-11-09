@@ -1,5 +1,6 @@
 import { calculateEma, calculateRsi, calculateSma } from "./candle-series";
 import type { CandleHistory } from "./web-candle-data";
+import { marketChartColors } from "./market-chart-theme";
 
 export type PriceIndicator = "sma" | "ema" | "rsi";
 export type PriceIndicatorState = Record<PriceIndicator, boolean>;
@@ -10,9 +11,9 @@ export type IndicatorTimeWindow = { start: number; end: number };
 
 export const EMPTY_PRICE_INDICATORS: PriceIndicatorState = { sma: false, ema: false, rsi: false };
 export const PRICE_INDICATORS: { id: PriceIndicator; label: string; minimum: number; color: string }[] = [
-  { id: "sma", label: "SMA 20", minimum: 20, color: "#b27613" },
-  { id: "ema", label: "EMA 20", minimum: 20, color: "#6541c1" },
-  { id: "rsi", label: "RSI 14", minimum: 15, color: "#5364b9" },
+  { id: "sma", label: "SMA 20", minimum: 20, color: marketChartColors.sma },
+  { id: "ema", label: "EMA 20", minimum: 20, color: marketChartColors.ema },
+  { id: "rsi", label: "RSI 14", minimum: 15, color: marketChartColors.rsi },
 ];
 
 export function hasPriceIndicators(indicators: PriceIndicatorState): boolean {
@@ -60,8 +61,8 @@ export function indicatorSegments(history: CandleHistory, values: readonly (numb
   });
 }
 
-export function lineIndicatorOverlays(history: CandleHistory, values: PriceIndicatorValues, indicators: PriceIndicatorState, window: IndicatorTimeWindow): LineIndicatorOverlay[] {
-  return PRICE_INDICATORS.flatMap(({ id, label, color }) => id === "rsi" || !indicators[id] ? [] : [{ id, label, color, segments: indicatorSegments(history, values[id], window) }]);
+export function lineIndicatorOverlays(history: CandleHistory, values: PriceIndicatorValues, indicators: PriceIndicatorState, window: IndicatorTimeWindow, colors = marketChartColors): LineIndicatorOverlay[] {
+  return PRICE_INDICATORS.flatMap(({ id, label }) => id === "rsi" || !indicators[id] ? [] : [{ id, label, color: colors[id], segments: indicatorSegments(history, values[id], window) }]);
 }
 
 /** Nearest actual close at or before the visible endpoint, within this window. */

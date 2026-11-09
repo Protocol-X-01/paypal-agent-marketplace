@@ -33,6 +33,34 @@ test("invalid, out-of-range and underflow inputs cannot become saved values", ()
   assert.deepEqual(parseHoldingDraft("0e-9999"), { kind: "valid", amount: 0 });
 });
 
+test("only accepts quantities whose decimal value survives numeric storage", () => {
+  for (const text of [
+    "0.1", "000.1000", ".00000001", "1e-8", "1000e-3",
+    "1.2345678901234567", "123456789012.34567", "999999999999.9999", "1000000000000.0000",
+    "1.0000000000000000e12", "1e-320", "5e-324", "0e-9999",
+  ]) {
+    assert.equal(parseHoldingDraft(text).kind, "valid", text);
+  }
+  for (const text of [
+    "0.1234567890123456789", "999999999999.99999",
+    "1.00000000000000001", "123456789012.345678", "100000000000000001e-17",
+  ]) {
+    assert.deepEqual(parseHoldingDraft(text), { kind: "invalid", reason: "precision" }, text);
+  }
+});
+
+test("unrepresentable edits stay in the draft and cannot replace saved amounts", () => {
+  const raw = '{"bitcoin":0.12345678901234568,"ethereum":2}';
+  const stored = readStoredHoldings(raw, tracked);
+  assert.equal(stored.ok, true);
+  assert.deepEqual(parseHoldingDraft(draftsForHoldings(stored.amounts).bitcoin), { kind: "valid", amount: 0.12345678901234568 });
+  const drafts = { bitcoin: "0.1234567890123456789", ethereum: "2" };
+  assert.equal(hasUnfinishedHoldings(drafts), true);
+  assert.deepEqual(previewHoldings(drafts, stored.amounts, tracked), { ethereum: 2 });
+  assert.deepEqual(stored.amounts, { bitcoin: 0.12345678901234568, ethereum: 2 });
+  assert.equal(drafts.bitcoin, "0.1234567890123456789");
+});
+
 test("saved holdings are read without silently discarding corrupt entries", () => {
   assert.deepEqual(readStoredHoldings(null, tracked), { ok: true, amounts: {} });
   assert.deepEqual(readStoredHoldings('{"bitcoin":0.1,"ethereum":0}', tracked), { ok: true, amounts: { bitcoin: 0.1, ethereum: 0 } });

@@ -40,20 +40,23 @@ export async function register(): Promise<void> {
   process.env.NEXT_OTEL_FETCH_DISABLED = "1";
 
   // NODE_ENV is also "production" for local `next start` builds. Export only
-  // from a production Render service, never from a developer machine or PR preview.
+  // when explicitly enabled on production Render, never on a PR preview.
   if (
     process.env.NODE_ENV !== "production" ||
     process.env.RENDER !== "true" ||
-    process.env.IS_PULL_REQUEST === "true"
+    process.env.IS_PULL_REQUEST === "true" ||
+    process.env.PAYPAL_ELASTIC_EXPORT_ENABLED !== "true"
   ) {
     return;
   }
 
   const endpoint = process.env.ELASTIC_OTLP_ENDPOINT?.trim();
-  const apiKey = process.env.ELASTIC_API_KEY?.trim();
+  // This key belongs to the PayPal Observability project. Do not reuse the
+  // generic Elastic key, which may belong to an unrelated security project.
+  const apiKey = process.env.PAYPAL_ELASTIC_OTLP_API_KEY?.trim();
   const missing = [
     !endpoint && "ELASTIC_OTLP_ENDPOINT",
-    !apiKey && "ELASTIC_API_KEY",
+    !apiKey && "PAYPAL_ELASTIC_OTLP_API_KEY",
   ].filter((name): name is string => Boolean(name));
 
   if (missing.length > 0) {
@@ -68,7 +71,7 @@ export async function register(): Promise<void> {
   const traceEndpoint = getTraceEndpoint(endpoint!);
   if (!traceEndpoint || /[\r\n,]/.test(apiKey!)) {
     console.warn(
-      "[observability] Elastic export disabled; ELASTIC_OTLP_ENDPOINT must be a valid HTTPS OTLP base URL and ELASTIC_API_KEY must be a single-line key.",
+      "[observability] Elastic export disabled; ELASTIC_OTLP_ENDPOINT must be a valid HTTPS OTLP base URL and PAYPAL_ELASTIC_OTLP_API_KEY must be a single-line key.",
     );
     return;
   }

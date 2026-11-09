@@ -18,18 +18,21 @@ const storefront = load(await source("../src/lib/channel3-storefront.ts"));
 const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront });
 const cors = load(await source("../src/lib/mobile-web-cors.ts"), { "server-only": {} });
 const catalog = load(await source("../src/lib/channel3-catalog.ts"));
+const priceRange = load(await source("../src/lib/marketplace-price-range.ts"));
 const aliases = {
   "@/lib/channel3": provider,
   "@/lib/channel3-storefront": storefront,
   "@/lib/channel3-catalog": catalog,
+  "@/lib/marketplace-price-range": priceRange,
   "@/lib/mobile-web-cors": cors,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => true },
+  "@/lib/request-limits": { acquireClientSlot: () => () => {} },
 };
 const search = load(await source("../src/app/api/marketplace/search/route.ts"), aliases);
 const browse = load(await source("../src/app/api/marketplace/catalog/route.ts"), aliases);
 const { NextRequest } = requireNode("next/server");
 const originalFetch = global.fetch;
-const keys = ["CHANNEL3_API_KEY", "CHANNEL3_BASE_URL", "CHANNEL3_COUNTRY", "CHANNEL3_CURRENCY", "CHANNEL3_LANGUAGE"];
+const keys = ["CHANNEL3_API_KEY", "CHANNEL3_BASE_URL", "CHANNEL3_COUNTRY", "CHANNEL3_CURRENCY", "CHANNEL3_LANGUAGE", "CHANNEL3_COLLECTION_ID"];
 const originalEnv = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 let calls = [];
 let providerPayload = { products: [{ id: "synthetic", title: "Example" }] };
@@ -39,6 +42,7 @@ global.fetch = async (url, options) => {
 };
 process.env.CHANNEL3_API_KEY = "simulation-only";
 process.env.CHANNEL3_BASE_URL = "https://api.example.invalid";
+process.env.CHANNEL3_COLLECTION_ID = "collection-fixture";
 
 function post(body) {
   return search.POST(new NextRequest("http://localhost:3000/api/marketplace/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
@@ -68,7 +72,7 @@ test("explicit storefronts map to the correct provider config in search and brow
       assert.equal(body.storefront, country);
       assert.equal(body.currency, currency);
       assert.equal(calls.length, 1);
-      assert.deepEqual({ ...calls[0].body.config, mode: undefined }, { country, currency, language: "en", mode: undefined });
+      assert.deepEqual({ ...calls[0].body.config, mode: undefined }, { country, currency, language: "en", collection_id: "collection-fixture", mode: undefined });
     }
   }
 });
@@ -88,7 +92,7 @@ test("omitted storefront preserves supported configured country, currency, and l
   }
 });
 
-test("missing locale environment keeps the previous GB/GBP/en defaults", async () => {
+test("missing locale environment uses US/USD/en defaults", async () => {
   delete process.env.CHANNEL3_COUNTRY;
   delete process.env.CHANNEL3_CURRENCY;
   delete process.env.CHANNEL3_LANGUAGE;
@@ -96,8 +100,8 @@ test("missing locale environment keeps the previous GB/GBP/en defaults", async (
   const response = await post({ query: "headphones" });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.storefront, "GB");
-  assert.equal(body.currency, "GBP");
+  assert.equal(body.storefront, "US");
+  assert.equal(body.currency, "USD");
   assert.equal(calls[0].body.config.language, "en");
 });
 
@@ -127,6 +131,72 @@ test("unsupported configured defaults fail closed while explicit storefronts sti
     }
   }
   assert.equal((await post({ query: "headphones", storefront: "US" })).status, 200);
+});
+
+test("natural-language price budgets become structured Channel3 filters in the selected currency", async () => {
+  locale("DE", "EUR", "de");
+  calls = [];
+  const response = await post({ query: "xD bags under 150", storefront: "GB" });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.priceRange, { maxPrice: 150 });
+  assert.deepEqual(result.products.map((product) => product.id), ["synthetic"]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.query, "xD bags");
+  assert.deepEqual(calls[0].body.filters.price, { max_price: 150 });
+  assert.equal(calls[0].body.config.country, "GB");
+  assert.equal(calls[0].body.config.currency, "GBP");
+
+  calls = [];
+  const usResponse = await post({ query: "wireless headphones under $150", storefront: "US" });
+  assert.equal(usResponse.status, 200);
+  assert.deepEqual((await usResponse.json()).priceRange, { maxPrice: 150 });
+  assert.equal(calls[0].body.query, "wireless headphones");
+  assert.equal(calls[0].body.config.currency, "USD");
+  assert.deepEqual(calls[0].body.filters.price, { max_price: 150 });
+});
+
+test("manual bounds intersect with a budget phrase and invalid budgets never reach Channel3", async () => {
+  locale("GB", "GBP", "en");
+  calls = [];
+  const combined = await post({ query: "headphones under 150", storefront: "GB", priceRange: { minPrice: 25, maxPrice: 200 } });
+  assert.equal(combined.status, 200);
+  assert.deepEqual((await combined.json()).priceRange, { minPrice: 25, maxPrice: 150 });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.filters.price, { min_price: 25, max_price: 150 });
+
+  for (const input of [
+    { query: "bags under 100", storefront: "GB", priceRange: { minPrice: 150 } },
+    { query: "bags under £100", storefront: "US" },
+  ]) {
+    calls = [];
+    const rejected = await post(input);
+    assert.equal(rejected.status, 400);
+    assert.equal(calls.length, 0, "invalid or conflicting budgets must fail before the provider call");
+  }
+});
+
+test("price-only budgets preserve the selected currency and use the documented generic provider query", async () => {
+  locale("GB", "GBP", "en");
+  calls = [];
+  const response = await post({ query: "under 150", storefront: "GB" });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.query, "under 150");
+  assert.equal(body.storefront, "GB");
+  assert.equal(body.currency, "GBP");
+  assert.deepEqual(body.priceRange, { maxPrice: 150 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.query, "products");
+  assert.equal(calls[0].body.config.currency, "GBP");
+  assert.deepEqual(calls[0].body.filters.price, { max_price: 150 });
+});
+
+test("typed price fields accept bounded decimal input and reject invalid ranges", () => {
+  assert.deepEqual(priceRange.parsePriceRangeInputs("", "150"), { range: { maxPrice: 150 }, error: null });
+  assert.deepEqual(priceRange.parsePriceRangeInputs("25.50", "150"), { range: { minPrice: 25.5, maxPrice: 150 }, error: null });
+  assert.match(priceRange.parsePriceRangeInputs("1.234", "150").error, /valid minimum price/i);
+  assert.match(priceRange.parsePriceRangeInputs("150", "100").error, /must not exceed/i);
 });
 
 test("malformed provider responses do not become successful storefront results", async () => {

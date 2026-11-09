@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type { ColDef } from "ag-grid-community";
-import { themeQuartz } from "ag-grid-community";
+import { colorSchemeDark, colorSchemeLight, themeQuartz } from "ag-grid-community";
 import { AllEnterpriseModule } from "ag-grid-enterprise";
 import { AgGridProvider, AgGridReact } from "ag-grid-react";
 import { compareBusinessChannels, type BusinessChannelMetric } from "@/lib/business-channel-comparison";
@@ -10,15 +10,16 @@ import { formatBusinessPercentage } from "@/lib/business-percentage";
 import {
   BUSINESS_SNAPSHOT_CHANNEL_LABELS,
   BUSINESS_SNAPSHOT_MAX_BYTES,
+  createBusinessSnapshotReport,
   formatBusinessMinorAmount,
   parseBusinessSnapshot,
-  type BusinessSnapshot,
+  type BusinessSnapshotReport,
   type BusinessSnapshotRow,
 } from "@/lib/business-snapshot";
 import styles from "./business-snapshot-panel.module.css";
+import { useAppearance } from "./theme-preference";
 
 const modules = [AllEnterpriseModule];
-const gridTheme = themeQuartz.withParams({ accentColor: "#1769d2", spacing: 8 });
 type ComparisonMetric = BusinessChannelMetric;
 const comparisonMetrics: Array<{ id: ComparisonMetric; label: string }> = [
   { id: "transactions", label: "Transactions" },
@@ -26,13 +27,27 @@ const comparisonMetrics: Array<{ id: ComparisonMetric; label: string }> = [
   { id: "refunds", label: "Refunds" },
 ];
 
-export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }: { perspective: "teams" | "leadership"; onSnapshotChange: (active: boolean, snapshot?: BusinessSnapshot | null) => void }) {
-  const [snapshot, setSnapshot] = useState<BusinessSnapshot | null>(null);
+export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }: { perspective: "teams" | "leadership"; onSnapshotChange: (active: boolean, report?: BusinessSnapshotReport | null) => void }) {
+  const { appearance } = useAppearance();
+  const [report, setReport] = useState<BusinessSnapshotReport | null>(null);
+  const snapshot = report?.snapshot ?? null;
+  const [attestationAccepted, setAttestationAccepted] = useState(false);
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
   const [sourceAfterDeviceClock, setSourceAfterDeviceClock] = useState(false);
   const [comparisonMetric, setComparisonMetric] = useState<ComparisonMetric>("transactions");
   const readRevision = useRef(0);
+  const gridTheme = useMemo(() => {
+    const light = appearance === "light";
+    return themeQuartz.withPart(light ? colorSchemeLight : colorSchemeDark).withParams({
+      accentColor: light ? "#155eef" : "#0070e0",
+      backgroundColor: light ? "#ffffff" : "#151a20",
+      foregroundColor: light ? "#10213e" : "#f7fafc",
+      chromeBackgroundColor: light ? "#f2f6fb" : "#20262e",
+      borderColor: light ? "#e3e9f1" : "rgba(255, 255, 255, .14)",
+      spacing: 8,
+    });
+  }, [appearance]);
 
   useEffect(() => () => { readRevision.current += 1; }, []);
 
@@ -41,7 +56,7 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
     return [
       { field: "period", headerName: "Period", minWidth: 115, valueFormatter: ({ value }) => value === "current" ? "Current" : "Previous" },
       { field: "channel", headerName: "Sales channel", minWidth: 145, valueFormatter: ({ value }) => value ? BUSINESS_SNAPSHOT_CHANNEL_LABELS[value as BusinessSnapshotRow["channel"]] : "" },
-      { field: "transactions", headerName: "Transactions", minWidth: 140, valueFormatter: ({ value }) => typeof value === "number" ? new Intl.NumberFormat("en-GB").format(value) : "" },
+      { field: "transactions", headerName: "Transactions", minWidth: 140, valueFormatter: ({ value }) => typeof value === "number" ? new Intl.NumberFormat("en-US").format(value) : "" },
       { field: "grossMinor", headerName: `Gross (${currency})`, minWidth: 150, valueFormatter: ({ value }) => typeof value === "number" ? formatBusinessMinorAmount(value, currency) : "" },
       { field: "refundMinor", headerName: `Refunds (${currency})`, minWidth: 150, valueFormatter: ({ value }) => typeof value === "number" ? formatBusinessMinorAmount(value, currency) : "" },
     ];
@@ -50,7 +65,7 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
   const rows = useMemo(() => snapshot ? [...snapshot.rows].sort((a, b) => a.period.localeCompare(b.period) || a.channel.localeCompare(b.channel)) : [], [snapshot]);
   const channelComparison = useMemo(() => snapshot ? compareBusinessChannels(snapshot, comparisonMetric) : [], [snapshot, comparisonMetric]);
   const cards = snapshot ? {
-    transactions: { label: "Transactions", value: new Intl.NumberFormat("en-GB").format(snapshot.periods.current.transactions), detail: "Current period · not unique customers" },
+    transactions: { label: "Transactions", value: new Intl.NumberFormat("en-US").format(snapshot.periods.current.transactions), detail: "Current period · not unique customers" },
     change: { label: "Activity change", value: formatBusinessPercentage(snapshot.summary.transactionChangePct, true), detail: snapshot.summary.transactionChangePct === null ? "Previous count is zero" : "Compared with previous period" },
     gross: { label: "Gross volume", value: formatBusinessMinorAmount(snapshot.periods.current.grossMinor, snapshot.currency), detail: `Current period · ${snapshot.currency}` },
     refunds: { label: "Refund ratio", value: formatBusinessPercentage(snapshot.summary.refundRatioPct), detail: snapshot.summary.refundRatioPct === null ? "Current gross volume is zero" : "Refund amount divided by gross volume" },
@@ -66,6 +81,12 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
+    const attested = attestationAccepted;
+    setAttestationAccepted(false);
+    if (!attested) {
+      setError("Confirm that you are authorized to use the report and that it covers both complete periods before selecting it.");
+      return;
+    }
     const revision = ++readRevision.current;
     setError("");
     if (file.size > BUSINESS_SNAPSHOT_MAX_BYTES) {
@@ -81,9 +102,10 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
         setError(result.error);
         return;
       }
-      setSnapshot(result.snapshot);
+      const importedReport = createBusinessSnapshotReport(result.snapshot, new Date().toISOString());
+      setReport(importedReport);
       setSourceAfterDeviceClock(Date.parse(result.snapshot.sourceUpdatedAt) > Date.now());
-      onSnapshotChange(true, result.snapshot);
+      onSnapshotChange(true, importedReport);
     } catch {
       if (revision === readRevision.current) setError("The report could not be read. Please choose it again.");
     } finally {
@@ -94,10 +116,11 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
   function clearSnapshot() {
     readRevision.current += 1;
     setReading(false);
-    setSnapshot(null);
+    setReport(null);
     setSourceAfterDeviceClock(false);
     setComparisonMetric("transactions");
     setError("");
+    setAttestationAccepted(false);
     onSnapshotChange(false, null);
   }
 
@@ -112,10 +135,14 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
         <span className={styles.badge}>Local to this screen</span>
       </div>
       <p className={styles.privacy}>The file is read in this browser, never uploaded or saved by the app. It clears when you leave this workspace or choose Clear report.</p>
+      <label className={styles.attestation}>
+        <input type="checkbox" checked={attestationAccepted} disabled={reading} onChange={(event) => setAttestationAccepted(event.currentTarget.checked)} />
+        <span><strong>Before choosing a report</strong><small>I confirm I am authorized to use the CSV I’m about to select, and have checked that it includes the complete periods I need to compare. The app cannot verify the source, account, population or actual coverage.</small></span>
+      </label>
       <div className={styles.actions}>
-        <label className={styles.fileButton}>
-          <span>{reading ? "Reading report…" : snapshot ? "Choose another CSV" : "Choose aggregate CSV"}</span>
-          <input type="file" accept=".csv,text/csv" onChange={(event) => void readFile(event)} disabled={reading} aria-describedby="business-import-help" />
+        <label className={`${styles.fileButton} ${!attestationAccepted || reading ? styles.fileButtonDisabled : ""}`}>
+          <span>{reading ? "Reading report…" : snapshot ? "Choose another CSV" : attestationAccepted ? "Choose aggregate CSV" : "Confirm before choosing"}</span>
+          <input type="file" accept=".csv,text/csv" onChange={(event) => void readFile(event)} disabled={reading || !attestationAccepted} aria-describedby="business-import-help" />
         </label>
         <a className={styles.templateLink} href="/templates/business-aggregate-template.csv" download>Download blank template</a>
         {snapshot && <button className={styles.clearButton} type="button" onClick={clearSnapshot}>Clear report</button>}
@@ -125,17 +152,25 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
       <details className={styles.instructions}>
         <summary>How to prepare the report</summary>
         <p>Use the template columns exactly. Include a <code>previous</code> and <code>current</code> row for each included channel: <code>online</code>, <code>in_person</code>, or <code>other</code>. Dates are UTC calendar dates in YYYY-MM-DD; <code>end_exclusive</code> is the first day outside the period. Both periods must be consecutive and complete.</p>
-        <p>Use an uppercase ISO 4217 currency code with a defined minor unit from the app’s September 2026 list, whole transaction counts, and whole minor units for gross and refunds (for example, 1250 means £12.50 in GBP). Use the same source timestamp on every row in UTC, such as <code>2026-11-06T01:30:00Z</code>; it must be at or after the end of the current period. Each row supports up to 1 billion transactions and 1 trillion minor units.</p>
+        <p>Use an uppercase ISO 4217 currency code with a defined minor unit from the app’s September 2026 list, whole transaction counts, and whole minor units for gross and refunds (for example, 1250 means $12.50 in USD). Use the same source timestamp on every row in UTC, such as <code>2026-11-06T01:30:00Z</code>; it must be at or after the end of the current period. Each row supports up to 1 billion transactions and 1 trillion minor units.</p>
         <p>Example format only; these figures are fictional:</p>
-        <pre>{`window_days,period,start_date,end_exclusive,channel,currency,transactions,gross_minor,refund_minor,source_updated_at\n7,previous,2026-10-23,2026-10-30,online,GBP,100,100000,2000,2026-11-06T00:00:00Z\n7,current,2026-10-30,2026-11-06,online,GBP,120,120000,3000,2026-11-06T00:00:00Z`}</pre>
+        <pre>{`window_days,period,start_date,end_exclusive,channel,currency,transactions,gross_minor,refund_minor,source_updated_at\n7,previous,2026-10-23,2026-10-30,online,USD,100,100000,2000,2026-11-06T00:00:00Z\n7,current,2026-10-30,2026-11-06,online,USD,120,120000,3000,2026-11-06T00:00:00Z`}</pre>
       </details>
       {snapshot && <div className={styles.report}>
         <div className={styles.reportHeading}>
           <div><p className={styles.eyebrow}>SELF-PROVIDED · UNVERIFIED · NOT LIVE</p><h4>{perspective === "teams" ? "Activity report" : "Report summary"}</h4></div>
           <span>{snapshot.windowDays}-day periods · {snapshot.currency}</span>
         </div>
-        <p className={styles.provenance}>UTC dates · Current: {snapshot.periods.current.startDate} to before {snapshot.periods.current.endExclusive}. Previous: {snapshot.periods.previous.startDate} to before {snapshot.periods.previous.endExclusive}. Source-stated update: {snapshot.sourceUpdatedAt}.</p>
+        <p className={styles.provenance}>UTC dates · Current: {snapshot.periods.current.startDate} to before {snapshot.periods.current.endExclusive}. Previous: {snapshot.periods.previous.startDate} to before {snapshot.periods.previous.endExclusive}. CSV-stated update (not authenticated): {snapshot.sourceUpdatedAt}.</p>
         {sourceAfterDeviceClock && <p className={styles.clockNotice} role="status">The source timestamp was later than this device’s clock when imported. Check the report and device time.</p>}
+        {report && <dl className={styles.trustDetails} aria-label="Report provenance and verification limits">
+          <div><dt>Source identity</dt><dd>Not authenticated</dd></div>
+          <div><dt>Use permission</dt><dd>User-attested · not independently verified</dd></div>
+          <div><dt>Population</dt><dd>Uploader-defined · not established</dd></div>
+          <div><dt>Period coverage</dt><dd>User-attested · source coverage unverified</dd></div>
+          <div><dt>Freshness</dt><dd>Unknown · file timestamp is unauthenticated</dd></div>
+          <div><dt>Received by browser</dt><dd>{report.provenance.receivedAt.value} · device clock</dd></div>
+        </dl>}
         <div className={styles.metrics}>{cards && cardOrder.map((key) => <article key={key}><span>{cards[key].label}</span><strong>{cards[key].value}</strong><small>{cards[key].detail}</small></article>)}</div>
         {comparisonValues && <figure className={styles.comparison} aria-labelledby="business-comparison-title">
           <figcaption className={styles.comparisonHeading}>
@@ -156,7 +191,7 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
               return <div className={styles.comparisonRow} key={period}>
                 <div className={styles.comparisonRowHeading}>
                   <div><strong>{period === "previous" ? "Previous period" : "Current period"}</strong><span>{range.startDate} to before {range.endExclusive} · UTC</span></div>
-                  <strong className={styles.comparisonAmount}>{comparisonMetric === "transactions" ? new Intl.NumberFormat("en-GB").format(value) : formatBusinessMinorAmount(value, snapshot.currency)}</strong>
+                  <strong className={styles.comparisonAmount}>{comparisonMetric === "transactions" ? new Intl.NumberFormat("en-US").format(value) : formatBusinessMinorAmount(value, snapshot.currency)}</strong>
                 </div>
                 <div className={styles.comparisonTrack} aria-hidden="true"><span className={period === "current" ? styles.comparisonCurrent : styles.comparisonPrevious} style={{ width: `${comparisonMaximum === 0 ? 0 : value / comparisonMaximum * 100}%` }} /></div>
               </div>;

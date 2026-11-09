@@ -1,0 +1,7 @@
+simulation: PayPal webhook verification regression
+version: 1
+routing: path
+mocks:
+  - name: paypal-webhook-verification
+    routeKey: paypal
+    path: postman/mocks/paypal-webhook-verification

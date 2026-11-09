@@ -1,5 +1,15 @@
 $kind: http-request
-description: ""
+description: >-
+  Returns full CoinGecko price, market-cap, and volume history when available.
+  If historical requests are rate-limited, the 1-day and 7-day ranges may fall
+  back to a cached price-only sparkline. Inspect `seriesSource` and
+  `availableMetrics` before using the returned series. The sparkline provides
+  no per-point timestamps, so fallback sample times are approximately evenly
+  spaced across the 7-day window and rounded to milliseconds. CoinGecko Demo
+  credentials are required. Provider calls are
+  capped at 24 per rolling 60-second window per application process; this budget
+  is not shared across service instances. A 429 response includes a Retry-After
+  header.
 url: "{{baseUrl}}/api/market/chart/:coinId?days=7"
 method: GET
 headers:

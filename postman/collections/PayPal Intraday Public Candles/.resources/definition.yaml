@@ -1,0 +1,7 @@
+$kind: collection
+description: >-
+  Derived from postman/specs/binance-intraday.yaml. These validation requests
+  do not contact Binance; the default target is deliberately unreachable until
+  a local server is explicitly selected.
+variables:
+  baseUrl: http://127.0.0.1:9

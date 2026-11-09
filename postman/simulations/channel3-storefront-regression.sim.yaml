@@ -1,0 +1,7 @@
+simulation: Channel3 storefront regression
+version: 1
+routing: path
+mocks:
+  - name: channel3-storefront-regression
+    routeKey: channel3
+    path: postman/mocks/channel3-storefront-regression

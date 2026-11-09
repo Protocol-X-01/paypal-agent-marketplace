@@ -28,7 +28,7 @@ import market_currency_simulation as isolation
 SOURCES = (
     'package.json', 'package-lock.json', 'next.config.ts', 'next-env.d.ts', 'tsconfig.json',
     'src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/channel3-catalog.ts',
-    'src/lib/channel3-rate-limit.ts', 'src/lib/mobile-web-cors.ts',
+    'src/lib/channel3-rate-limit.ts', 'src/lib/mobile-web-cors.ts', 'src/lib/request-limits.ts',
     'src/app/api/marketplace/search/route.ts', 'src/app/api/marketplace/catalog/route.ts',
 )
 REQUESTS = (
@@ -407,6 +407,7 @@ globalThis.fetch = function (input, init) {
             env.update({'TMPDIR': str(work), 'LANG': 'C.UTF-8', 'NO_PROXY':'127.0.0.1,localhost',
                         'NODE_USE_ENV_PROXY':'1', 'NODE_OPTIONS':f'--max-old-space-size=512 --require={json.dumps(str(work / "guard.cjs"))}',
                         'NEXT_TELEMETRY_DISABLED':'1', 'NEXT_IGNORE_INCORRECT_LOCKFILE':'1', 'CHANNEL3_API_KEY':'simulation-only',
+                        'CHANNEL3_COLLECTION_ID':'fixture-collection',
                         'CIRCLE_NODE_TOTAL':'2', 'RAYON_NUM_THREADS':'1', 'UV_THREADPOOL_SIZE':'2',
                         'CHANNEL3_COUNTRY':'DE', 'CHANNEL3_CURRENCY':'GBP', 'CHANNEL3_LANGUAGE':'de'})
             log = tempfile.NamedTemporaryFile(prefix='paypal-channel3-next-proxy-', suffix='.log', dir=SCRATCH_ROOT, delete=False)

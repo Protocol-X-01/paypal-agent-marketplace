@@ -1,0 +1,7 @@
+simulation: Provider redirect credential regression
+version: 1
+routing: path
+mocks:
+  - name: provider-redirect-regression
+    routeKey: upstream
+    path: postman/mocks/provider-redirect-regression

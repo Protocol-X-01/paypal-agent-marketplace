@@ -43,22 +43,81 @@ In PayPal Developer Dashboard, enable Log in with PayPal for the correct sandbox
 app, select only the needed information, and register the exact callback. PayPal
 requires a privacy-policy URL and user-agreement URL, and reviews live apps and
 scopes before live activation. See the [PayPal integration guide](https://developer.paypal.com/log-in/build).
-The sandbox issuer, discovery metadata, ID-token behavior, scope eligibility,
-and callback configuration have not been verified with this project's PayPal
-app. A failed or unexpected metadata check leaves login unavailable.
+The local web and native runtimes now use PayPal's documented authorization-code
+and user-info flow rather than relying on a discovery document or ID token.
+This project's sandbox consent, token response and returned account-type claim
+remain unverified. Keep login disabled until the complete sandbox flow and the
+separate operational acceptance gates pass.
 
 ## Session and privacy model
 
-The server creates a five-minute one-use login transaction, and checks state,
-nonce, S256 PKCE, the ID token's issuer, audience, expiry and RSA signature, and
-the userinfo subject. Discovery and provider endpoints are restricted to the
-selected PayPal environment; redirects and oversized responses fail closed.
+The server creates a five-minute one-use login transaction and consumes its
+state before exchanging the authorization code with the server-held client
+secret. It then fetches OpenID user-info with the short-lived Bearer access
+token and requires a bounded `sub`. PayPal's documented manual flow does not
+specify PKCE or an ID token; the existing database nonce/verifier columns remain
+for schema compatibility and are not sent to PayPal. Requests are restricted
+to fixed PayPal hosts and paths, have five-second deadlines and bounded
+responses, and fail on redirects. Access and refresh tokens are not persisted.
 Browser cookies are host-only, Secure, HttpOnly and SameSite=Lax. The opaque
 application session expires after 30 minutes, is stored only as a hash, and is
 revoked on sign-out or rotated on a successful new sign-in. Login and sign-out
 require an exact same-origin POST. A configured callback returns to the fixed
 Account destination and does not put a code or token into its destination;
-an unconfigured callback returns a generic unavailable response.
+an unconfigured callback returns a fixed relative failure redirect.
+Session reads check both the session and family against the advancing database
+clock, including after waiting for a table lock.
+
+Web and native callbacks share a 4 KiB response filter. It ignores unrecognized
+extensions without forwarding or reflecting them, rejects duplicate recognized
+parameters and unsupported hybrid/JARM/token fields, and keeps code and error
+responses separate. A bounded `scope` is informational and discarded; a bounded
+`iss`, when present, is checked against the configured PayPal environment.
+Malformed responses fail before a web transaction is consumed. These local checks do not establish actual
+PayPal sandbox metadata, consent, or successful customer sign-in.
+
+The web store locks a pending transaction before checking its submitted state,
+context and expiry. A late or incorrect state in the same unexpired context leaves
+the attempt pending; matching states remain one-use. Once a matching claim commits,
+the stored state, nonce and verifier have been logically replaced with empty
+non-secret markers before the winning callback can begin provider work. Expired or
+cross-context attempts are completed and their stored values cleared in the same
+database transaction. This uses the existing schema; no migration is required.
+
+The advancing-clock expiry check is repeated after the claim update to catch a
+wait during that statement. Time can still pass during the later commit or its
+acknowledgement; session issuance performs independent expiry checks. A claim
+that commits but loses its acknowledgement has markers in the current row; one
+that rolls back can remain pending with its original values. Pending attempts
+and rows created by older running versions are not guaranteed to be scrubbed at
+expiry without a reliable cleanup process. Logical updates do not erase older
+PostgreSQL row versions, WAL or backups; retention and access remain separately
+controlled.
+
+Local validation on 7 November used isolated PostgreSQL owner and restricted
+runtime-role fixtures, including duplicate claims, live and expired row-lock
+waits, a delayed update and deferred commit failure. Evidence:
+`/home/protocol-x/Downloads/paypal-claim-final-pg-rlb4u09r/metrics.json`.
+The controller's acknowledgement-loss cases use a fictional in-memory store,
+not an interrupted PostgreSQL network connection. No hosted database or real
+provider was exercised by these checks.
+
+Before issuing a session, the store also rechecks the pending transaction, its
+session family, and any initiating session after the relevant locks have been
+acquired, after the insert, and in the final guarded family update. An authority
+that expires during those waits cannot create a new session. The final guarded
+update is the authorization point; it cannot guarantee wall-clock validity at
+the exact instant a later database commit completes.
+When a browser starts another sign-in with an earlier transaction cookie and no
+active session cookie, the earlier transaction must still be valid in this
+context. An expired or unresolvable earlier transaction fails closed rather than
+starting an unrelated family; the browser may need to wait for that short-lived
+cookie to expire before retrying.
+
+Bounded expiry cleanup rechecks each target's expiry after a row-lock wait, so
+it does not delete a family that a concurrent transaction has extended. Cleanup
+runs separately from the subsequent sign-in transaction and can commit even if
+that sign-in later fails.
 
 Login transactions and sessions are bound to a keyed fingerprint of the
 canonical origin, selected environment and issuer, client ID and secret,

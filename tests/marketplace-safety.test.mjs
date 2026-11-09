@@ -64,6 +64,17 @@ test("handoff requires the exact product and retailer in the refreshed response"
   assert.deepEqual(matchCurrentOffer(items, "p1"), { product: items[1], url: null });
 });
 
+test("handoff never treats an overlong or different complete ID as an exact match", () => {
+  const prefix = "a".repeat(300);
+  const longProduct = { id: `${prefix}A`, offers: [{ domain: "shop.example", url: "https://shop.example/other" }] };
+  const otherLongProduct = { ...longProduct, id: `${prefix}B` };
+  const completeProduct = { ...longProduct, id: prefix };
+  assert.deepEqual(matchCurrentOffer([longProduct], prefix, "shop.example"), { product: null, url: null });
+  assert.deepEqual(matchCurrentOffer([otherLongProduct], longProduct.id, "shop.example"), { product: null, url: null });
+  assert.deepEqual(matchCurrentOffer([longProduct], longProduct.id, "shop.example"), { product: null, url: null });
+  assert.deepEqual(matchCurrentOffer([completeProduct], prefix, "shop.example"), { product: completeProduct, url: "https://shop.example/other" });
+});
+
 test("a matching label cannot redirect to another or unsafe host", () => {
   for (const url of ["https://other.example/product", "https://127.0.0.1/product", "https://shop.example:8443/product"]) {
     const product = { id: "p1", offers: [{ domain: "shop.example", url }] };
