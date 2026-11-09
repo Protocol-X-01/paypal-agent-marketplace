@@ -103,7 +103,7 @@ function SendContent() {
           <View style={styles.titleBlock}>
             <Text style={styles.kicker}>PAYMENTS</Text>
             <Text accessibilityRole="header" style={styles.pageTitle}>Send</Text>
-            <Text style={styles.subtitle}>Start a USD contact draft.</Text>
+            <Text style={styles.subtitle}>USD Venmo draft</Text>
           </View>
 
           <View style={styles.amountCard}>
@@ -131,7 +131,7 @@ function SendContent() {
             </View>
             {validationMessage
               ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.amountError}>{validationMessage}</Text>
-              : <Text style={styles.currencyHint}>US dollars</Text>}
+              : null}
 
             <View style={styles.suggestions} accessibilityLabel="Suggested amounts">
               {SUGGESTED_AMOUNTS.map((suggestion) => {
@@ -158,8 +158,7 @@ function SendContent() {
           <View style={styles.contactCard}>
             <View style={styles.contactMark} importantForAccessibility="no"><Text style={styles.contactMarkText}>↗</Text></View>
             <View style={styles.contactCopy}>
-              <Text style={styles.contactTitle}>Choose a contact</Text>
-              <Text style={styles.contactDescription}>Select or add a contact, then review your note.</Text>
+              <Text style={styles.contactTitle}>Recipient</Text>
             </View>
           </View>
 
@@ -203,7 +202,6 @@ function createStyles(palette: Palette) {
     currencySymbol: { color: palette.muted, fontSize: 25, lineHeight: 32, fontWeight: '700' },
     amountInput: { minWidth: 70, flex: 1, paddingVertical: 10, color: palette.ink, fontSize: 32, lineHeight: 40, fontWeight: '800', fontVariant: ['tabular-nums'] },
     currencyCode: { color: palette.muted, fontSize: 12, lineHeight: 18, fontWeight: '800', letterSpacing: 0.5 },
-    currencyHint: { color: palette.muted, fontSize: 11, lineHeight: 16, marginTop: 7 },
     amountError: { color: palette.negative, fontSize: 11, lineHeight: 16, marginTop: 7 },
     suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 15 },
     suggestion: { minWidth: 64, minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 13, borderRadius: 13, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface },
@@ -215,7 +213,6 @@ function createStyles(palette: Palette) {
     contactMarkText: { color: palette.link, fontSize: 22, lineHeight: 27, fontWeight: '700' },
     contactCopy: { flex: 1, gap: 2 },
     contactTitle: { color: palette.ink, fontSize: 13, lineHeight: 18, fontWeight: '800' },
-    contactDescription: { color: palette.muted, fontSize: 11, lineHeight: 16 },
     primaryButton: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: palette.blue, paddingHorizontal: 16, paddingVertical: 12 },
     primaryButtonText: { color: palette.onBlue, fontSize: 14, lineHeight: 20, fontWeight: '800' },
     buttonDisabled: { opacity: 0.5 },

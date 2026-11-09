@@ -121,7 +121,7 @@ function DataNotice({
           <Text style={styles.noticeTitle}>Market data needs attention</Text>
           <Text style={styles.noticeBody}>{error ?? 'Showing a saved market view while requesting another response.'}</Text>
           <Text style={styles.noticeBody}>{comparison ?? `Displayed view retrieved ${formatTimestamp(retrievedAt)}`}</Text>
-          <Text style={styles.noticeBody}>Retrieval time alone does not confirm price freshness.</Text>
+          <Text style={styles.noticeBody}>Prices can lag the fetch time.</Text>
         </View>
         <View style={styles.noticeActions}>
           {onShowLatest && <NativeButton label="Show latest response" onPress={onShowLatest} compact variant="text" />}
@@ -148,7 +148,7 @@ function DataNotice({
       <View style={styles.dataDot} />
       <View style={styles.noticeCopy}>
         <Text style={styles.freshText}>{loading ? 'Requesting market data' : `CoinGecko · Response retrieved ${formatTimestamp(retrievedAt)}`}</Text>
-        <Text style={styles.noticeBody}>Retrieval time alone does not confirm price freshness.</Text>
+        <Text style={styles.noticeBody}>Prices can lag the fetch time.</Text>
       </View>
     </View>
   );
@@ -348,7 +348,6 @@ export default function MarketsScreen() {
         <View style={styles.titleBlock}>
           <Text style={styles.kicker}>CRYPTO OVERVIEW</Text>
           <Text accessibilityRole="header" style={styles.pageTitle}>Markets</Text>
-          <Text style={styles.subtitle}>Reference prices · availability varies.</Text>
         </View>
 
         <DataNotice
@@ -364,15 +363,10 @@ export default function MarketsScreen() {
         <View style={styles.sectionHeading}>
           <View style={styles.sectionHeadingText}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Selected asset</Text>
-            <Text style={styles.sectionSubtitle}>Choose an asset; pull to refresh.</Text>
           </View>
           <NativeButton label={refreshingMarketData ? 'Refreshing…' : 'Refresh'} accessibilityLabel="Refresh quote and active chart data" onPress={refreshMarketData} disabled={refreshingMarketData} compact variant="text" />
         </View>
 
-        <View style={styles.assetPickerHeading}>
-          <Text style={styles.assetPickerTitle}>Choose asset</Text>
-          <Text style={styles.assetPickerHint}>Swipe to explore</Text>
-        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.assetPicker} accessibilityLabel="Choose a crypto asset">
           {ASSETS.map((item) => {
             const selected = item.id === selectedCoin;
@@ -431,7 +425,6 @@ export default function MarketsScreen() {
         <View style={styles.sectionHeading}>
           <View>
             <Text accessibilityRole="header" style={styles.sectionTitle}>{metricLabel(visibleMetric)} history</Text>
-            <Text style={styles.sectionSubtitle}>Compare the selected measure over time.</Text>
           </View>
         </View>
 
@@ -485,7 +478,7 @@ export default function MarketsScreen() {
                   onPress={() => chooseIntradayDays(window)}
                 />)}
               </View>
-              <Text style={styles.fallbackNote}>Binance Spot · USDT, separate from USD. 3m/5m use 1D; 1d uses 7D.</Text>
+              <Text style={styles.fallbackNote}>USDT quote · not USD. 3m/5m: 1D · 1d: 7D.</Text>
             </>}
           </View>}
 
@@ -493,7 +486,7 @@ export default function MarketsScreen() {
           {visibleMetric === 'price' && <CandleIndicatorControls indicators={candleIndicators} onIndicatorChange={toggleIndicator} candleCount={candleResource.data?.candles.length ?? null} open={lineIndicatorsOpen} onToggleOpen={() => setLineIndicatorsOpen((open) => !open)} />}
           {visibleMetric === 'price' && anyIndicator && (estimatedLine ? (
             <View style={styles.indicatorNotice} accessibilityRole="summary">
-              <Text style={styles.fallbackNote}>Indicators are unavailable on this estimated-time line. Switch to Candles to inspect exact CoinGecko OHLC closes.</Text>
+              <Text style={styles.fallbackNote}>Indicators need exact candle times. Switch to Candles.</Text>
               <NativeButton label="View candles" onPress={() => chooseChartMode('candles')} compact variant="text" />
             </View>
           ) : candleResource.loading || !currencyReady ? (

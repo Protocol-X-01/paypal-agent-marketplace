@@ -186,7 +186,7 @@ export function MarketChart({ points, metric, color, currency = DEFAULT_DISPLAY_
           <Pressable accessibilityRole="button" accessibilityLabel="Select next chart point" accessibilityState={{ disabled: selectedIndex === chart.samples.length - 1 }} disabled={selectedIndex === chart.samples.length - 1} onPress={() => stepSelection(1)} style={[styles.selectionButton, selectedIndex === chart.samples.length - 1 && styles.selectionButtonDisabled]}><Text style={styles.selectionButtonText}>›</Text></Pressable>
         </View>
       </View>
-      <Text style={styles.selectionHint}>Tap or drag horizontally to inspect the plotted samples.{ordered.length > chart.samples.length ? ` Showing ${chart.samples.length} of ${ordered.length} samples; zoom in to inspect more.` : ''}</Text>
+      <Text style={styles.selectionHint}>Tap or drag to inspect samples.{ordered.length > chart.samples.length ? ` ${chart.samples.length} of ${ordered.length} shown · zoom to see more.` : ''}</Text>
       <View style={styles.rangeLabels}>
         <Text style={styles.axisLabel}>Low {metricValueLabel(metric, chart.low, currency, isPaypalUsd)}</Text>
         <Text style={[styles.axisLabel, styles.alignRight]}>High {metricValueLabel(metric, chart.high, currency, isPaypalUsd)}</Text>

@@ -286,7 +286,7 @@ export function CandleChart({ candles, currency, quote, intervalMinutes, isPaypa
           <Line x1={x(selectedIndex)} x2={x(selectedIndex)} y1={8} y2={RSI_HEIGHT - 8} stroke={colors.plotText} strokeWidth={1} strokeDasharray="4 4" />
         </Svg>
       </View>}
-      <Text style={styles.hint}>Tap or drag horizontally to inspect. The time shown is the candle close in UTC.{gaps.length ? ' Dashed separators mark missing intervals.' : ''}{activeCount ? ' Indicators use available closes and need a warm-up period.' : ''}</Text>
+      <Text style={styles.hint}>Tap or drag to inspect · candle close in UTC{gaps.length ? ' · dashed gaps mark missing intervals' : ''}{activeCount ? ' · indicators need warm-up' : ''}.</Text>
     </View>
   );
 }
