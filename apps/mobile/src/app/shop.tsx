@@ -19,7 +19,7 @@ import { searchChannel3, fetchChannel3Catalog, createCustomerCollectionsReposito
 import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS, getChannel3SeasonalEdit } from '@/lib/channel3-shelves';
 import { isFreshVerifiedOffer, VERIFIED_OFFERS_TTL_MS } from '@/lib/channel3-offers';
 import { createChannel3ImageLoader, type Channel3ImageLease } from '@/lib/channel3-image';
-import { createStorefrontFence, DEFAULT_SHOP_STOREFRONT, loadShopStorefront, saveShopStorefront, SHOP_STOREFRONTS, type ShopStorefront, type StorefrontTicket } from '@/lib/shop-storefront';
+import { createStorefrontFence, DEFAULT_SHOP_STOREFRONT, loadShopDiscoveryMode, loadShopStorefront, saveShopDiscoveryMode, saveShopStorefront, SHOP_STOREFRONTS, type ShopDiscoveryMode, type ShopStorefront, type StorefrontTicket } from '@/lib/shop-storefront';
 import { useCustomerSession } from '@/lib/customer-session-context';
 import { useResponsiveLayout } from '@/lib/responsive-layout';
 import { palette } from '@/lib/palette';
@@ -200,6 +200,9 @@ export default function ShopScreen() {
   const storefrontMounted = useRef(false);
   const storefrontSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const storefrontSaveRevision = useRef(0);
+  const [discoveryMode, setDiscoveryMode] = useState<ShopDiscoveryMode>('browse');
+  const discoveryModeSelectionRevision = useRef(0);
+  const discoveryModeSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const searchRequest = useRef<AbortController | null>(null);
   const searchIdentity = useRef<object | null>(null);
   const searchInterrupted = useRef(false);
@@ -284,6 +287,10 @@ export default function ShopScreen() {
 
   useEffect(() => {
     storefrontMounted.current = true;
+    const modeRevision = discoveryModeSelectionRevision.current;
+    void loadShopDiscoveryMode().then((savedMode) => {
+      if (storefrontMounted.current && discoveryModeSelectionRevision.current === modeRevision) setDiscoveryMode(savedMode);
+    }).catch(() => undefined);
     void loadShopStorefront().then((saved) => {
       if (!storefrontMounted.current) return;
       storefrontFence.current.select(saved.storefront);
@@ -526,8 +533,32 @@ export default function ShopScreen() {
     }
   }
 
+  function chooseDiscoveryMode(mode: ShopDiscoveryMode) {
+    discoveryModeSelectionRevision.current += 1;
+    setDiscoveryMode(mode);
+    discoveryModeSaveQueue.current = discoveryModeSaveQueue.current
+      .catch(() => undefined)
+      .then(() => saveShopDiscoveryMode(mode))
+      .catch(() => undefined);
+    if (mode === 'browse') {
+      searchRequest.current?.abort();
+      searchRequest.current = null;
+      searchIdentity.current = null;
+      searchInterrupted.current = false;
+      setSearching(false);
+      setSearchMoreLoading(false);
+      setSearchMoreError(null);
+    } else {
+      catalogRequest.current?.abort();
+      catalogRequest.current = null;
+      setCuratedLoading(false);
+      setCuratedMoreLoading(false);
+    }
+  }
+
   async function loadCuratedSection(section: Channel3CatalogSection | null, retailer: Channel3CatalogRetailer | null = curatedRetailer, append = false) {
     if (!storefrontReady || (!section && !retailer) || (append && (curatedMoreLoading || !curatedCatalog?.nextPageToken))) return;
+    chooseDiscoveryMode('browse');
     const previous = append ? curatedCatalog : null;
     catalogRequest.current?.abort();
     const controller = new AbortController();
@@ -694,6 +725,7 @@ export default function ShopScreen() {
 
   async function runSearch(searchText = query) {
     if (!storefrontReady || searching) return;
+    chooseDiscoveryMode('search');
     const cleaned = searchText.trim();
     if (cleaned.length < 2 || cleaned.length > 120) {
       setSearchError('Enter a search phrase between 2 and 120 characters.');
@@ -1014,11 +1046,29 @@ export default function ShopScreen() {
             {(storefrontStatus === 'invalid' || storefrontStatus === 'unavailable') && <Text style={styles.storefrontNotice} accessibilityRole="summary" accessibilityLiveRegion="polite">{storefrontStatus === 'invalid' ? 'The saved shopping region could not be read. Select a region to replace it.' : 'Your shopping region could not be read or saved. This choice applies for this session.'}</Text>}
           </View>
 
+          <View style={styles.discoveryModes} accessibilityRole="radiogroup" accessibilityLabel="Catalogue view">
+            {(['browse', 'search'] as const).map((mode) => {
+              const selected = discoveryMode === mode;
+              const label = mode === 'browse' ? 'Browse' : 'Search';
+              return <Pressable
+                key={mode}
+                accessibilityRole="radio"
+                accessibilityLabel={`${label} catalogue`}
+                accessibilityState={{ checked: selected }}
+                aria-checked={Platform.OS === 'web' ? selected : undefined}
+                onPress={() => chooseDiscoveryMode(mode)}
+                style={({ pressed }) => [styles.discoveryModeOption, selected && styles.discoveryModeSelected, pressed && styles.pressed]}>
+                <Text style={[styles.discoveryModeText, selected && styles.discoveryModeTextSelected]}>{label}</Text>
+              </Pressable>;
+            })}
+          </View>
+
           <View style={styles.privacyNotice} accessibilityRole="summary">
             <Text style={styles.privacyTitle}>Saved lists stay on this device</Text>
             <Text style={styles.privacyText}>Search goes through PayPal Markets to Channel3; image requests expose your IP. Last-seen prices stay on this device; retailer links are never saved.</Text>
           </View>
 
+          {discoveryMode === 'browse' && <>
           <View style={styles.curatedSection}>
             <View style={styles.sectionHeadingRow}>
               <View style={styles.headingFlex}>
@@ -1137,7 +1187,9 @@ export default function ShopScreen() {
           {curatedMoreError && <Text style={styles.offerError} accessibilityRole="alert" accessibilityLiveRegion="polite">{curatedMoreError}</Text>}
           {curatedCatalog && <Text style={styles.sectionSubtitle} accessibilityLiveRegion="polite" accessibilityState={{ busy: curatedMoreLoading }}>{curatedPageStatus}</Text>}
           {curatedCatalog && <NativeButton label={curatedMoreLoading ? 'Loading more products…' : curatedCatalog.nextPageToken ? 'Load more products' : curatedCatalog.products.length >= 96 ? 'Browse limit reached' : 'All loaded'} disabled={curatedMoreLoading || !curatedCatalog.nextPageToken} onPress={() => void loadCuratedSection(curatedSection, curatedRetailer, true)} />}
+          </>}
 
+          {discoveryMode === 'search' && <>
           <View style={styles.searchCard}>
             <Text style={styles.sectionTitle}>Find something</Text>
               <Text style={styles.sectionSubtitle}>Search products or brands.</Text>
@@ -1312,6 +1364,7 @@ export default function ShopScreen() {
               />
             </View>
           )}
+          </>}
 
           <View style={styles.collectionsSection}>
             <View style={styles.sectionHeadingRow}>
@@ -1528,6 +1581,11 @@ const baseStyles = StyleSheet.create({
   storefrontOptionCurrency: { color: '#526B83', fontSize: 11, fontWeight: '700' },
   storefrontFootnote: { color: '#526B83', fontSize: 11, lineHeight: 16, marginTop: 9 },
   storefrontNotice: { color: '#795419', backgroundColor: '#FFF7E8', overflow: 'hidden', borderRadius: 9, padding: 10, marginTop: 9, fontSize: 11, lineHeight: 16 },
+  discoveryModes: { flexDirection: 'row', gap: 7, borderRadius: 15, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, padding: 4, marginBottom: 14 },
+  discoveryModeOption: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 11, borderWidth: 1, borderColor: 'transparent' },
+  discoveryModeSelected: { backgroundColor: palette.blueWash, borderColor: '#76ADE4' },
+  discoveryModeText: { color: palette.muted, fontSize: 13, fontWeight: '800' },
+  discoveryModeTextSelected: { color: palette.blue },
   privacyNotice: { backgroundColor: '#EDF5FD', borderWidth: 1, borderColor: '#DAE9F9', borderRadius: 16, padding: 13, marginBottom: 17 },
   privacyTitle: { color: '#2B5278', fontSize: 12, fontWeight: '800', marginBottom: 4 },
   privacyText: { color: '#536D87', fontSize: 11, lineHeight: 17 },

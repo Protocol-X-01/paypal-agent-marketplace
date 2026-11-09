@@ -12,6 +12,7 @@ export const GUEST_PRIVATE_STORAGE_KEYS = Object.freeze({
 export const PUBLIC_STORAGE_KEYS = Object.freeze({
   displayCurrency: 'paypal-markets.mobile.display-currency.v1',
   shopStorefront: 'paypal-markets.mobile.shop-storefront.v1',
+  shopDiscoveryMode: 'paypal-markets.mobile.shop-discovery-mode.v1',
 });
 /** 32 bytes produce 43 base64url characters with the final two unused bits zero. */
 export function isCanonicalCustomerDataScope(value: unknown): value is string {

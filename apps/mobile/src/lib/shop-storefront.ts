@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ShopStorefront = 'GB' | 'US';
+export type ShopDiscoveryMode = 'browse' | 'search';
 export type StorefrontTicket = { storefront: ShopStorefront; revision: number };
 export const DEFAULT_SHOP_STOREFRONT: ShopStorefront = 'US';
 export const SHOP_STOREFRONT_KEY = 'paypal-markets.mobile.shop-storefront.v1';
+export const SHOP_DISCOVERY_MODE_KEY = 'paypal-markets.mobile.shop-discovery-mode.v1';
 
 export const SHOP_STOREFRONTS: Record<ShopStorefront, { label: string; shortLabel: string; currency: 'GBP' | 'USD' }> = {
   GB: { label: 'United Kingdom', shortLabel: 'UK', currency: 'GBP' },
@@ -12,6 +14,21 @@ export const SHOP_STOREFRONTS: Record<ShopStorefront, { label: string; shortLabe
 
 export function isShopStorefront(value: unknown): value is ShopStorefront {
   return value === 'GB' || value === 'US';
+}
+
+export function isShopDiscoveryMode(value: unknown): value is ShopDiscoveryMode {
+  return value === 'browse' || value === 'search';
+}
+
+export async function loadShopDiscoveryMode(): Promise<ShopDiscoveryMode> {
+  const value = await AsyncStorage.getItem(SHOP_DISCOVERY_MODE_KEY);
+  return isShopDiscoveryMode(value) ? value : 'browse';
+}
+
+export async function saveShopDiscoveryMode(mode: ShopDiscoveryMode): Promise<void> {
+  if (!isShopDiscoveryMode(mode)) throw new Error('Choose Browse or Search.');
+  await AsyncStorage.setItem(SHOP_DISCOVERY_MODE_KEY, mode);
+  if (await AsyncStorage.getItem(SHOP_DISCOVERY_MODE_KEY) !== mode) throw new Error('Shop view could not be verified.');
 }
 
 export async function loadShopStorefront(): Promise<{ storefront: ShopStorefront; status: 'default' | 'saved' | 'invalid' }> {

@@ -6,6 +6,8 @@ Updated 2026-11-09. This is the working scope for the PayPal hackathon concept. 
 
 The private review branch `codex/paypal-upgrade-20261109` now contains the PayPal-specific OAuth code and user-info adapter for web and native runtimes, based on PayPal's documented `/connect`, token-service, and Identity API flow, plus the clarified Business reporting authorization boundary. Targeted ESLint and website TypeScript checks passed for the adapter; `git diff --check` passed for the later documentation update. This is source-level readiness only: no tests, production build, buyer consent, signed native acceptance, or deployment occurred; customer login remains disabled. The isolated checkout is clean and its reviewed changes are pushed to GitHub; this branch has not been deployed to Render. See [customer login setup](CUSTOMER-LOGIN-SETUP.md) and [Business data](PAYPAL-BUSINESS-DATA.md) for the remaining acceptance gates.
 
+The mobile Shop now mirrors the website's mutually exclusive Browse/Search flow. The selected view is saved on the device; choosing a curated category switches to Browse, while submitting a search switches to Search, and only that view's results are rendered. Mobile lint, mobile TypeScript, and `git diff --check` pass for this change. Automated tests, a production build, and current-source Xiaomi/tablet visual acceptance were not performed; device review remains open.
+
 ## Product boundaries
 
 - Venmo remains the customer's wallet and payment surface. This concept does not connect to a Venmo account, hold keys, execute crypto trades, or complete retailer checkout.
