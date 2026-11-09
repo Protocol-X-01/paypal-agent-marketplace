@@ -25,6 +25,7 @@ const aliases = {
   "@/lib/channel3-catalog": catalog,
   "@/lib/mobile-web-cors": cors,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => true },
+  "@/lib/request-limits": { acquireClientSlot: () => () => {} },
 };
 const search = load(await source("../src/app/api/marketplace/search/route.ts"), aliases);
 const browse = load(await source("../src/app/api/marketplace/catalog/route.ts"), aliases);
@@ -36,6 +37,7 @@ const originalTimeout = AbortSignal.timeout;
 // The test runner supplies a clean environment; no real value is loaded.
 process.env.CHANNEL3_API_KEY = "simulation-only";
 process.env.CHANNEL3_BASE_URL = "https://channel3.example.invalid";
+process.env.CHANNEL3_COLLECTION_ID = "collection-fixture";
 let makeResponse;
 let calls = [];
 globalThis.fetch = async (url, init) => {
@@ -90,7 +92,10 @@ test("GB and US search and browse retain full product fields and existing provid
       assert.equal(body.storefront, country);
       assert.equal(body.currency, currency);
       assert.deepEqual(body.products, [product]);
-      if (kind === "search") assert.equal(body.nextPageToken, upstream.next_page_token);
+      if (kind === "search") {
+        assert.equal(typeof body.nextPageToken, "string");
+        assert.notEqual(body.nextPageToken, upstream.next_page_token);
+      }
       assert.equal(calls.length, 1);
       assert.equal(calls[0].payload.config.country, country);
       assert.equal(calls[0].payload.config.currency, currency);

@@ -8,6 +8,63 @@ Reuse verified PayPal discovery, authorization-code validation, nonce, S256 PKCE
 
 Native app sessions are distinct from browser cookies and PayPal tokens. Do not weaken the web controller's exact same-origin POST requirement, read its HttpOnly cookie from the app, or add a client-controlled return URL. Use a separate native callback and cookie namespace. Reuse the stable subject HMAC derivation, so web and native can name the same verified owner locally, without implying cross-device data synchronization.
 
+## Native expiry checks — local-only
+
+Session reads, handoff transitions and code exchanges must use the advancing database clock after the shared store lock is acquired. When issuing or rotating an authority, lock and recheck the relevant family, handoff, code and initiating session after potentially blocking row or uniqueness waits. An expiry at the final authorization check fails generically and rolls back issuance, rotation and supersession. The check is a defined point before commit; it cannot guarantee the wall clock will not advance before commit finishes. Expired aliases and handoff proofs must still support the existing cancellation and logout recovery rules. Cleanup remains separately committed and may remove eligible expired records even if a later issuance attempt fails.
+
+The isolated PostgreSQL fixture passed expiry and rollback cases, including a
+wait after prior-session revocation, in `/home/protocol-x/Downloads/paypal-native-final-guard-pg-185gqtx8/`.
+These results do not establish provider consent, a hosted rollout, or installed-device behavior.
+
+## Native handoff retention — local-only
+
+Each authorization POST now generates a separate random claim tag. While a
+handoff is `claimed`, the tag's hash occupies the existing `reservation_hash` field;
+provider reservation replaces it with a different reservation hash. If the
+claim or redirect construction throws, the controller makes a best-effort abort
+that matches the handoff, context, browser and claim tag. It cancels and clears
+only that still-claimed, unissued row; it preserves its cancellation proof and
+does not revoke a prior session. A competing POST with a different tag cannot
+abort the winner, even if their provider values match. Cleanup failure leaves
+the original generic response unchanged.
+
+On a later handoff-creation attempt, separately committed maintenance passes
+also looks for expired unissued claimed/processing handoffs and expired ready
+codes in live, non-revoked families. It clears provider, browser, reservation,
+code and account fields while retaining the row, challenge and family proof.
+Issued aliases and live attempts are not swept by this pass. Each pass scans up
+to 40 eligible candidates and changes at most 20, independently of the existing
+expired-family deletion quota. The scrub commits before expired-family deletion
+begins. A process-local cursor advances only after the scrub commits, with same-instance passes queued; row locks
+are taken family first with `SKIP LOCKED`. Other processes have their own cursors.
+Expired-family deletion separately scans up to 40 families and deletes at most
+100 child or family rows per pass. It locks and rechecks each family first, skips
+locked children, and deletes a family only after both child tables are empty.
+Its separate cursor is published only after that deletion transaction commits.
+Database writers must not revive an already expired family after obtaining its
+lock; arbitrary direct SQL that violates that invariant is outside this guarantee.
+
+This is opportunistic maintenance, not a guaranteed deletion deadline: no pass
+runs while there are no new handoff attempts, and failures, process loss or a
+response lost after the handler returns can still leave a claim. The 40/20
+limits bound candidate and update counts, not the database scan or total elapsed
+time; individual statement timeouts do not establish a whole-pass latency bound.
+Older running versions do not write claim tags, though new reservation accepts
+their untagged claimed rows. Logical updates do not erase PostgreSQL history,
+WAL or backups. A separately reviewed reliable cleanup and retention policy is
+still required before enabling sign-in.
+
+Isolated local PostgreSQL tests passed with both owner and restricted runtime
+roles. They cover expiration batches, locked-row progress, cancellation
+proofs, claim-tag mismatches, a prior session, rollback and a delayed delivery
+of a committed maintenance acknowledgement. Evidence is recorded in
+`/home/protocol-x/Downloads/paypal-native-family-retention-five-pg-gsx_e8ky/`,
+`/home/protocol-x/Downloads/paypal-native-family-extension-after-q9f_t1a6/`
+and `/home/protocol-x/Downloads/paypal-native-lock-order-pg-vu23k621/`.
+The acknowledgement delay is injected after a real local COMMIT; the separate
+controller's claim-acknowledgement failure uses an in-memory store, not a
+real interrupted PostgreSQL connection.
+
 ## Proposed flow
 
 1. On an explicit sign-in action, the app creates independent cryptographically random 32-byte state and verifier. It persists the pending state/verifier only in device SecureStore. S256 means SHA-256 over the ASCII verifier, encoded canonical unpadded base64url. The app sends only state, challenge, method and android/ios platform to `POST /api/auth/native/handoffs`. A supplied prior native bearer must be valid; an invalid bearer never starts a guest flow accidentally.
@@ -15,6 +72,8 @@ Native app sessions are distinct from browser cookies and PayPal tokens. Do not 
 3. Browser GET shows a minimal confirmation page, never starts authorization. A fresh native-only HttpOnly/Secure/SameSite=Lax host-only binding cookie and anti-CSRF form token protect its explicit Continue POST. The same-origin POST claims the handoff atomically with independently generated provider state, nonce and PKCE verifier. A second browser claim fails. The app handoff verifier is never reused as the provider verifier.
 4. PayPal returns to the separately registered `/api/auth/native/paypal/callback`. Consume the browser-bound provider transaction once, perform the existing provider checks, then recheck cancellation, configuration and family generation under lock. Generate a random one-use handoff code with lifetime at most sixty seconds and no later than the original handoff expiry. Redirect only to the configured verified HTTPS app link with `code` and the original app `state`. Do not include identity, dataScope, an app session, provider tokens or errors. Failure uses a fixed local failure page.
 5. The app handles only the exact allowed HTTPS host/path and exactly one canonical `code` and `state`. Reject unknown/duplicate query parameters, fragments, oversized links and unmatched state. `POST /api/auth/native/exchange` sends code, handoff, state and the saved verifier over HTTPS. The server atomically validates and consumes the code and creates or rotates an opaque native session. One concurrent exchange can succeed. No replay response returns the token again.
+The [PayPal button guide](https://developer.paypal.com/log-in/build-button/) illustrates a successful callback with a `scope` parameter. The local native callback accepts one bounded RFC 6749 scope string on a code response, discards it before provider completion, and never treats it as authority. A bounded `iss` is forwarded to the OpenID verifier; when discovery advertises issuer-response support, the verifier requires a matching value. Within the 4 KiB query limit, unrecognized response extensions are ignored and never forwarded or reflected. Duplicate recognized parameters, malformed scope or issuer values, conflicting code/error parameters, and unsupported hybrid, JARM and token response fields fail closed. Standard error-description fields are discarded on an error response. The fixed app-link destination still contains only the one-use app code and app state. This local behavior does not prove the actual sandbox flow, metadata, scopes, or customer consent.
+
 6. Store the opaque native session only in SecureStore, with device-only access where supported. Never put it in AsyncStorage, a deep link, clipboard, analytics or logs. Delete the pending verifier only after token persistence/read-back succeeds. If exchange succeeds but storage fails, use cancellation to revoke the issued family. If a response is lost, cancel before retrying a new sign-in; the original exchange is not idempotently replayable.
 7. Fetch `GET /api/auth/native/session` with the bearer before private hydration and after foregrounding. The session has a fixed thirty-minute expiry and no refresh token. Account changes, expiry and sign-out clear in-memory private views immediately. `POST /api/auth/native/logout` revokes the native family and pending handoffs. Browser/PayPal sign-out is separate.
 
@@ -33,7 +92,7 @@ Client logout hides all private UI immediately. If server revocation cannot be c
 ## Limits before enablement
 
 - Require a separately configured explicit native-enable flag, default off. Disabled handlers make no provider calls: availability returns `{ loginAvailable: false }`, the callback redirects to a fixed local failure path, and the remaining handlers return 503. Local disabled-state route checks establish these responses; successful real provider/device use remains unverified.
-- Canonical base64url handles decode to exactly32bytes; reject noncanonical encodings. JSON/form bodies at most2KiB, callback query4KiB, app return link512bytes; reject duplicate/unknown fields and parameters. Body read deadline3seconds. Session/error responses at most2KiB; confirmation HTML16KiB with no third-party assets. Provider bounds remain at least as strict as existing web validation.
+- Canonical base64url handles decode to exactly32bytes; reject noncanonical encodings. JSON/form bodies at most2KiB, callback query4KiB, app return link512bytes. Reject duplicate/unknown fields and parameters except for unrecognized provider-callback extensions handled as described above. Body read deadline3seconds. Session/error responses at most2KiB; confirmation HTML16KiB with no third-party assets. Provider bounds remain at least as strict as existing web validation.
 - Native store quotas: at most2,048 retained families,4,096 retained handoffs/provider transactions combined,8,192 retained session aliases. Count completed/cancelled/revoked rows too. Separate native counters do not exempt the deployment from an overall database-capacity review. Bounded cleanup removes at most100 eligible expired rows per action; never delete family/alias/cancel evidence while it can revoke an active descendant. Quota exhaustion returns429 with bounded Retry-After.
 - Proposed per-process concurrent handlers: handoff/start/callback/exchange8 each, session16, cancellation/logout4 each. These are concurrency bounds, not effective shared rate limits. Require trusted-edge shared abuse limits before public enablement, including guest handoff issuance; do not trust caller IP headers, Origin, platform strings or app version as identity.
 - Use verified TLS and a dedicated PostgreSQL role. All responses `Cache-Control: no-store`, `Referrer-Policy: no-referrer`; auth pages have restrictive CSP, no framing and only exact PayPal form destinations. Native bearer routes do not use cookies or permissive credentialed CORS. Browser form CSRF checks remain separate from native bearer authentication.

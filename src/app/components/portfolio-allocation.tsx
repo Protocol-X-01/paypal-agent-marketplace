@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { allocationShareLabel, portfolioAllocation } from "@/lib/portfolio-allocation";
-import { formatMarketMoney } from "@/lib/market-format";
+import { formatPortfolioMoney as valueLabel } from "@/lib/market-format";
 import type { MarketCurrency } from "@/lib/market-currency";
 import type { TrackedCoin } from "@/lib/market-assets";
 import type { PortfolioSummary } from "@/lib/portfolio-summary";
@@ -18,12 +18,6 @@ const ASSETS: Record<TrackedCoin, { name: string; symbol: string; color: string 
   "paypal-usd": { name: "PayPal USD", symbol: "PYUSD", color: "#0070e0" },
 };
 
-function valueLabel(value: number, currency: MarketCurrency) {
-  return value > 0 && value < 0.000001
-    ? `Less than ${formatMarketMoney(0.000001, currency)}`
-    : formatMarketMoney(value, currency);
-}
-
 export default function PortfolioAllocation({ portfolio, currency, inputMessage, loading }: {
   portfolio: PortfolioSummary;
   currency: MarketCurrency;
@@ -37,7 +31,7 @@ export default function PortfolioAllocation({ portfolio, currency, inputMessage,
   const unavailable = inputMessage || (!portfolio.positions.length
     ? "Add a quantity to see how your portfolio is divided."
     : missing
-      ? `${loading ? "Waiting for" : "Reference prices are needed for"} ${missing} ${missing === 1 ? "holding" : "holdings"} before the full allocation can be shown.`
+      ? `${loading ? "Waiting for an updated price or estimate for" : "A usable reference price or estimate is needed for"} ${missing} ${missing === 1 ? "holding" : "holdings"} before the full allocation can be shown.`
       : portfolio.total === 0
         ? "The entered holdings have no positive estimated value to divide yet."
         : "The complete allocation is unavailable until every holding can be valued.");
@@ -45,14 +39,14 @@ export default function PortfolioAllocation({ portfolio, currency, inputMessage,
   return (
     <section className={styles.panel} aria-labelledby="portfolio-allocation-title">
       <div className={styles.heading}>
-        <div><p className={styles.eyebrow}>PORTFOLIO MIX</p><h2 id="portfolio-allocation-title">Your allocation</h2><p>Based on your entered quantities and {currency} reference prices.</p></div>
+        <div><p className={styles.eyebrow}>PORTFOLIO MIX</p><h2 id="portfolio-allocation-title">Your allocation</h2></div>
         <span className={styles.badge}>Manual estimate</span>
       </div>
       {slices ? <div className={styles.content}>
         <div className={styles.chartWrap}>
           <svg className={styles.chart} viewBox="14 14 172 172" aria-hidden="true">
             <circle cx="100" cy="100" r="72" fill="none" stroke="#e5eef8" strokeWidth="22" />
-            {slices.map((slice) => <circle key={slice.id} cx="100" cy="100" r="72" fill="none" pathLength="100" stroke={ASSETS[slice.id].color} strokeWidth={selected?.id === slice.id ? "26" : "22"} strokeDasharray={`${slice.share} ${100 - slice.share}`} strokeDashoffset={-slice.start} transform="rotate(-90 100 100)" onClick={() => setSelectedId(slice.id)} className={styles.slice} />)}
+            {slices.map((slice) => <circle key={slice.id} cx="100" cy="100" r="72" fill="none" pathLength="100" stroke={ASSETS[slice.id].color} strokeWidth={selected?.id === slice.id ? "26" : "22"} strokeDasharray={`${slice.share} ${100 - slice.share}`} strokeDashoffset={-slice.start} transform="rotate(-90 100 100)" className={styles.slice} />)}
           </svg>
           <div className={styles.chartCenter} aria-live="polite">
             <span>{selected ? ASSETS[selected.id].symbol : "TOTAL VALUE"}</span>

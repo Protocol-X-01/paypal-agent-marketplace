@@ -22,7 +22,7 @@ MOCK = Path("postman/mocks/coingecko-currency-regression")
 SOURCE_FILES = (
     "package.json", "next.config.ts", "next-env.d.ts", "tsconfig.json",
     "src/lib/market-assets.ts", "src/lib/market-currency.ts", "src/lib/market-data.ts",
-    "src/lib/mobile-web-cors.ts", "src/app/api/market/quotes/route.ts",
+    "src/lib/mobile-web-cors.ts", "src/lib/request-limits.ts", "src/app/api/market/quotes/route.ts",
     "src/app/api/market/coins/route.ts", "src/app/api/market/chart/[coinId]/route.ts",
 )
 PROVIDER_BASE = 'const COINGECKO_BASE = "https://api.coingecko.com/api/v3";'
@@ -120,6 +120,10 @@ def check_cases(base):
     cases = (
         ("GBP quotes", "/api/market/quotes?currency=GBP"),
         ("GBP chart", "/api/market/chart/bitcoin?days=7&currency=GBP"),
+        ("negative price chart", "/api/market/chart/bitcoin?days=7&currency=CAD"),
+        ("negative market cap chart", "/api/market/chart/bitcoin?days=7&currency=NZD"),
+        ("negative volume chart", "/api/market/chart/bitcoin?days=7&currency=SGD"),
+        ("fractional timestamp chart", "/api/market/chart/bitcoin?days=7&currency=NOK"),
         ("empty EUR quotes", "/api/market/quotes?currency=EUR"),
         ("JPY provider failure", "/api/market/quotes?currency=JPY"),
         ("AUD 7-day fallback", "/api/market/chart/bitcoin?days=7&currency=AUD"),
@@ -150,6 +154,8 @@ def check_cases(base):
                       ])
             elif name == "empty EUR quotes":
                 ok = status == 502 and code == "upstream_invalid_response"
+            elif name in {"negative price chart", "negative market cap chart", "negative volume chart", "fractional timestamp chart"}:
+                ok = status == 502 and code == "upstream_invalid_response" and "prices" not in body
             elif name == "JPY provider failure":
                 ok = status == 503 and code == "market_data_unavailable"
             elif name == "AUD 7-day fallback":
@@ -180,6 +186,10 @@ def verify_mock_requests(log):
     expected = {
         ("/api/v3/coins/markets", "gbp", "", 200),
         ("/api/v3/coins/bitcoin/market_chart", "gbp", "7", 200),
+        ("/api/v3/coins/bitcoin/market_chart", "cad", "7", 200),
+        ("/api/v3/coins/bitcoin/market_chart", "nzd", "7", 200),
+        ("/api/v3/coins/bitcoin/market_chart", "sgd", "7", 200),
+        ("/api/v3/coins/bitcoin/market_chart", "nok", "7", 200),
         ("/api/v3/coins/markets", "eur", "", 200),
         ("/api/v3/coins/markets", "jpy", "", 500),
         ("/api/v3/coins/bitcoin/market_chart", "aud", "7", 429),
@@ -225,7 +235,7 @@ def main():
         env = {key: os.environ[key] for key in ("HOME", "PATH") if key in os.environ}
         env.update({"TMPDIR": str(work), "LANG": "C.UTF-8", "NEXT_TELEMETRY_DISABLED": "1", "NO_PROXY": "*"})
         app_env = {**env, "COINGECKO_DEMO_API_KEY": "simulation-only",
-                   "NODE_OPTIONS": f"--require={json.dumps(str(guard))}"}
+                   "NODE_OPTIONS": f"--max-old-space-size=384 --require={json.dumps(str(guard))}"}
         guard_check = subprocess.run(
             ["node", "-e", "try { require('node:net').connect({host:'192.0.2.1',port:9}); process.exit(1); } catch (e) { process.exit(e.message.includes('blocks non-loopback') ? 0 : 1); }"],
             env=app_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
@@ -288,7 +298,7 @@ def main():
                 failures.append("mock request evidence")
                 print("FAIL expected requests did not reach the local mock", flush=True)
             else:
-                print("PASS all 9 expected provider requests reached the local mock", flush=True)
+                print("PASS all 13 expected provider requests reached the local mock", flush=True)
             return 1 if failures else 0
         except Exception:
             for label, log in (("simulation", mock_error), ("app", app_log)):

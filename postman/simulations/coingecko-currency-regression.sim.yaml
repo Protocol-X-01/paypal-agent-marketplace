@@ -1,0 +1,7 @@
+simulation: CoinGecko currency regression
+version: 1
+routing: path
+mocks:
+  - name: coingecko-currency-regression
+    routeKey: coingecko
+    path: postman/mocks/coingecko-currency-regression

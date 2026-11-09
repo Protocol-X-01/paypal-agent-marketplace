@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "apps/mobile/**",
     "apps/management/**",
   ]),
+  {
+    files: ["postman/mocks/paypal-native-oidc-fixture/default.js"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

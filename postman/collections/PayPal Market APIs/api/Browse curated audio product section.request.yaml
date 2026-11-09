@@ -1,0 +1,45 @@
+$kind: http-request
+description: >-
+  Returns fresh products for the app-wide audio section. This is separate from
+  customer-saved device collections. The Channel3 key stays on the server; the
+  request is read-only and does not create a checkout or payment. Curated
+  browsing requires the shared CHANNEL3_COLLECTION_ID on the server and returns
+  503 when it is missing or invalid. Calls share the marketplace rate limit.
+  The app limits upstream responses to 2 MiB
+  decoded bytes and rejects larger declared lengths; the provider request has
+  an eight-second deadline.
+url: '{{baseUrl}}/api/marketplace/catalog?section=audio&storefront=GB'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: section
+    value: audio
+  - key: storefront
+    value: GB
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns the curated audio section", function () {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.headers.get("Content-Type")).to.match(/application\/json/i);
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.storefront).to.eql("GB");
+        pm.expect(body.currency).to.eql("GBP");
+        if (pm.variables.get("mockLocaleFixture") === "enabled") pm.expect(body.products[0].id).to.eql("fixture-GB-GBP-en");
+        pm.expect(body.section).to.eql("audio");
+        pm.expect(body.title).to.eql("Headphones & headsets");
+        pm.expect(Number.isNaN(Date.parse(body.retrievedAt))).to.eql(false);
+        pm.expect(body.products).to.be.an("array");
+        pm.expect(body.products.length).to.be.at.most(8);
+        body.products.forEach(function (product) {
+          pm.expect(product.id).to.be.a("string").and.not.empty;
+          pm.expect(product.title).to.be.a("string").and.not.empty;
+        });
+      });
+settings: {}
+examples: './.resources/Browse curated audio product section.resources/examples'
+order: 2000

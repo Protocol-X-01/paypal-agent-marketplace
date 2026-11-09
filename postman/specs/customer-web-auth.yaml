@@ -28,7 +28,10 @@ paths:
         a Secure, HttpOnly, SameSite=Lax, host-only transaction cookie. No
         client-provided return URL or account type is accepted. Transactions
         are bound to the active login configuration and cannot complete after
-        that configuration changes.
+        that configuration changes. If the browser supplies an earlier
+        transaction cookie without an active session, the earlier transaction
+        must still be valid in the same context; otherwise start returns the
+        generic unavailable response rather than creating an unrelated family.
       parameters:
         - $ref: '#/components/parameters/Origin'
       responses:
@@ -58,11 +61,39 @@ paths:
       summary: Complete a PayPal authorization response
       description: >-
         PayPal redirects the browser here with a single-use authorization
-        response. The server consumes the browser-bound transaction, validates
+        response. The callback query is at most 4 KiB in UTF-8. Unrecognized
+        parameters are ignored without being forwarded or reflected; recognized
+        parameters must not be duplicated. Unsupported hybrid, JARM and token
+        response fields (response, id_token, access_token, token, token_type,
+        expires_in and refresh_token) are rejected even when empty. Code and error
+        must not occur together. Error description and error URI may accompany an
+        error response and are discarded without reflection. A successful code
+        response may include one nonempty RFC 6749 scope string of at most 1024
+        ASCII bytes; it is discarded and never grants authority. A single bounded
+        issuer is forwarded to the OpenID verifier and required when discovery
+        advertises authorization_response_iss_parameter_supported. The server
+        atomically matches callback state while claiming the browser-bound transaction;
+        a wrong state in the same unexpired context fails without consuming it.
+        Expiry is checked against the advancing database clock after any row-lock
+        wait, before provider work. When a matching claim commits, the stored
+        state, nonce, and PKCE verifier are logically replaced with non-secret
+        markers before provider work begins. Expired or cross-context pending
+        transactions are completed and their stored values cleared atomically.
+        Abandoned pending transactions remain until a later cleanup; database
+        history and backups may retain previous values under their own policies.
+        Before issuing a session, the server rechecks the login transaction,
+        session family and any initiating session after the relevant storage
+        locks are acquired. An attempt that expires while waiting fails without
+        issuing a new session.
+        A matching state can be claimed once for a code or error response. The server validates
         state, PKCE, nonce, ID-token signature and claims, and userinfo subject.
         Success rotates any prior application session and sets a new Secure,
         HttpOnly, SameSite=Lax host-only session cookie. Provider errors redirect to a
-        fixed local account page with a generic failure marker. Enabled callback budget/concurrency/storage failures redirect303 to that same fixed URL before consuming the transaction; exhaustion also carries Retry-After1..60. Callback
+        fixed local account page with a generic failure marker. Enabled callback budget
+        or concurrency failures redirect303 before consuming the transaction;
+        exhaustion also carries Retry-After1..60. Storage failures use the same fixed
+        failure destination without setting a session cookie; a claim or session
+        write may already have committed, so a new sign-in may be required. Callback
         responses do not clear the short-lived transaction cookie, avoiding
         deletion of a newer sign-in cookie by a delayed response. Provider
         credentials, tokens, account identifiers and authorization codes are
@@ -73,15 +104,47 @@ paths:
         - name: code
           in: query
           required: false
-          schema: { type: string }
+          schema: { type: string, maxLength: 2048 }
         - name: state
           in: query
           required: false
-          schema: { type: string }
+          schema:
+            type: string
+            minLength: 43
+            maxLength: 43
+            pattern: '^[A-Za-z0-9_-]{43}$'
         - name: error
           in: query
           required: false
-          schema: { type: string }
+          schema: { type: string, maxLength: 128 }
+        - name: error_description
+          in: query
+          required: false
+          description: Optional error detail; accepted only with an error and discarded without reflection.
+          schema: { type: string, maxLength: 4096 }
+        - name: error_uri
+          in: query
+          required: false
+          description: Optional error detail; accepted only with an error and discarded without reflection.
+          schema: { type: string, maxLength: 4096 }
+        - name: scope
+          in: query
+          required: false
+          description: Optional informational scope on a successful code response only; not an authorization grant.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+            pattern: '^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$'
+        - name: iss
+          in: query
+          required: false
+          description: Authorization response issuer; passed unchanged to the OpenID verifier on code responses.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+            pattern: '^[\x21-\x7E]+$'
       # Disabled/incomplete configuration redirects303 using a fixed relative Location,
       # without request Host/URL interpolation, cookie mutation or backend/provider work.
       responses:
@@ -104,6 +167,8 @@ paths:
       summary: Read the current customer web session
       description: >-
         An absent, expired, or revoked cookie returns authenticated false.
+        Session and family expiry use the advancing database clock after a
+        storage wait, rather than the start of a delayed query.
         The optional provider account type only chooses an initial presentation;
         PREMIER and other unrecognized values remain unknown until their
         semantics for this application are established.

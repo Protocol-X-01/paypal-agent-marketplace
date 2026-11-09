@@ -1,0 +1,38 @@
+$kind: http-request
+name: Browse expanded retailer catalog
+description: >-
+  Browse a bounded retailer page in the US storefront. Curated browsing requires
+  the shared CHANNEL3_COLLECTION_ID on the server and returns 503 when it is
+  missing or invalid.
+url: '{{baseUrl}}/api/marketplace/catalog?retailer=target&storefront=US&limit=24'
+method: GET
+queryParams:
+  - key: retailer
+    value: target
+  - key: storefront
+    value: US
+  - key: limit
+    value: '24'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns a bounded retailer page with honest continuation", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.storefront).to.eql("US");
+        pm.expect(body.currency).to.eql("USD");
+        pm.expect(body.section).to.eql(null);
+        pm.expect(body.retailer).to.eql("target");
+        pm.expect(body.limit).to.eql(24);
+        pm.expect(body.products).to.be.an("array");
+        pm.expect(body.products.length).to.be.at.most(24);
+        pm.expect(body.nextPageToken === null || (typeof body.nextPageToken === "string" && body.nextPageToken.length <= 6144)).to.eql(true);
+        for (const product of body.products) for (const offer of product.offers || []) {
+          const rate = offer.max_commission_rate;
+          if (rate != null) pm.expect(Number.isFinite(rate) && rate >= 0 && rate <= 1).to.eql(true);
+        }
+      });
+settings: {}
+order: 2600

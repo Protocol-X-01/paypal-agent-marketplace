@@ -1,0 +1,9 @@
+version: 1
+name: Fictional PayPal native sign-in provider
+slug: paypal-native-oidc-fixture
+protocol: http
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
+interceptRequests: true

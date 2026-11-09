@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isMarketCurrency } from "@/lib/market-currency";
 import { getMarketQuotes, MarketDataError } from "@/lib/market-data";
 import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from "@/lib/mobile-web-cors";
+import { takeClientRequestLimit } from "@/lib/request-limits";
 
 function json(request: NextRequest, body: unknown, init?: ResponseInit): NextResponse {
   return withMobileWebCors(request, NextResponse.json(body, init));
@@ -15,6 +16,16 @@ export async function GET(request: NextRequest) {
   const currency = new URL(request.url).searchParams.get("currency") ?? "USD";
   if (!isMarketCurrency(currency)) {
     return json(request, { error: { code: "unsupported_currency", message: "Choose a supported display currency." } }, { status: 400 });
+  }
+
+  const clientBudget = takeClientRequestLimit(request, "coingecko", 12);
+  if (!clientBudget.allowed) {
+    return json(request, {
+      error: {
+        code: "market_data_rate_limited",
+        message: "Market data requests are temporarily rate limited. Retry after the interval in the Retry-After header.",
+      },
+    }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(clientBudget.retryAfterSeconds) } });
   }
 
   try {

@@ -12,7 +12,7 @@ export type BusinessChannelMetric = "transactions" | "gross" | "refunds";
 export function compareBusinessChannels(snapshot: BusinessSnapshot, metric: BusinessChannelMetric) {
   const measure = (row: BusinessSnapshotRow) => metric === "transactions" ? row.transactions : metric === "gross" ? row.grossMinor : row.refundMinor;
   const format = (value: number) => metric === "transactions"
-    ? new Intl.NumberFormat("en-GB").format(value)
+    ? new Intl.NumberFormat("en-US").format(value)
     : formatBusinessMinorAmount(value, snapshot.currency);
 
   return BUSINESS_SNAPSHOT_CHANNELS.flatMap((channel) => {
@@ -35,7 +35,7 @@ export function compareBusinessChannels(snapshot: BusinessSnapshot, metric: Busi
       const amount = Math.abs(difference / previous * 100);
       percentage = difference !== 0 && amount < 0.05
         ? `${difference > 0 ? "Increase" : "Decrease"} of less than 0.1%.`
-        : `${difference > 0 ? "+" : difference < 0 ? "−" : ""}${new Intl.NumberFormat("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(amount)}% vs previous.`;
+        : `${difference > 0 ? "+" : difference < 0 ? "−" : ""}${new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(amount)}% vs previous.`;
     }
     return [{ channel, label: BUSINESS_SNAPSHOT_CHANNEL_LABELS[channel], previous: format(previous), current: format(current), previousWidth, currentWidth, change, changeDescription, percentage }];
   });

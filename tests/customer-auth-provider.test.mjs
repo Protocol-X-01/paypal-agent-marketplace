@@ -127,6 +127,69 @@ test("oversized declared and streamed identity responses are canceled", async ()
   assert.equal(streamCanceled, true);
 });
 
+async function settlesWithin(promise, milliseconds) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Synthetic provider operation did not settle in time")), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+test("oversized identity responses reject promptly even when cancellation never settles or rejects", async () => {
+  for (const [declared, cancelBehavior] of [[true, "pending"], [false, "pending"], [true, "reject"], [false, "reject"]]) {
+    let canceled = false;
+    const body = new ReadableStream({
+      pull(controller) { if (!declared) controller.enqueue(new Uint8Array(1024 * 1024 + 1)); },
+      cancel() {
+        canceled = true;
+        return cancelBehavior === "reject" ? Promise.reject(new Error("fictional cancellation failure")) : new Promise(() => {});
+      },
+    });
+    const response = new Response(body, { headers: { "content-type": "application/json", ...(declared ? { "content-length": String(1024 * 1024 + 1) } : {}) } });
+    await settlesWithin(assert.rejects(provider.discoverProvider(config, async () => response)), 1500);
+    assert.equal(canceled, true, `best-effort cancellation was requested (${declared}, ${cancelBehavior})`);
+  }
+});
+
+test("identity request deadline releases stalled transport and body without trusting cancellation", { timeout: 7500 }, async () => {
+  let bodyCanceled = false;
+  let lateResponseCanceled = false;
+  const never = () => new Promise(() => {});
+  const stalledBody = new Response(new ReadableStream({ pull: never, cancel() { bodyCanceled = true; return never(); } }), {
+    headers: { "content-type": "application/json" },
+  });
+  const lateBody = new ReadableStream({ cancel() { lateResponseCanceled = true; return never(); } });
+  const lateResponse = new Response(lateBody, { headers: { "content-type": "application/json" } });
+  const stalledTransport = provider.discoverProvider(config, async (_url, init) => new Promise((resolve) => {
+    init.signal.addEventListener("abort", () => setTimeout(() => resolve(lateResponse), 0), { once: true });
+  }));
+  const stalledRead = provider.discoverProvider(config, async () => stalledBody);
+  await settlesWithin(Promise.all([assert.rejects(stalledTransport), assert.rejects(stalledRead)]), 6500);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(bodyCanceled, true);
+  assert.equal(lateResponseCanceled, true);
+});
+
+test("a pre-aborted provider request does not invoke the transport", async () => {
+  const customFetch = Symbol("fictional custom fetch");
+  const canceled = new AbortController();
+  canceled.abort();
+  const fakeOidc = {
+    customFetch,
+    ClientSecretBasic: () => ({}),
+    discovery: async (_issuer, _client, _metadata, _clientAuth, options) => options[customFetch](
+      "https://www.sandbox.paypal.com/.well-known/openid-configuration",
+      { method: "GET", headers: {}, redirect: "manual", signal: canceled.signal },
+    ),
+  };
+  const isolated = load("src/lib/customer-auth/provider.ts", { "./config": authConfig, "openid-client": fakeOidc });
+  let calls = 0;
+  await assert.rejects(isolated.discoverProvider(config, async () => { calls += 1; throw new Error("must not call transport"); }));
+  assert.equal(calls, 0);
+});
+
 
 test("native callback uses the same signed identity checks without crossing web callback boundaries", async () => {
   const fixture = fixtureProvider({ callbackPath: "/api/auth/native/paypal/callback" });

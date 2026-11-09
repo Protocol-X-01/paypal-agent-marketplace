@@ -182,7 +182,7 @@ test("uses the pinned current ISO minor units, not the locale's display defaults
     const rows = fixtureRows().map((row) => ({ ...row, currency, gross_minor: "1250", refund_minor: "1250" }));
     const result = parseBusinessSnapshot(csv(rows));
     assert.equal(result.ok, true, currency);
-    const formatter = new Intl.NumberFormat("en-GB", {
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits,
     });
     assert.equal(formatBusinessMinorAmount(1250, currency), formatter.format(1250 / 10 ** digits), currency);
@@ -197,7 +197,7 @@ test("uses the pinned current ISO minor units, not the locale's display defaults
   assert.equal(formatBusinessMinorAmount(1.5, "GBP"), "Unavailable");
   assert.equal(formatBusinessMinorAmount(3_000_000_000_001, "GBP"), "Unavailable");
   assert.equal(formatBusinessMinorAmount(2_999_999_999_997, "COP"),
-    new Intl.NumberFormat("en-GB", { style: "currency", currency: "COP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(29_999_999_999.97));
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "COP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(29_999_999_999.97));
 });
 
 test("rejects unsupported or mixed currencies and unsafe numeric fields", () => {

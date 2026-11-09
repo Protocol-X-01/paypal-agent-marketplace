@@ -8,8 +8,10 @@ request:
     type: json
     content: |-
       {
-        "query": "string",
-        "limit": 6
+        "query": "headphones",
+        "limit": 6,
+        "storefront": "GB",
+        "priceRange": { "maxPrice": 150 }
       }
 response:
   statusCode: 200
@@ -20,8 +22,11 @@ response:
     type: json
     content: |-
       {
-        "provider": "string",
-        "query": "string",
+        "provider": "Channel3",
+        "storefront": "GB",
+        "currency": "GBP",
+        "query": "headphones",
+        "priceRange": { "maxPrice": 150 },
         "retrievedAt": "2016-01-06T18:44:13.506Z",
         "products": [
           {

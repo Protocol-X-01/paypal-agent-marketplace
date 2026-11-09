@@ -19,7 +19,7 @@ if (process.env.NODE_ENV === "production") {
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Keep build workers bounded on development and small hosted instances.
-  experimental: { cpus: 2 },
+  experimental: { cpus: 2, turbopackFileSystemCacheForBuild: false, useTypeScriptCli: false },
   serverExternalPackages: ["better-sqlite3"],
   cacheComponents: true,
   partialPrefetching: true,

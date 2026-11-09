@@ -1,0 +1,28 @@
+$kind: http-request
+description: Rejects a chart request with an unsupported display currency.
+url: '{{baseUrl}}/api/market/chart/:coinId?days=7&currency=XYZ'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: days
+    value: '7'
+  - key: currency
+    value: XYZ
+pathVariables:
+  - key: coinId
+    value: bitcoin
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("unsupported chart currency is rejected", function () {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.headers.get("Content-Type")).to.match(/application\/json/i);
+        const body = pm.response.json();
+        pm.expect(body.error.code).to.eql("unsupported_currency");
+        pm.expect(body.error.message).to.be.a("string").and.not.empty;
+      });
+settings: {}
+order: 2300

@@ -1,13 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { browseCatalog, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3Locale, getChannel3CollectionId } from '@/lib/channel3';
+import { browseCatalog, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3Locale, getRequiredChannel3CollectionId } from '@/lib/channel3';
 import { findChannel3CuratedSection, findChannel3CuratedRetailer } from '@/lib/channel3-catalog';
 import { isStorefront } from '@/lib/channel3-storefront';
 import { takeChannel3RateLimit } from '@/lib/channel3-rate-limit';
 import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from '@/lib/mobile-web-cors';
 
 function json(request: NextRequest, body: unknown, init?: ResponseInit): NextResponse {
-  return withMobileWebCors(request, NextResponse.json(body, init));
+  const response = NextResponse.json(body, init);
+  response.headers.set('Cache-Control', 'no-store');
+  return withMobileWebCors(request, response);
 }
 
 export async function GET(request: NextRequest) {
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const locale = getChannel3Locale(isStorefront(storefront) ? storefront : undefined);
-    const binding = JSON.stringify({ section: section?.id ?? null, categoryId: section?.categoryId ?? null, retailer: retailer?.id ?? null, websiteId: retailer?.websiteId ?? null, collectionId: getChannel3CollectionId() ?? null, locale, limit });
+    const binding = JSON.stringify({ section: section?.id ?? null, categoryId: section?.categoryId ?? null, retailer: retailer?.id ?? null, websiteId: retailer?.websiteId ?? null, collectionId: getRequiredChannel3CollectionId(), locale, limit });
     const providerToken = cursor === null ? undefined : decodeCatalogPageToken(cursor, binding);
     if (providerToken === null) return json(request, { error: 'Restart this catalog selection to load more products.' }, { status: 400 });
     const result = await browseCatalog({ categoryId: section?.categoryId, websiteId: retailer?.websiteId }, limit, locale, providerToken);

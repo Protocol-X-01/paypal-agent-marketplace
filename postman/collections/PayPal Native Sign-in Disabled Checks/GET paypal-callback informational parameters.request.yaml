@@ -1,0 +1,31 @@
+$kind: http-request
+name: GET paypal-callback informational parameters
+description: Fictional parameters confirm that a disabled callback strips the query. This does not exercise an enabled provider flow.
+order: 4500
+url: "{{baseUrl}}/api/auth/native/paypal/callback?code=fictional-code&state=fictional-state&scope=openid&iss=fictional-issuer"
+method: GET
+queryParams:
+  - key: code
+    value: fictional-code
+  - key: state
+    value: fictional-state
+  - key: scope
+    value: openid
+  - key: iss
+    value: fictional-issuer
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Disabled callback discards fictional query parameters", () => {
+        pm.response.to.have.status(303);
+        pm.expect(pm.response.headers.get("Location")).to.eql("/api/auth/native/failure");
+        pm.expect(pm.response.headers.has("Set-Cookie")).to.eql(false);
+        pm.expect(pm.response.text()).to.eql("");
+      });
+      pm.test("Disabled callback retains privacy headers", () => {
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.headers.get("Referrer-Policy")).to.eql("no-referrer");
+      });

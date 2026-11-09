@@ -12,9 +12,13 @@ const compiled = ts.transpileModule(source, {
 const cjsModule = { exports: {} };
 const nodeRequire = createRequire(import.meta.url);
 let providerCalls = 0;
-const require = (name) => name === "@/lib/paypal"
-  ? { verifyWebhook: async () => { providerCalls += 1; return { verification_status: "SUCCESS" }; } }
-  : nodeRequire(name);
+const require = (name) => {
+  if (name === "@/lib/paypal") {
+    return { verifyWebhook: async () => { providerCalls += 1; return { verification_status: "SUCCESS" }; } };
+  }
+  if (name === "@/lib/request-limits") return { acquireClientSlot: () => () => {} };
+  return nodeRequire(name);
+};
 new Function("exports", "require", "module", compiled)(cjsModule.exports, require, cjsModule);
 const { POST } = cjsModule.exports;
 

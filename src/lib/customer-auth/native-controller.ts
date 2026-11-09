@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import type * as oidc from "openid-client";
 import type { NativeAuthConfig } from "./native-config";
 import { beginAuthorization, completeAuthorization } from "./provider";
+import { buildProviderCallbackUrl, parseProviderCallbackQuery } from "./provider-callback";
 import type { NativeAuthStore } from "./native-store";
 import { NativeStoreError } from "./native-store";
 import { buildNativeReturnUrl, equalNativeHandles, hashNativeHandle, isCanonicalNativeHandle, newNativeHandle, NativeProtocolError, parseNativeAuthorizeForm, parseNativeCancelBody, parseNativeExchangeBody, parseNativeHandoffBody } from "./native-protocol";
@@ -164,22 +165,33 @@ export function createNativeAuthController(deps: Dependencies) {
       // Provider helper has validated metadata; independently constrain the final redirect.
       const location = new URL(auth.location), expectedHost = c.environment === "live" ? "www.paypal.com" : "www.sandbox.paypal.com";
       if (location.protocol !== "https:" || location.hostname !== expectedHost || location.port || location.username || location.password || location.hash || !["/signin/authorize", "/connect", "/connect/"].includes(location.pathname) || auth.location.length > 4096 || location.searchParams.get("redirect_uri") !== c.callback) throw new HttpError(503, "sign_in_unavailable");
-      try { await s.claimHandoff(hashNativeHandle(input.handoff), c.contextHash, hashNativeHandle(browser.handle), auth.transaction); }
-      catch (e) { if (e instanceof NativeStoreError && e.code === "unavailable") throw new HttpError(409, "attempt_unavailable"); throw e; }
-      const r = redirect(auth.location); r.headers.append("Set-Cookie", `${HANDOFF}=${input.handoff}${COOKIE}`); return r;
+      const handoffHash = hashNativeHandle(input.handoff), browserHash = hashNativeHandle(browser.handle);
+      const claimHash = hashNativeHandle(newNativeHandle());
+      try {
+        await s.claimHandoff(handoffHash, c.contextHash, browserHash, auth.transaction, claimHash);
+        const r = redirect(auth.location); r.headers.append("Set-Cookie", `${HANDOFF}=${input.handoff}${COOKIE}`); return r;
+      } catch (e) {
+        // A claim may have committed even when its acknowledgement was lost.
+        // Never let best-effort cleanup change the original failure response.
+        try { await s.abortClaim(handoffHash, c.contextHash, browserHash, claimHash); } catch { /* cancellation or later expiry maintenance may still clear it */ }
+        if (e instanceof NativeStoreError && e.code === "unavailable") throw new HttpError(409, "attempt_unavailable");
+        throw e;
+      }
     },
     async callback(request: Request) {
       const c = enabled(); const failure = () => redirect(`${c.origin}${BASE}/failure`);
       try {
-        const url = checkedUrl(request, c, "/paypal/callback", true), q = exactQuery(url, ["code", "state", "error"], 4096);
-        const state = q.get("state"), code = q.get("code"), providerError = q.get("error");
-        if (!isCanonicalNativeHandle(state) || (code && providerError) || (!code && !providerError) || (code && (code.length > 2048 || /[\u0000-\u0020\u007f]/.test(code))) || (providerError && providerError.length > 128)) return failure();
+        const url = checkedUrl(request, c, "/paypal/callback", true), q = parseProviderCallbackQuery(url);
+        const state = q.get("state"), providerError = q.get("error");
+        if (!isCanonicalNativeHandle(state)) return failure();
         const browser = browserBinding(request, c, now()), h = cookie(request, HANDOFF);
         if (!browser || !isCanonicalNativeHandle(h)) return failure();
         const s = await ready(c); const reservation = newNativeHandle();
         const stored = await s.reserveProvider(hashNativeHandle(h), c.contextHash, hashNativeHandle(browser.handle), state, hashNativeHandle(reservation));
         if (!stored || providerError) return failure();
-        const p = await deps.provider(c); const identity = await (deps.complete ?? completeAuthorization)(p, new URL(`${c.callback}${url.search}`), stored.transaction, c, "native");
+        const p = await deps.provider(c);
+        const callback = buildProviderCallbackUrl(c.callback, q);
+        const identity = await (deps.complete ?? completeAuthorization)(p, callback, stored.transaction, c, "native");
         const handoffCode = newNativeHandle();
         await s.completeProvider(hashNativeHandle(h), c.contextHash, hashNativeHandle(reservation), hashNativeHandle(handoffCode), identity);
         return redirect(buildNativeReturnUrl(c.links, stored.platform, handoffCode, stored.appState));

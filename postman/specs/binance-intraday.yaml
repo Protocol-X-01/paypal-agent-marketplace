@@ -22,7 +22,15 @@ paths:
         accepted only when its exclusive close precedes the provider's HTTP
         response Date. That header is not an independently verified exchange
         clock. Results are cached per process for up to 15 seconds. Access or
-        redisplay may be restricted by region or provider terms.
+        redisplay may be restricted by region or provider terms. Requests are
+        limited to six per rolling 60 seconds per detected client address, with
+        at most two uncached upstream loads active for that address at a time.
+        Cache hits and identical in-flight requests reuse existing work and do
+        not consume another active slot. Missing or invalid client addresses
+        share the unknown-address bucket. These in-memory limits are per server
+        process and are not shared across service instances.
+        The provider budget remains twelve calls per rolling 60 seconds per
+        process, with at most four provider requests in flight.
       parameters:
         - name: coinId
           in: path
@@ -64,7 +72,8 @@ paths:
                 $ref: '#/components/schemas/Error'
         '429':
           description: >-
-            A per-process budget or the provider's rate limit was reached.
+            A per-client request budget, per-process provider budget, or the
+            provider's rate limit was reached.
             Numeric provider delays are preserved. An unrepresentably large
             delay blocks further provider calls until this process restarts;
             the returned Retry-After then indicates when to check again.

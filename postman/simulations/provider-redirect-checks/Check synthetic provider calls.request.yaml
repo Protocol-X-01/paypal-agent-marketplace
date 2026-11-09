@@ -1,0 +1,21 @@
+$kind: http-request
+description: Check aggregate calls only; the simulation never stores request contents.
+url: '{{baseUrl}}/upstream/stats'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("each provider call handled success and rejected both redirects", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        for (const name of ["c3search", "c3browse", "quotes", "chart", "token", "verify"]) {
+          pm.expect(body[name].success).to.eql(name === "token" ? 4 : 1);
+          pm.expect(body[name].same).to.eql(1);
+          pm.expect(body[name].cross).to.eql(1);
+        }
+        pm.expect(body.sameTarget).to.eql(0);
+        pm.expect(body.invalid).to.eql(0);
+      });
+settings: {}
+order: 1000

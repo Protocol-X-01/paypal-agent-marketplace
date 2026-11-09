@@ -4,12 +4,13 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { createCustomerSessionController, type CustomerSessionState } from "@/lib/customer-session-client";
 import { createScopedStorage, type LocalDataStorage } from "@/lib/customer-session-storage";
 import { createScopedEvents } from "@/lib/customer-session-events";
+import { createShoppingDraftMemory } from "@/lib/customer-shopping-draft-memory";
 
 const AUTH_SIGNAL = "paypal-markets-session-signal-v1";
 const AUTH_RETURN = "paypal-markets-sign-in-return-v1";
 const heldStorage: LocalDataStorage = { getItem() { throw new Error("Session not verified"); }, setItem() { throw new Error("Session not verified"); }, removeItem() { throw new Error("Session not verified"); } };
 type PrivateScope = { ready: boolean; storage: LocalDataStorage; events: Pick<Window, "addEventListener" | "removeEventListener" | "dispatchEvent">; label: string };
-type SessionContextValue = { state: CustomerSessionState; scope: PrivateScope; check: () => Promise<void>; logout: () => Promise<void>; beginSignIn: () => void };
+type SessionContextValue = { state: CustomerSessionState; scope: PrivateScope; shoppingDraft: ReturnType<typeof createShoppingDraftMemory>; check: () => Promise<void>; logout: () => Promise<void>; beginSignIn: () => void };
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 function signalOtherTabs(kind: "check" | "hold") {
@@ -21,6 +22,7 @@ function signalOtherTabs(kind: "check" | "hold") {
 
 export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   const [controller] = useState(() => createCustomerSessionController({ notify: signalOtherTabs }));
+  const [shoppingDraft] = useState(() => createShoppingDraftMemory(controller.getSnapshot));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getServerSnapshot);
   const lease = state.lease;
   const scope = useMemo<PrivateScope>(() => ({
@@ -31,6 +33,8 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   }), [lease]);
 
   useEffect(() => {
+    const unsubscribeDraft = controller.subscribe(shoppingDraft.observe);
+    shoppingDraft.observe();
     let hidden = document.visibilityState === "hidden";
     let returning = false;
     try { returning = window.sessionStorage.getItem(AUTH_RETURN) === "1"; window.sessionStorage.removeItem(AUTH_RETURN); } catch { /* No credentials or identity are stored in the marker. */ }
@@ -45,11 +49,11 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onPageShow);
     const timer = window.setInterval(() => { if (document.visibilityState === "visible" && controller.getSnapshot().status === "ready") void controller.check({ background: true, automatic: true }); }, 5 * 60_000);
-    return () => { window.clearInterval(timer); window.removeEventListener("storage", onStorage); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pageshow", onPageShow); controller.dispose(); };
-  }, [controller]);
+    return () => { unsubscribeDraft(); shoppingDraft.clear(); window.clearInterval(timer); window.removeEventListener("storage", onStorage); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pageshow", onPageShow); controller.dispose(); };
+  }, [controller, shoppingDraft]);
 
   const value: SessionContextValue = {
-    state, scope, check: () => controller.check(), logout: controller.logout,
+    state, scope, shoppingDraft, check: () => controller.check(), logout: controller.logout,
     beginSignIn() {
       try { window.sessionStorage.setItem(AUTH_RETURN, "1"); } catch { /* A full-page callback still verifies its session. */ }
       // A form attempt is not a new identity. Keep it mounted and preserve the
@@ -67,6 +71,11 @@ export function useCustomerSession() {
 }
 
 export function usePrivateDataScope() { return useCustomerSession().scope; }
+
+export function useShoppingDraftMemory() {
+  const { state, shoppingDraft } = useCustomerSession();
+  return { lease: state.status === "ready" ? state.lease : null, shoppingDraft };
+}
 
 export function PrivateSessionNotice() {
   const { state, check, logout } = useCustomerSession();

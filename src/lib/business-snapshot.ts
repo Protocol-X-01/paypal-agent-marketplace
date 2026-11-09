@@ -43,7 +43,7 @@ export function formatBusinessMinorAmount(value: number, currency: string): stri
   const fallback = `${currency} ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${fraction}`;
 
   try {
-    const formatter = new Intl.NumberFormat("en-GB", {
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits,
     });
     const options = formatter.resolvedOptions();
@@ -108,6 +108,77 @@ export type BusinessSnapshot = {
     refundRatioPct: number | null;
   };
 };
+
+export type BusinessSnapshotProvenance = {
+  trustState: "self-provided-unverified";
+  audience: "customer-business";
+  sourceKind: "aggregate-csv";
+  authorization: {
+    state: "user-attested";
+    basis: "import-confirmation";
+    independentlyVerified: false;
+    attestedAt: string;
+    clock: "browser-device-clock";
+  };
+  population: { state: "uploader-defined-unverified" };
+  metricDefinitionVersion: "business-aggregate-csv-v1";
+  windowDays: BusinessSnapshotWindow;
+  currency: string;
+  channels: readonly BusinessSnapshotChannel[];
+  periods: Readonly<Record<BusinessSnapshotPeriodName, Pick<BusinessSnapshotPeriod, "startDate" | "endExclusive">>>;
+  sourceUpdatedAt: { value: string; basis: "csv-stated"; authenticated: false };
+  receivedAt: { value: string; basis: "browser-device-clock"; authenticated: false };
+  freshness: { state: "unknown"; reason: "The source timestamp is user-provided and unauthenticated." };
+  completeness: {
+    state: "user-attested";
+    structuralValidation: "passed";
+    sourceCoverageVerified: false;
+  };
+};
+
+export type BusinessSnapshotReport = {
+  snapshot: BusinessSnapshot;
+  provenance: BusinessSnapshotProvenance;
+};
+
+/** Attach import-time trust metadata without presenting self-attestation as provider verification. */
+export function createBusinessSnapshotReport(snapshot: BusinessSnapshot, attestedAt: string): BusinessSnapshotReport {
+  return {
+    snapshot,
+    provenance: {
+      trustState: "self-provided-unverified",
+      audience: "customer-business",
+      sourceKind: "aggregate-csv",
+      authorization: {
+        state: "user-attested",
+        basis: "import-confirmation",
+        independentlyVerified: false,
+        attestedAt,
+        clock: "browser-device-clock",
+      },
+      population: { state: "uploader-defined-unverified" },
+      metricDefinitionVersion: "business-aggregate-csv-v1",
+      windowDays: snapshot.windowDays,
+      currency: snapshot.currency,
+      channels: [...new Set(snapshot.rows.map((row) => row.channel))].sort(),
+      periods: {
+        previous: { startDate: snapshot.periods.previous.startDate, endExclusive: snapshot.periods.previous.endExclusive },
+        current: { startDate: snapshot.periods.current.startDate, endExclusive: snapshot.periods.current.endExclusive },
+      },
+      sourceUpdatedAt: { value: snapshot.sourceUpdatedAt, basis: "csv-stated", authenticated: false },
+      receivedAt: { value: attestedAt, basis: "browser-device-clock", authenticated: false },
+      freshness: {
+        state: "unknown",
+        reason: "The source timestamp is user-provided and unauthenticated.",
+      },
+      completeness: {
+        state: "user-attested",
+        structuralValidation: "passed",
+        sourceCoverageVerified: false,
+      },
+    },
+  };
+}
 
 export type BusinessSnapshotResult =
   | { ok: true; snapshot: BusinessSnapshot }

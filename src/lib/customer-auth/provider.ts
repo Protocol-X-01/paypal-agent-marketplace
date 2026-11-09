@@ -7,6 +7,7 @@ import { issuerFor, type AuthConfig, type AuthEnvironment } from "./config";
 import type { AccountType, CustomerIdentity, LoginTransaction } from "./store";
 
 const MAX_PROVIDER_BYTES = 1024 * 1024;
+const PROVIDER_TIMEOUT_SECONDS = 5;
 const ENDPOINT_PATHS = {
   authorization_endpoint: new Set(["/signin/authorize", "/connect", "/connect/"]),
   token_endpoint: new Set(["/v1/oauth2/token", "/v1/identity/openidconnect/tokenservice"]),
@@ -31,32 +32,68 @@ function checkedUrl(value: string, environment: AuthEnvironment): URL {
 function providerFetch(environment: AuthEnvironment, transport: typeof fetch): oidc.CustomFetch {
   return async (input, init) => {
     checkedUrl(input, environment);
-    const response = await transport(input, { ...(init as unknown as RequestInit), redirect: "error", cache: "no-store" });
-    const declared = response.headers.get("content-length");
-    if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_PROVIDER_BYTES) {
-      await response.body?.cancel().catch(() => {});
-      throw new Error("Identity response is too large");
-    }
-    if (!response.body) return response;
-    const reader = response.body.getReader();
-    let total = 0;
-    const body = new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        try {
-          const next = await reader.read();
-          if (next.done) { controller.close(); return; }
-          total += next.value.byteLength;
-          if (total > MAX_PROVIDER_BYTES) {
-            await reader.cancel().catch(() => {});
-            controller.error(new Error("Identity response is too large"));
-            return;
-          }
-          controller.enqueue(next.value);
-        } catch (error) { controller.error(error); }
-      },
-      async cancel() { await reader.cancel().catch(() => {}); },
+    const deadline = AbortSignal.timeout(PROVIDER_TIMEOUT_SECONDS * 1000);
+    const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+    const timedOut = () => new Error("Identity request timed out or was canceled");
+    const cancelBody = (body: ReadableStream<Uint8Array> | null) => {
+      try { void body?.cancel().catch(() => {}); } catch { /* Best effort only. */ }
+    };
+    let onAbort = () => {};
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(timedOut());
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
     });
-    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let complete = false;
+    try {
+      // A transport may ignore abort and resolve late; release any late body
+      // without waiting for its cancellation to settle.
+      const pending = Promise.resolve().then(() => {
+        if (signal.aborted) throw timedOut();
+        return transport(input, { ...(init as unknown as RequestInit), signal, redirect: "error", cache: "no-store" });
+      }).then((response) => {
+        if (signal.aborted) { cancelBody(response.body); throw timedOut(); }
+        return response;
+      });
+      const response = await Promise.race([pending, aborted]);
+      if (signal.aborted) { cancelBody(response.body); throw timedOut(); }
+      const declared = response.headers.get("content-length");
+      if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_PROVIDER_BYTES) {
+        cancelBody(response.body);
+        throw new Error("Identity response is too large");
+      }
+      if (!response.body) return response;
+      reader = response.body.getReader();
+      const activeReader = reader;
+      const read = async () => {
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        while (true) {
+          if (signal.aborted) throw timedOut();
+          const next = await activeReader.read();
+          if (signal.aborted) throw timedOut();
+          if (next.done) { complete = true; break; }
+          if (next.value.byteLength > MAX_PROVIDER_BYTES - total) throw new Error("Identity response is too large");
+          total += next.value.byteLength;
+          chunks.push(next.value);
+        }
+        const bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        return bytes;
+      };
+      const body = await Promise.race([read(), aborted]);
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+      if (reader) {
+        if (!complete) {
+          try { void reader.cancel().catch(() => {}); } catch { /* Best effort only. */ }
+        }
+        try { reader.releaseLock(); } catch { /* A pending read may still be unwinding. */ }
+      }
+    }
   };
 }
 
@@ -86,7 +123,7 @@ export async function discoverProvider(config: AuthConfig, transport: typeof fet
     config.clientId,
     { client_secret: config.clientSecret, id_token_signed_response_alg: "RS256" },
     oidc.ClientSecretBasic(config.clientSecret),
-    { [oidc.customFetch]: providerFetch(config.environment, transport), timeout: 5 },
+    { [oidc.customFetch]: providerFetch(config.environment, transport), timeout: PROVIDER_TIMEOUT_SECONDS },
   );
   checkMetadata(provider, config.environment);
   oidc.enableNonRepudiationChecks(provider);

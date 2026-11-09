@@ -1,0 +1,25 @@
+simulation: Provider redirect credential regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: Synthetic local Channel3, CoinGecko Demo, and PayPal token and webhook-verification endpoints.
+  unblocks: Verify that credential-bearing provider requests reject redirects and still accept successful responses without contacting real providers.
+assumptions:
+  - id: redirect-credential-protection
+    status: supported
+    claim: The tested provider callers reject synthetic same-origin and cross-origin HTTP 307 responses before reaching the redirect destination.
+    reason: The test invokes the real provider modules with synthetic credentials over loopback HTTPS, observes Postman mock requests and checks both redirect destinations.
+    verification: On 2026-11-06, search, browse, quotes, chart, PayPal token and PayPal verification each accepted a synthetic HTTP 200 and rejected same-origin and cross-origin HTTP 307 responses. Neither redirect destination received a request. An earlier pre-fix isolated Channel3 search followed a synthetic cross-origin 307 and forwarded the fictional x-api-key.
+    source: src/lib/channel3.ts ; src/lib/market-data.ts ; src/lib/paypal.ts ; tests/provider-redirect-simulation.py ; tests/provider-redirect-driver.cjs
+    updated_at: '2026-11-06'
+  - id: real-provider-redirect-contract
+    status: unknown
+    claim: The live providers never require HTTP redirects for the configured endpoints.
+    reason: The local stand-in cannot establish real provider routing or availability, and the test is intentionally offline.
+    verification: Not tested against real providers. If an endpoint starts requiring redirects, the application will report its existing provider-unavailable error until its configured endpoint is reviewed.
+    source: postman/mocks/provider-redirect-regression/default.js
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty worktree; exact source SHA-256 values are printed by the runner)
+    cli: 1.84.0

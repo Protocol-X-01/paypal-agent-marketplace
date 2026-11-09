@@ -7,9 +7,9 @@ import styles from "./insight-panel.module.css";
 
 type InsightPanelProps = { kind: InsightKind; selection: InsightSelection; enabled?: boolean };
 type Result = { status: "pending" | "success" | "error"; response?: InsightResponse; error?: string };
-const utc = (value: string | number) => new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value)) + " UTC";
+const utc = (value: string | number) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value)) + " UTC";
 const interval = (minutes: number) => minutes >= 1440 ? `${minutes / 1440}-day` : minutes >= 60 ? `${minutes / 60}-hour` : `${minutes}-minute`;
-const count = (value: number) => new Intl.NumberFormat("en-GB").format(value);
+const count = (value: number) => new Intl.NumberFormat("en-US").format(value);
 
 export default function InsightPanel({ kind, selection, enabled = true }: InsightPanelProps) {
   // A view owns its request and result, including when a previous selection returns.

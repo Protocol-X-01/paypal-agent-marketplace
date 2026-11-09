@@ -1,0 +1,5 @@
+$kind: collection
+name: PayPal Webhook Verification - local synthetic regression
+description: Local-only fictional webhook requests. These do not verify real signatures or process payments.
+variables:
+  baseUrl: /

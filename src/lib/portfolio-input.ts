@@ -6,7 +6,7 @@ export type HoldingDrafts = Partial<Record<TrackedCoin, string>>;
 export type HoldingDraft =
   | { kind: "empty" }
   | { kind: "incomplete" }
-  | { kind: "invalid" }
+  | { kind: "invalid"; reason?: "precision" }
   | { kind: "valid"; amount: number };
 
 export type StorageSaveResult = { kind: "saved"; baseline: string | null } | { kind: "changed" } | { kind: "corrupt" } | { kind: "unavailable" };
@@ -33,7 +33,18 @@ export function mayClearStorageWarning(conflict: boolean, holdingsPending: boole
   return !conflict && !holdingsPending && !watchlistPending && !hasDrafts;
 }
 
-/** Keep intermediate text out of the persisted numeric holdings object. */
+/** Compare decimal values independently of leading/trailing zeroes and exponent notation. */
+function canonicalDecimal(value: string): string {
+  const [coefficient, exponentText = "0"] = value.toLowerCase().split("e");
+  const [whole, fraction = ""] = coefficient.split(".");
+  const digits = `${whole}${fraction}`.replace(/^0+/, "");
+  if (!digits) return "0";
+  const significant = digits.replace(/0+$/, "");
+  const exponent = Number(exponentText) - fraction.length + digits.length - significant.length;
+  return `${significant}e${exponent}`;
+}
+
+/** Keep intermediate text and quantities that would be rounded out of storage. */
 export function parseHoldingDraft(value: string): HoldingDraft {
   if (value === "") return { kind: "empty" };
   if (value.length > 128 || !/^(?:\d+(?:\.\d*)?|\.\d*)(?:[eE][+-]?\d*)?$/.test(value)) return { kind: "invalid" };
@@ -42,6 +53,9 @@ export function parseHoldingDraft(value: string): HoldingDraft {
   if (!Number.isFinite(amount) || amount < 0 || amount > 1e12) return { kind: "invalid" };
   // Reject positive input which underflows to zero instead of silently erasing it.
   if (amount === 0 && /[1-9]/.test(value.split(/[eE]/, 1)[0])) return { kind: "invalid" };
+  // Snapshots store numbers. Require the number's shortest decimal representation
+  // to preserve the value typed by the user, regardless of decimal notation.
+  if (canonicalDecimal(value) !== canonicalDecimal(String(amount))) return { kind: "invalid", reason: "precision" };
   return { kind: "valid", amount };
 }
 

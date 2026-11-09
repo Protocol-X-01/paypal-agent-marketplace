@@ -18,6 +18,7 @@ async function loadSource(path, modules = {}, globals = {}) {
 }
 
 const formatting = await loadSource("../src/lib/market-format.ts");
+const assets = await loadSource("../src/lib/market-assets.ts");
 const element = (type, props) => ({ type, props: props ?? {} });
 const jsx = { jsx: element, jsxs: element, Fragment: Symbol("Fragment") };
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -51,6 +52,7 @@ async function createHomepage(fetchMock) {
     react,
     "react/jsx-runtime": jsx,
     "@/lib/market-format": formatting,
+    "@/lib/market-assets": assets,
     "../home.module.css": { default: {} },
   }, { fetch: fetchMock });
 
@@ -119,6 +121,17 @@ test("a failed shared request leaves both homepage views in their error state", 
   assert.equal(page.renderProvider().status, "error");
   assert.match(textOf(page.renderMarket({ variant: "hero" })), /temporarily unavailable/i);
   assert.match(textOf(page.renderMarket({ variant: "grid" })), /unavailable/i);
+  cancel();
+});
+
+test("duplicate coin IDs do not display conflicting homepage prices", async () => {
+  const page = await createHomepage(async () => ({ ok: true, json: async () => ({ retrievedAt: "2026-11-06T06:05:30Z", coins: [bitcoin, { ...bitcoin, priceUsd: 99999 }] }) }));
+  page.renderProvider();
+  const cancel = page.effects[0]();
+  await flush();
+  await flush();
+  assert.equal(page.renderProvider().status, "error");
+  assert.doesNotMatch(textOf(page.renderMarket({ variant: "hero" })), /71,234|99,999/);
   cancel();
 });
 

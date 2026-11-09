@@ -1,0 +1,21 @@
+$kind: http-request
+name: Reject oversized 3m window
+url: '{{baseUrl}}/api/market/intraday/bitcoin?interval=3m&days=7'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: interval
+    value: 3m
+  - key: days
+    value: '7'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |
+      pm.test('A seven-day 3m window is rejected', () => {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.json().error.code).to.equal('unsupported_window');
+      });
+order: 2000

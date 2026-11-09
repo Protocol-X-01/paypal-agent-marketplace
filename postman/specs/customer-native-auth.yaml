@@ -59,6 +59,19 @@ paths:
         With no Authorization header starts a new family. If a bearer is supplied,
         it must be valid or return 401; never silently downgrade to guest.
         Bind reauthentication to that existing native family and its generation.
+        A prior session and its family must still be unexpired when checked using
+        the advancing database clock after relevant lock and insert waits; a failed
+        check cannot create a new handoff or alter the prior family.
+        Before creating a handoff, bounded maintenance may cancel individually
+        expired, unissued native handoffs and clear their provider or return-code
+        material while retaining their cancellation proofs and existing sessions.
+        Expired-family deletion locks and rechecks each family before deleting
+        children; a family being independently extended is skipped rather than
+        using a stale expiry snapshot.
+        Maintenance runs separately from creation and may commit even when a new
+        handoff is rejected. It runs on later handoff creation attempts, so it
+        does not establish a guaranteed deletion deadline. Logical database updates
+        do not guarantee erasure from database history, WAL or backups.
         Does not consume or change web sessions. No redirect URL, app identity,
         account type, dataScope or provider credentials are accepted from the client.
       security:
@@ -107,7 +120,8 @@ paths:
         GET never starts provider authorization. Valid handoff creates an independent
         short-lived browser-binding cookie and anti-CSRF form token. Page has no
         third-party resources, displays the app identity and requires an explicit
-        Continue action. Do not authenticate an app solely from its platform field.
+        Continue action. A handoff tied to an expired initiating session is not
+        valid. Do not authenticate an app solely from its platform field.
       parameters:
         - in: query
           name: handoff
@@ -128,9 +142,16 @@ paths:
       summary: Proposed browser-bound, one-use provider authorization start
       description: >-
         Exact canonical Origin and native browser-binding cookie plus form token
-        required. Maximum body 2 KiB. Atomically claims a pending handoff before
-        creating independent provider state, nonce and S256 verifier. A handoff
+        required. Maximum body 2 KiB. Creates independent provider state, nonce
+        and S256 verifier, then atomically claims the pending handoff with them. A handoff
         can start once only. Provider PKCE and app handoff PKCE are distinct.
+        Handoff, family and any initiating session are rechecked after lock waits
+        before the provider authorization is started.
+        If the claim or redirect construction fails, the server makes a best-effort
+        attempt to cancel and clear only the exact claim owned by this
+        POST, preserving its cancellation proof and any existing session. A competing
+        claim is not cancelled. Cleanup may fail or be interrupted; it is not a
+        guaranteed erasure deadline and cannot detect a response lost after return.
         Native-specific cookie names prevent collision with web sign-in.
       parameters:
         - in: header
@@ -167,9 +188,26 @@ paths:
       operationId: completeNativeProviderAuthorization
       summary: Proposed native-only registered PayPal callback
       description: >-
-        Callback query at most 4 KiB. Requires the native browser transaction cookie,
+        Callback query at most 4 KiB in UTF-8. Unrecognized parameters are ignored,
+        never forwarded to provider validation or reflected in redirects. Recognized
+        parameters must not be duplicated. Unsupported hybrid, JARM and token
+        response fields (response, id_token, access_token, token, token_type,
+        expires_in and refresh_token) are rejected even when empty. Code and error
+        must not occur together. Error description and error URI may accompany an
+        error response and are discarded without reflection. A successful code
+        response may include one nonempty RFC 6749 scope
+        string, at most 1024 ASCII bytes. It is informational, discarded before
+        provider completion, never used as authority, and never reflected in redirects.
+        Scope is not accepted with an error response. A single bounded issuer value
+        may accompany a response. On code responses it is passed to the OpenID
+        verifier, which compares it with the discovered issuer and requires it when
+        discovery advertises authorization_response_iss_parameter_supported.
+        Error responses always fail without issuing a session. Requires the native browser transaction cookie,
         matching provider state, one-use transaction, nonce, provider PKCE and validated
         issuer/audience/expiry/signature/userinfo subject, as in the existing web flow.
+        Reservation and code preparation recheck handoff, family and any initiating
+        session after lock or uniqueness waits; an expired authority cannot start
+        provider completion or create a handoff code.
         Atomically checks family generation/cancellation and prepares a handoff code
         valid for at most 60 seconds or remaining handoff lifetime, whichever is less.
         Redirects only to the configured verified HTTPS app link, with code and app
@@ -183,10 +221,38 @@ paths:
           schema: { type: string, maxLength: 2048 }
         - in: query
           name: state
-          schema: { type: string, maxLength: 128 }
+          schema: { $ref: '#/components/schemas/RandomHandle' }
         - in: query
           name: error
           schema: { type: string, maxLength: 128 }
+        - in: query
+          name: error_description
+          required: false
+          description: Optional error detail; accepted only with an error and discarded without reflection.
+          schema: { type: string, maxLength: 4096 }
+        - in: query
+          name: error_uri
+          required: false
+          description: Optional error detail; accepted only with an error and discarded without reflection.
+          schema: { type: string, maxLength: 4096 }
+        - in: query
+          name: scope
+          required: false
+          description: Optional informational scope on a successful code response only; not an authorization grant.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+            pattern: '^[\x21\x23-\x5B\x5D-\x7E]+(?: [\x21\x23-\x5B\x5D-\x7E]+)*$'
+        - in: query
+          name: iss
+          required: false
+          description: Authorization response issuer; passed unchanged to the OpenID verifier on code responses.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+            pattern: '^[\x21-\x7E]+$'
       # Enabled budget/outer concurrency failures redirect303 to the fixed failure URL,
       # without echoing code/state or clearing cookies; exhausted budgets include Retry-After1..60.
       # Disabled/incomplete configuration redirects303 using a fixed relative Location,
@@ -219,6 +285,11 @@ paths:
       description: >-
         JSON up to 2 KiB. Validate canonical base64url, exact app state, one-use
         code, S256(verifier), expiry, active configuration and family generation.
+        Recheck the handoff, family, code and any initiating session using the
+        advancing database clock after relevant lock and insert waits. If any is
+        expired at that check, return generic401 and roll back session issuance
+        and family rotation. The check is an authorization point before commit;
+        it is not a promise that a clock cannot advance before commit completes.
         Constant-time comparisons; hash all random bearer handles at rest.
         Atomically mark code consumed and create/rotate the native family session.
         Exactly one concurrent exchange succeeds. Lost response is not replayable:
@@ -299,6 +370,10 @@ paths:
     get:
       operationId: readNativeSession
       summary: Proposed native session validation without renewal
+      description: >-
+        Validate the session and family against the advancing database clock
+        after acquiring the shared store lock. An expired session returns generic401.
+        Validation does not renew a session or disable logout for retained aliases.
       security: [{ NativeSession: [] }]
       responses:
         '200':

@@ -1,0 +1,53 @@
+simulation: Elastic OTLP privacy regression
+generated: '2026-11-06'
+purpose:
+  stands_in_for: A synthetic local OTLP HTTP protobuf receiver, not Elastic Cloud.
+  unblocks: Compare the Vercel, official and production-wrapped exporters through the application's privacy processor, including failures, redirects, diagnostics and inherited headers.
+assumptions:
+  - id: filtered-trace-wire
+    status: supported
+    claim: The tested privacy processor removes the synthetic marker from the emitted protobuf while retaining the selected route and service metadata.
+    reason: The Postman receiver decodes the expected resource, scope, span, attributes and status and rejects the marker anywhere in the wire body.
+    verification: On 2026-11-06 all three exporter configurations sent an accepted trace and their HTTP failure cases through the loopback mock. All decoded trace bodies had the expected reviewed metadata, no events or links, and no synthetic marker. This covers the constructed spans only.
+    source: src/lib/telemetry-privacy.ts ; tests/elastic-otlp-exporter.cjs ; postman/mocks/elastic-otlp-privacy/default.js
+    updated_at: '2026-11-06'
+  - id: vercel-http-failure
+    status: contradicted
+    claim: The installed Vercel protobuf exporter reports receiver HTTP failures as failed exports.
+    reason: The installed implementation invokes its success callback for any resolved fetch response without checking HTTP status.
+    verification: On 2026-11-06 synthetic HTTP 400 and 503 both produced exporter code 0 and a resolved forceFlush; a closed local port produced a failed export. Numeric response statuses were observed without logging bodies or headers.
+    source: tests/elastic-otlp-exporter.cjs ; installed @vercel/otel 2.2.1
+    updated_at: '2026-11-06'
+  - id: official-http-failure
+    status: supported
+    claim: The tested official Node OTLP protobuf exporter reports HTTP 400 and 503 as failures in this local fixture.
+    reason: The actual exporter completion and provider forceFlush both reflected the mock's rejection.
+    verification: On 2026-11-06 the official 0.223.0 exporter failed and forceFlush rejected for HTTP 400, HTTP 503 after retries, and a closed local port. The raw 400 error contained a synthetic marker supplied by the receiver, so a separate error-redaction boundary is necessary.
+    source: tests/elastic-otlp-exporter.cjs ; https://opentelemetry.io/docs/specs/otlp/
+    updated_at: '2026-11-06'
+  - id: wrapped-errors-diagnostics-and-redirect
+    status: supported
+    claim: The tested production wrapper and diagnostic logger withhold the synthetic receiver marker in the exercised errors and warnings.
+    reason: The test observes the delegate and wrapped callbacks, flush rejections, captured diagnostic output and injected lifecycle errors without printing their contents.
+    verification: On 2026-11-06 the wrapped official exporter succeeded for HTTP 200, failed with redacted errors for 400 and 503, and rejected 307 without reaching its redirect target. The 400 and 307 raw delegate errors contained the marker; corresponding wrapped errors did not. Synthetic warning, error and lifecycle failures also withheld the marker.
+    source: src/lib/telemetry-exporter.ts ; tests/elastic-otlp-exporter.cjs ; postman/mocks/elastic-otlp-privacy/default.js
+    updated_at: '2026-11-06'
+  - id: inherited-header-control
+    status: supported
+    claim: The tested factory helper prevents two inherited OTLP header settings from being merged into this official exporter's requests.
+    reason: The receiver counts synthetic general and traces-specific headers independently without recording their values.
+    verification: On 2026-11-06 both synthetic inherited headers reached the receiver through the raw official exporter and neither reached it through the wrapped exporter constructed with the helper. Both environment settings were restored after construction.
+    source: src/lib/telemetry-exporter.ts ; tests/elastic-otlp-exporter.cjs ; postman/simulations/elastic-otlp-checks
+    updated_at: '2026-11-06'
+  - id: real-elastic
+    status: unknown
+    claim: The deployed service can authenticate and deliver traces to the intended Elastic collector.
+    reason: This simulation has no real collector, credentials, TLS, Render process, or live telemetry.
+    verification: Not exercised. A separately authorized, configured deployment and controlled real collector check would be required.
+    source: instrumentation.ts
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty worktree; actual tested source SHA-256 values are printed by the runner)
+    cli: 1.84.0

@@ -1,0 +1,4 @@
+$kind: collection
+description: Generated from ai-fictional-report-insight.yaml; the saved request is a no-cost foreign-origin rejection check. The default host is intentionally unreachable.
+variables:
+  baseUrl: http://127.0.0.1:9

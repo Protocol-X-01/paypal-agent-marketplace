@@ -42,6 +42,7 @@ const aliases = {
   '@/lib/channel3-catalog': catalog,
   '@/lib/mobile-web-cors': cors,
   '@/lib/channel3-rate-limit': { takeChannel3RateLimit: () => true },
+  '@/lib/request-limits': { acquireClientSlot: () => () => {} },
 };
 const search = load('src/app/api/marketplace/search/route.ts', aliases);
 const browse = load('src/app/api/marketplace/catalog/route.ts', aliases);
@@ -102,6 +103,7 @@ async function run() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   process.env.CHANNEL3_API_KEY = 'simulation-only';
   process.env.CHANNEL3_BASE_URL = `https://127.0.0.1:${server.address().port}`;
+  process.env.CHANNEL3_COLLECTION_ID = 'fixture-collection';
   try {
     for (const [country, currency] of [['GB', 'GBP'], ['US', 'USD']]) {
       for (const request of [post, get]) {

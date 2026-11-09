@@ -1,0 +1,31 @@
+$kind: http-example
+request:
+  url: "{{baseUrl}}/api/marketplace/search"
+  method: POST
+  headers:
+    - key: Content-Type
+      value: application/json
+    - key: Accept
+      value: application/json
+    - key: Origin
+      value: https://other.example
+  body:
+    type: json
+    content: |-
+      {
+        "query": "headphones",
+        "limit": 6
+      }
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "error": "Request origin is not allowed."
+      }
+order: 6000

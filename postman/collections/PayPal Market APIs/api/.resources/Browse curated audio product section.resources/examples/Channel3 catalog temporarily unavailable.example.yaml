@@ -1,0 +1,23 @@
+$kind: http-example
+name: Channel3 catalog temporarily unavailable
+request:
+  url: '{{baseUrl}}/api/marketplace/catalog?section=audio'
+  method: GET
+  headers:
+    Accept: application/json
+  body:
+    type: text
+    content: ''
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    Content-Type: application/json
+    Cache-Control: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "error": "The curated catalog is temporarily unavailable. Please try again later."
+      }
+order: 2000

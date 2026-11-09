@@ -1,4 +1,5 @@
 import 'server-only';
+import { acquireClientSlotForAddress } from './request-limits';
 
 // Binance's market-data-only origin; this module has no account or order path.
 const KLINES_URL = 'https://data-api.binance.vision/api/v3/klines';
@@ -254,7 +255,12 @@ export function createBinanceIntradayClient(options: ClientOptions = {}) {
     }
   }
 
-  async function get(coinId: IntradayCoin, interval: IntradayInterval, days: IntradayDays): Promise<IntradayHistory> {
+  async function get(
+    coinId: IntradayCoin,
+    interval: IntradayInterval,
+    days: IntradayDays,
+    address = 'unknown',
+  ): Promise<IntradayHistory> {
     // Defensive checks also protect non-route callers from unsupported windows.
     if (!isIntradayCoin(coinId) || !isIntradayInterval(interval) || (days !== 1 && days !== 7) ||
         (days === 7 && interval !== '15m')) throw new IntradayError('unavailable');
@@ -264,10 +270,15 @@ export function createBinanceIntradayClient(options: ClientOptions = {}) {
     if (cached && time >= cached.createdAt && time - cached.createdAt < CACHE_MS) return cached.value;
     const ongoing = pending.get(key);
     if (ongoing) return ongoing;
+    const releaseClientSlot = acquireClientSlotForAddress(address, 'binance-intraday', 2);
+    if (!releaseClientSlot) throw new IntradayError('rate_limited', 1);
     const promise = load(coinId, interval, days).then((value) => {
       cache.set(key, { value, createdAt: now() });
       return value;
-    }).finally(() => { pending.delete(key); });
+    }).finally(() => {
+      pending.delete(key);
+      releaseClientSlot();
+    });
     pending.set(key, promise);
     return promise;
   }

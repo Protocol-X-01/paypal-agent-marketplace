@@ -1,0 +1,39 @@
+simulation: PayPal Business first-page inspection
+generated: '2026-11-06'
+purpose:
+  stands_in_for: A locally authored synthetic PayPal Transaction Search first-page response and selected failures.
+  unblocks: Inspecting the sandbox-only adapter's privacy and failure behavior without real merchant data or a PayPal request. Postman was signed out, so the provider owner's mock was not searched.
+assumptions:
+  - id: first-page-request-subset
+    status: supported
+    claim: PayPal documents a transaction search request with a date range, transaction_info field selection, balance-affecting filter, page and page size.
+    reason: The provider reference specifies those parameters and permits page sizes of 1 to 500.
+    verification: The subset was checked against the provider reference. The synthetic simulation exercises the adapter using page 1 and page size 100, but does not verify the real service.
+    source: https://developer.paypal.com/api/transaction-search/v1/search-get
+    updated_at: '2026-11-06'
+  - id: page-semantics
+    status: unknown
+    claim: A page-1 query and its response identify the first page consistently and reliably during changing data.
+    reason: PayPal calls the query zero-relative but its example uses page 1 for the first page; the response page is also described as zero-relative. Ordering and stability are not established by the test.
+    verification: Documentation inspected; no sandbox or live report was retrieved. The adapter never claims a complete report.
+    source: https://developer.paypal.com/api/transaction-search/v1/schema.json
+    updated_at: '2026-11-06'
+  - id: direction-and-event-identity
+    status: unknown
+    claim: Transaction Search's amount and event fields alone establish merchant-side credit or debit and a unique event identity.
+    reason: The T-code reference says codes can be credit or debit; Transaction Search permits repeated IDs. No direction/sign rule or stable unique row key was established.
+    verification: PayPal documentation inspected. The fictional repeated-ID response is not deduplicated, classified as a sale or refund, or exposed as rows.
+    source: https://developer.paypal.com/reports/reference/t-codes/ ; https://developer.paypal.com/api/transaction-search/v1/search-get
+    updated_at: '2026-11-06'
+  - id: local-failure-boundaries
+    status: supported
+    claim: In the listed synthetic scenarios, the local adapter returns incomplete or unavailable results and does not expose fixture identifiers or provider error content.
+    reason: The adapter and tests run in a loopback-only namespace against a locally authored stand-in; the observations do not prove real provider behavior or authorization.
+    verification: The simulation runs the actual adapter against success, 403, malformed and oversized responses, a timeout, redirect and missing-list cases; its collection checks the synthetic success response.
+    source: tests/paypal-business-first-page-simulation.py ; tests/paypal-business-first-page-driver.cjs
+    updated_at: '2026-11-06'
+fingerprints:
+  - id: dirty-local-snapshot
+    date: '2026-11-06'
+    commit: 1329b80bc75ab0b8192010aa1a5983cd111ec6e0 (dirty working tree; adapter SHA-256 64959a6cc430570358301da685db70c6038cc5513740cd031ec2acd083d458d3; driver SHA-256 5240fc8428548000e7d7c24bc76f485d33f863c57358d63e194ca672faf47218; mock SHA-256 1eb2032d2d161ea6d6769e060b0108d5db3df23d5968f23c097e9eb8b2912658)
+    cli: 1.84.0

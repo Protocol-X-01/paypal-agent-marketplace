@@ -2,7 +2,7 @@ import "server-only";
 
 import { cacheLife } from "next/cache";
 import { z } from "zod";
-import { TRACKED_COINS, type TrackedCoin } from "./market-assets";
+import { hasDistinctTrackedCoinIds, TRACKED_COINS, type TrackedCoin } from "./market-assets";
 import type { MarketCurrency } from "./market-currency";
 import type { Candle } from "./candle-series";
 
@@ -11,6 +11,15 @@ export const CHART_DAYS = [1, 7, 30, 90, 365] as const;
 export type ChartDays = (typeof CHART_DAYS)[number];
 
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
+// App-owned decoded-body limits, not CoinGecko promises. Demo auto-granularity
+// reaches roughly 2,160 hourly observations per series at 90 days; 4 MiB leaves
+// headroom for three full-precision series. Quotes request only seven tracked
+// assets and their 7-day sparklines. Provider payload formats can still change.
+// https://docs.coingecko.com/demo/reference/coins-id-market-chart
+// https://docs.coingecko.com/demo/reference/coins-markets
+const MAX_QUOTE_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_CHART_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_CANDLE_RESPONSE_BYTES = 1024 * 1024;
 // Leave headroom below CoinGecko Demo's 30 calls/minute. This rolling limit is
 // per Node process and is not shared between service instances.
 const PROVIDER_CALL_LIMIT_PER_MINUTE = 24;
@@ -40,11 +49,17 @@ const marketRowSchema = z
   })
   .passthrough();
 
+// Historical values follow the existing ChartPoint contract. Keep timestamps
+// within JavaScript's Date range so clients can render each accepted sample.
+const chartPointSchema = z.tuple([
+  z.number().int().min(-8_640_000_000_000_000).max(8_640_000_000_000_000),
+  z.number().nonnegative(),
+]);
 const chartSchema = z
   .object({
-    prices: z.array(z.tuple([z.number(), z.number()])),
-    market_caps: z.array(z.tuple([z.number(), z.number()])),
-    total_volumes: z.array(z.tuple([z.number(), z.number()])),
+    prices: z.array(chartPointSchema),
+    market_caps: z.array(chartPointSchema),
+    total_volumes: z.array(chartPointSchema),
   })
   .passthrough();
 
@@ -166,7 +181,7 @@ async function readBoundedProviderJson(response: Response, signal: AbortSignal, 
   }
 }
 
-async function fetchProvider(path: string, params: URLSearchParams, maxResponseBytes?: number): Promise<unknown> {
+async function fetchProvider(path: string, params: URLSearchParams, maxResponseBytes: number): Promise<unknown> {
   const headers = providerHeaders();
   reserveProviderCall();
   const signal = AbortSignal.timeout(8_000);
@@ -186,12 +201,7 @@ async function fetchProvider(path: string, params: URLSearchParams, maxResponseB
     throw new MarketDataError("unavailable", 429, providerRetryAfterSeconds(response.headers.get("Retry-After")));
   }
   if (!response.ok) throw new MarketDataError("unavailable", response.status);
-  if (maxResponseBytes !== undefined) return readBoundedProviderJson(response, signal, maxResponseBytes);
-  try {
-    return await response.json();
-  } catch {
-    throw new MarketDataError("invalid_response", response.status);
-  }
+  return readBoundedProviderJson(response, signal, maxResponseBytes);
 }
 
 export interface MarketCoin {
@@ -278,7 +288,7 @@ const candlesSchema = z.array(candleTupleSchema).max(1000).refine((rows) => rows
 
 async function loadMarketCandles(coinId: TrackedCoin, days: ChartDays, currency: MarketCurrency): Promise<MarketCandles> {
   const params = new URLSearchParams({ vs_currency: currency.toLowerCase(), days: String(days), precision: "full" });
-  const raw = await fetchProvider(`/coins/${coinId}/ohlc`, params, 1024 * 1024);
+  const raw = await fetchProvider(`/coins/${coinId}/ohlc`, params, MAX_CANDLE_RESPONSE_BYTES);
   const result = candlesSchema.safeParse(raw);
   if (!result.success) throw new MarketDataError("invalid_response");
   return {
@@ -314,9 +324,9 @@ async function loadMarketQuotes(currency: MarketCurrency): Promise<MarketQuotes>
     price_change_percentage: "24h,7d",
     precision: "full",
   });
-  const raw = await fetchProvider("/coins/markets", params);
-  const parsed = z.array(marketRowSchema).min(1).safeParse(raw);
-  if (!parsed.success) throw new MarketDataError("invalid_response");
+  const raw = await fetchProvider("/coins/markets", params, MAX_QUOTE_RESPONSE_BYTES);
+  const parsed = z.array(marketRowSchema).min(1).max(TRACKED_COINS.length).safeParse(raw);
+  if (!parsed.success || !hasDistinctTrackedCoinIds(parsed.data)) throw new MarketDataError("invalid_response");
 
   return {
     currency,
@@ -393,7 +403,7 @@ async function loadMarketChart(coinId: TrackedCoin, days: ChartDays, currency: M
   const params = new URLSearchParams({ vs_currency: currency.toLowerCase(), days: String(days), precision: "full" });
   let raw: unknown;
   try {
-    raw = await fetchProvider(`/coins/${coinId}/market_chart`, params);
+    raw = await fetchProvider(`/coins/${coinId}/market_chart`, params, MAX_CHART_RESPONSE_BYTES);
   } catch (error) {
     if (
       !(error instanceof MarketDataError) ||
@@ -413,8 +423,10 @@ async function loadMarketChart(coinId: TrackedCoin, days: ChartDays, currency: M
     const anchor = Date.parse(coin.lastUpdated ?? overview.retrievedAt);
     const end = Number.isFinite(anchor) ? anchor : Date.parse(overview.retrievedAt);
     const step = (7 * 24 * 60 * 60 * 1000) / coin.sparkline7d.length;
+    // The inferred times must remain distinct when represented in milliseconds.
+    if (step < 1) throw error;
     const allPrices = coin.sparkline7d.map((value, index) => ({
-      timestamp: end - (coin.sparkline7d.length - index) * step,
+      timestamp: Math.round(end - (coin.sparkline7d.length - index) * step),
       value,
     }));
     const prices = days === 1

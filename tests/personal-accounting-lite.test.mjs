@@ -65,3 +65,71 @@ test("web calculator uses a currency-keyed session and does not offer an unavail
   const portfolioButton = nodes(tree).find((node) => node.type === "button" && node.props.children === "Use portfolio estimate");
   assert.equal(portfolioButton.props.disabled, true);
 });
+
+test("web playground retains and rejects an overlong paste in every amount field", async () => {
+  const element = (type, props, key) => ({ type, props: props ?? {}, key });
+  const slots = [];
+  let cursor = 0;
+  const Component = load(await readFile(new URL("../src/app/components/personal-accounting-lite.tsx", import.meta.url), "utf8"), {
+    react: { useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], (value) => { slots[i] = value; }]; } },
+    "react/jsx-runtime": { jsx: element, jsxs: element, Fragment: Symbol("Fragment") },
+    "@/lib/personal-accounting-lite": web,
+    "./personal-accounting-lite.module.css": { __esModule: true, default: {} },
+  }).default;
+  const root = Component({ currency: "GBP", portfolioTotal: null, portfolioAvailable: false });
+  function expand(value) {
+    if (!value || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(expand);
+    if (typeof value.type === "function") return expand(value.type(value.props));
+    return { ...value, props: { ...value.props, children: expand(value.props?.children) } };
+  }
+  function nodes(value) {
+    if (!value || typeof value !== "object") return [];
+    if (Array.isArray(value)) return value.flatMap(nodes);
+    return [value, ...nodes(value.props?.children)];
+  }
+  function text(value) {
+    if (value === null || value === undefined || typeof value === "boolean") return "";
+    if (Array.isArray(value)) return value.map(text).join("");
+    return typeof value === "object" ? text(value.props?.children) : String(value);
+  }
+  const render = () => { cursor = 0; return expand(root.type(root.props)); };
+  let tree = render();
+  const input = (id) => nodes(tree).find((node) => node.type === "input" && node.props.id === id);
+  const enter = (id, value) => {
+    const field = input(id);
+    assert.ok(field, `Missing ${id}`);
+    // A browser enforces maxLength before onChange, including on paste.
+    const delivered = typeof field.props.maxLength === "number" ? value.slice(0, field.props.maxLength) : value;
+    field.props.onChange({ target: { value: delivered } });
+    tree = render();
+  };
+  const result = (sectionId) => {
+    const section = nodes(tree).find((node) => node.type === "section" && node.props["aria-labelledby"] === sectionId);
+    return text(nodes(section).find((node) => node.type === "strong"));
+  };
+  const fields = [
+    ["lite-start", "100.00", true, true],
+    ["lite-income", "50.00", true, false],
+    ["lite-spending", "25.00", true, false],
+    ["lite-target", "300.00", false, true],
+    ["lite-monthly", "75.00", false, true],
+  ];
+  for (const [id, value] of fields) enter(id, value);
+  assert.equal(result("lite-cashflow-title"), "GBP 125.00");
+  assert.equal(result("lite-savings-title"), "3 months");
+  const pasted = "0".repeat(32) + "1";
+  assert.equal(web.parseLiteMoney("0".repeat(32), "GBP").kind, "valid");
+  assert.equal(web.parseLiteMoney(pasted, "GBP").kind, "invalid");
+  for (const [id, validValue, cashflowInvalid, savingsInvalid] of fields) {
+    enter(id, pasted);
+    assert.equal(input(id).props.value, pasted, `${id} must retain the complete pasted amount`);
+    assert.equal(input(id).props["aria-invalid"], true);
+    assert.match(text(nodes(tree).find((node) => node.props?.id === `${id}-error`)), /no more than 32 characters/i);
+    assert.equal(result("lite-cashflow-title"), cashflowInvalid ? "—" : "GBP 125.00");
+    assert.equal(result("lite-savings-title"), savingsInvalid ? "—" : "3 months");
+    enter(id, validValue);
+    assert.equal(result("lite-cashflow-title"), "GBP 125.00");
+    assert.equal(result("lite-savings-title"), "3 months");
+  }
+});

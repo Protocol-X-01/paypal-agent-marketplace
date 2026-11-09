@@ -2,10 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from "@/lib/mobile-web-cors";
 import { isMarketCurrency } from "@/lib/market-currency";
 import { CHART_DAYS, getMarketCandles, MarketDataError, TRACKED_COINS, type ChartDays, type TrackedCoin } from "@/lib/market-data";
+import { takeClientRequestLimit } from "@/lib/request-limits";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ coinId: string }> }) {
   const json = (body: unknown, init?: ResponseInit) => withMobileWebCors(request, NextResponse.json(body, init));
-  const invalid = (code: string, message: string, status = 400) => json({ error: { code, message } }, { status, headers: { "Cache-Control": "no-store" } });
+  const invalid = (code: string, message: string, status = 400, headers: Record<string, string> = {}) => json({ error: { code, message } }, { status, headers: { "Cache-Control": "no-store", ...headers } });
   if (!isAllowedApplicationOrigin(request)) return invalid("origin_not_allowed", "Request origin is not allowed.", 403);
   const { coinId } = await params;
   if (!TRACKED_COINS.includes(coinId as TrackedCoin)) return invalid("unsupported_coin", "Choose a supported asset from the market watchlist.");
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   const currency = query.get("currency") ?? "USD";
   if (!isMarketCurrency(currency)) return invalid("unsupported_currency", "Choose a supported display currency.");
+  const clientBudget = takeClientRequestLimit(request, "coingecko", 12);
+  if (!clientBudget.allowed) return invalid("market_data_rate_limited", "Market data requests are temporarily rate limited.", 429,
+    { "Retry-After": String(clientBudget.retryAfterSeconds) });
   try {
     return json(await getMarketCandles(coinId as TrackedCoin, Number(rawDays) as ChartDays, currency), {
       headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=240" },

@@ -16,7 +16,7 @@ const PAD_X = 12;
 const PAD_Y = 18;
 
 function candleTime(timestamp: number) {
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(timestamp) + " UTC";
+  return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(timestamp) + " UTC";
 }
 
 type IndicatorProps = { indicators?: PriceIndicatorState; onIndicatorsChange?: Dispatch<SetStateAction<PriceIndicatorState>>; showIndicatorControls?: boolean; viewSnapshot?: CandleViewSnapshot | null; onViewSnapshotChange?: (next: CandleViewSnapshot) => void };
@@ -34,8 +34,9 @@ export default function CandleHistoryPanel({ coinId, currency, days, intraday, p
 
 export function CandlePlot({ history, precisePrice = false, indicators: controlledIndicators, onIndicatorsChange, showIndicatorControls = true, viewSnapshot, onViewSnapshotChange }: { history: CandleHistory; precisePrice?: boolean } & IndicatorProps) {
   const { candles, currency } = history;
-  const [window, setWindow] = useState<CandleWindow | null>(() => restoreCandleView(history, viewSnapshot).window);
-  const [selected, setSelected] = useState<number | null>(() => restoreCandleView(history, viewSnapshot).selected);
+  const restoredView = restoreCandleView(history, viewSnapshot);
+  const [window, setWindow] = useState<CandleWindow>(() => restoredView.window ?? { start: Math.max(0, candles.length - Math.min(60, candles.length)), end: candles.length });
+  const [selected, setSelected] = useState<number>(() => restoredView.selected ?? Math.max(0, candles.length - 1));
   const [localIndicators, setLocalIndicators] = useState<PriceIndicatorState>({ ...EMPTY_PRICE_INDICATORS });
   const indicators = controlledIndicators ?? localIndicators;
   const setIndicators = onIndicatorsChange ?? setLocalIndicators;

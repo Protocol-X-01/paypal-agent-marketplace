@@ -1,0 +1,51 @@
+$kind: http-request
+description: >-
+  Returns the tracked crypto market reference values using pounds sterling as
+  the display currency. The response contains currency-neutral value field
+  names and explicitly identifies GBP as their currency.
+url: '{{baseUrl}}/api/market/quotes?currency=GBP'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: currency
+    value: GBP
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("GBP market quotes are available", function () {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.headers.get("Content-Type")).to.match(/application\/json/i);
+      });
+      pm.test("quote values identify their currency and use neutral field names", function () {
+        const body = pm.response.json();
+        pm.expect(body.currency).to.eql("GBP");
+        pm.expect(body.provider).to.eql("CoinGecko");
+        pm.expect(Number.isNaN(Date.parse(body.retrievedAt))).to.eql(false);
+        pm.expect(body.coins).to.be.an("array").that.is.not.empty;
+        pm.expect(body.coins.length).to.be.at.most(7);
+        pm.expect(new Set(body.coins.map(function (coin) { return coin.id; })).size).to.eql(body.coins.length);
+        const fields = ["id", "symbol", "name", "rank", "price", "marketCap", "volume24h", "change24hPct", "change7dPct", "high24h", "low24h", "sparkline7d", "lastUpdated"];
+        const nonnegative = ["price", "marketCap", "volume24h", "high24h", "low24h"];
+        const percentages = ["change24hPct", "change7dPct"];
+        body.coins.forEach(function (coin) {
+          pm.expect(coin).to.have.all.keys(fields);
+          ["priceUsd", "marketCapUsd", "volume24hUsd", "high24hUsd", "low24hUsd"].forEach(function (field) {
+            pm.expect(coin).not.to.have.property(field);
+          });
+          nonnegative.forEach(function (field) {
+            pm.expect(coin[field] === null || (Number.isFinite(coin[field]) && coin[field] >= 0), field).to.eql(true);
+          });
+          percentages.forEach(function (field) {
+            pm.expect(coin[field] === null || Number.isFinite(coin[field]), field).to.eql(true);
+          });
+          pm.expect(coin.sparkline7d).to.be.an("array");
+          coin.sparkline7d.forEach(function (value) {
+            pm.expect(Number.isFinite(value) && value >= 0).to.eql(true);
+          });
+        });
+      });
+settings: {}
+order: 1200

@@ -1,0 +1,36 @@
+$kind: http-request
+description: Inspect only aggregate counters from the loopback OTLP stand-in.
+url: '{{baseUrl}}/elastic/__elastic__/stats'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("all exporter configurations sent only filtered protobuf spans", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        for (const name of ["vercel", "official", "wrapped"]) {
+          const group = body[name];
+          pm.expect(group.accepted).to.eql(1);
+          pm.expect(group.badRequest).to.eql(1);
+          pm.expect(group.unavailable).to.be.at.least(1);
+          pm.expect(group.redirected).to.eql(name === "wrapped" ? 1 : 0);
+          pm.expect(group.redirectTarget).to.eql(0);
+          pm.expect(group.received).to.eql(2 + group.unavailable + group.redirected);
+          pm.expect(group.validated).to.eql(group.received);
+          pm.expect(group.rejected).to.eql(0);
+          if (name === "official") {
+            pm.expect(group.ambientGeneral).to.eql(group.received);
+            pm.expect(group.ambientTraces).to.eql(group.received);
+          }
+          if (name === "wrapped") {
+            pm.expect(group.ambientGeneral).to.eql(0);
+            pm.expect(group.ambientTraces).to.eql(0);
+          }
+        }
+      });
+settings: {}
+order: 1000

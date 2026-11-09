@@ -1,0 +1,34 @@
+$kind: http-example
+name: Illustrative audio section response (synthetic)
+request:
+  url: '{{baseUrl}}/api/marketplace/catalog?section=audio&storefront=GB'
+  method: GET
+  headers:
+    Accept: application/json
+  body:
+    type: text
+    content: ''
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    Content-Type: application/json
+    Cache-Control: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "provider": "Channel3",
+        "storefront": "GB",
+        "currency": "GBP",
+        "section": "audio",
+        "title": "Headphones & headsets",
+        "retrievedAt": "2026-11-05T12:00:00.000Z",
+        "products": [
+          {
+            "id": "example-audio-product",
+            "title": "Example over-ear headphones"
+          }
+        ]
+      }
+order: 1000

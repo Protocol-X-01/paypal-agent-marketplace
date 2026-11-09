@@ -1,0 +1,28 @@
+$kind: http-example
+request:
+  url: '{{baseUrl}}/api/marketplace/search'
+  method: POST
+  headers:
+    - key: Content-Type
+      value: application/json
+    - key: Accept
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {"query":"headphones"}
+response:
+  statusCode: 503
+  statusText: Service Unavailable
+  headers:
+    - key: Content-Type
+      value: application/json
+    - key: Cache-Control
+      value: no-store
+    - key: Retry-After
+      value: '5'
+  body:
+    type: json
+    content: |-
+      {"error":"Search is temporarily busy. Please try again shortly."}
+order: 9000

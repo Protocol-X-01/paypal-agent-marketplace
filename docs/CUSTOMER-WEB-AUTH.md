@@ -58,7 +58,60 @@ application session expires after 30 minutes, is stored only as a hash, and is
 revoked on sign-out or rotated on a successful new sign-in. Login and sign-out
 require an exact same-origin POST. A configured callback returns to the fixed
 Account destination and does not put a code or token into its destination;
-an unconfigured callback returns a generic unavailable response.
+an unconfigured callback returns a fixed relative failure redirect.
+Session reads check both the session and family against the advancing database
+clock, including after waiting for a table lock.
+
+Web and native callbacks share a 4 KiB response filter. It ignores unrecognized
+extensions without forwarding or reflecting them, rejects duplicate recognized
+parameters and unsupported hybrid/JARM/token fields, and keeps code and error
+responses separate. A bounded `scope` is informational and discarded; a bounded
+`iss` reaches the OpenID verifier for its issuer check. Malformed responses fail
+before a web transaction is consumed. These local checks do not establish actual
+PayPal sandbox metadata, consent, or successful customer sign-in.
+
+The web store locks a pending transaction before checking its submitted state,
+context and expiry. A late or incorrect state in the same unexpired context leaves
+the attempt pending; matching states remain one-use. Once a matching claim commits,
+the stored state, nonce and verifier have been logically replaced with empty
+non-secret markers before the winning callback can begin provider work. Expired or
+cross-context attempts are completed and their stored values cleared in the same
+database transaction. This uses the existing schema; no migration is required.
+
+The advancing-clock expiry check is repeated after the claim update to catch a
+wait during that statement. Time can still pass during the later commit or its
+acknowledgement; session issuance performs independent expiry checks. A claim
+that commits but loses its acknowledgement has markers in the current row; one
+that rolls back can remain pending with its original values. Pending attempts
+and rows created by older running versions are not guaranteed to be scrubbed at
+expiry without a reliable cleanup process. Logical updates do not erase older
+PostgreSQL row versions, WAL or backups; retention and access remain separately
+controlled.
+
+Local validation on 7 November used isolated PostgreSQL owner and restricted
+runtime-role fixtures, including duplicate claims, live and expired row-lock
+waits, a delayed update and deferred commit failure. Evidence:
+`/home/protocol-x/Downloads/paypal-claim-final-pg-rlb4u09r/metrics.json`.
+The controller's acknowledgement-loss cases use a fictional in-memory store,
+not an interrupted PostgreSQL network connection. No hosted database or real
+provider was exercised by these checks.
+
+Before issuing a session, the store also rechecks the pending transaction, its
+session family, and any initiating session after the relevant locks have been
+acquired, after the insert, and in the final guarded family update. An authority
+that expires during those waits cannot create a new session. The final guarded
+update is the authorization point; it cannot guarantee wall-clock validity at
+the exact instant a later database commit completes.
+When a browser starts another sign-in with an earlier transaction cookie and no
+active session cookie, the earlier transaction must still be valid in this
+context. An expired or unresolvable earlier transaction fails closed rather than
+starting an unrelated family; the browser may need to wait for that short-lived
+cookie to expire before retrying.
+
+Bounded expiry cleanup rechecks each target's expiry after a row-lock wait, so
+it does not delete a family that a concurrent transaction has extended. Cleanup
+runs separately from the subsequent sign-in transaction and can commit even if
+that sign-in later fails.
 
 Login transactions and sessions are bound to a keyed fingerprint of the
 canonical origin, selected environment and issuer, client ID and secret,

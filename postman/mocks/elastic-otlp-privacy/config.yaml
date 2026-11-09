@@ -1,0 +1,9 @@
+version: 1
+name: elastic-otlp-privacy
+slug: elastic-otlp-privacy
+protocol: http
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
+interceptRequests: true

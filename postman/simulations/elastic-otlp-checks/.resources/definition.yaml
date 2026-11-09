@@ -1,0 +1,5 @@
+$kind: collection
+name: Local Elastic OTLP privacy checks
+variables:
+  - key: baseUrl
+    value: http://127.0.0.1

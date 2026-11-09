@@ -1,10 +1,13 @@
 # Render Blueprint for the PayPal Markets companion.
-# Free tier is suitable for a preview; it sleeps when idle and has no persistent disk.
+# Leaving the plan unspecified preserves an existing service's plan on sync.
+# A new web service defaults to paid 0.5c-512mb; review charges before creation.
+# Before linking or syncing, review the actual service and every field below:
+# omitted buildFilter clears existing filters, omitted Blueprint previews are
+# disabled, and explicit settings can change auto-deploy and environment values.
 services:
   - type: web
     name: paypal-markets-companion
     runtime: node
-    plan: free
     region: frankfurt
     buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
     startCommand: npm run start
@@ -43,9 +46,13 @@ services:
         sync: false
       - key: COINGECKO_DEMO_API_KEY
         sync: false
+      # This template defaults to no export. Enabling it or changing an
+      # existing service requires separate review and authorization.
+      - key: PAYPAL_ELASTIC_EXPORT_ENABLED
+        value: "false"
       # Secret prompts apply only to new Blueprint creations. Add values
       # manually to existing services because later syncs ignore sync:false.
       - key: ELASTIC_OTLP_ENDPOINT
         sync: false
-      - key: ELASTIC_API_KEY
+      - key: PAYPAL_ELASTIC_OTLP_API_KEY
         sync: false

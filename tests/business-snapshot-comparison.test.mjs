@@ -62,17 +62,22 @@ async function createPanel() {
   const Component = (await load("../src/app/components/business-snapshot-panel.tsx", {
     react: hooks,
     "react/jsx-runtime": jsx,
-    "ag-grid-community": { themeQuartz: { withParams: () => ({}) } },
+    "ag-grid-community": { colorSchemeDark: {}, colorSchemeLight: {}, themeQuartz: { withPart: () => ({ withParams: () => ({}) }) } },
     "ag-grid-enterprise": { AllEnterpriseModule: {} },
     "ag-grid-react": { AgGridProvider: () => null, AgGridReact: () => null },
     "@/lib/business-snapshot": snapshotModule,
     "@/lib/business-channel-comparison": channelComparison,
     "@/lib/business-percentage": businessPercentage,
+    "./theme-preference": { useAppearance: () => ({ appearance: "dark" }) },
     "./business-snapshot-panel.module.css": { __esModule: true, default: {} },
   })).default;
   function render() { cursor = 0; return Component({ perspective: "leadership", onSnapshotChange: (value) => changed.push(value) }); }
   function startImport(file) {
+    const attestation = nodes(render()).find((node) => node.type === "input" && node.props.type === "checkbox");
+    assert.ok(attestation, "The report authorization confirmation must be present");
+    attestation.props.onChange({ currentTarget: { checked: true } });
     const input = nodes(render()).find((node) => node.type === "input" && node.props.type === "file");
+    assert.equal(input.props.disabled, false, "A confirmed report can be selected through the UI");
     input.props.onChange({ currentTarget: { files: [file], value: "synthetic.csv" } });
   }
   async function importReport(source) {
@@ -96,6 +101,7 @@ function button(tree, label) {
 test("a self-provided snapshot compares both periods and switches measures without losing the report", async () => {
   const panel = await createPanel();
   assert.equal(comparison(panel.render()), undefined, "No report means no invented comparison");
+  assert.equal(nodes(panel.render()).find((node) => node.type === "input" && node.props.type === "file").props.disabled, true);
   let tree = await panel.importReport(csv([100, 100000, 2000], [120, 120000, 3000]));
   assert.deepEqual(panel.changed, [true]);
   let view = comparison(tree);

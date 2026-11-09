@@ -1,0 +1,16 @@
+$kind: http-request
+description: A budget-only search is sent to Channel3 as a broad product search with a structured price limit. The response includes the effective storefront-currency priceRange. No checkout or payment is created.
+url: "{{baseUrl}}/api/marketplace/search"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "under 150",
+      "limit": 6,
+      "storefront": "GB"
+    }
+order: 3000

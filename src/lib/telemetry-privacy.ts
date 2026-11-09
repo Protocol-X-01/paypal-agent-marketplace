@@ -6,7 +6,8 @@ const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIO
 const SAFE_ROUTES = new Set([
   "/", "/dashboard", "/agent/[id]", "/api/agents/[id]/chat",
   "/api/agents/[id]/wallet", "/api/health", "/api/market/chart/[coinId]",
-  "/api/market/coins", "/api/market/quotes", "/api/marketplace/catalog",
+  "/api/market/candles/[coinId]", "/api/market/coins",
+  "/api/market/intraday/[coinId]", "/api/market/quotes", "/api/marketplace/catalog",
   "/api/marketplace/search", "/api/orders", "/api/webhooks/paypal",
 ]);
 
