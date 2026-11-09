@@ -1069,18 +1069,19 @@ export default function ShopScreen() {
               ) : <View style={layout.shopGrid ? styles.productGrid : undefined}>{curatedCatalog.products.map((product) => {
                 const alreadySaved = saveTarget?.items.some((item) => item.id === product.id) ?? false;
                 const directOffer = preferredRetailerOffer(product);
+                const directOfferLabel = directOffer ? offerHandoffLabel(directOffer) : 'a current retailer';
                 return (
                   <View key={`curated-${product.id}`} style={[styles.productCard, layout.shopGrid && styles.productGridItem]}>
                     <View style={styles.productHeading}>
-                      <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOffer?.domain ?? 'a current retailer'}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, curatedTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [styles.productThumbnailLink, pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
+                      <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOfferLabel}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, curatedTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [styles.productThumbnailLink, pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
                         <ProductThumbnail key={`${product.id}-${product.imageUrl ?? ''}`} imageUrl={product.imageUrl} />
                       </Pressable>
                       <View style={styles.productInfo}>
                         <Text style={styles.productBrand}>{productLabel(product.brand)}</Text>
-                        <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOffer?.domain ?? 'a current retailer'}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, curatedTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
+                        <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOfferLabel}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, curatedTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
                           <Text style={styles.productName}>{product.title}</Text>
                         </Pressable>
-                        {directOffer && <Text style={styles.productLinkHint}>Shop at {directOffer.domain} ↗</Text>}
+                        {directOffer && <Text style={styles.productLinkHint}>Shop at {directOfferLabel} ↗</Text>}
                       </View>
                       <Pressable
                         accessibilityRole="button"
@@ -1240,18 +1241,19 @@ export default function ShopScreen() {
               </View>
               <View style={layout.shopGrid ? styles.productGrid : undefined}>{searchResults.map((product) => {
                 const directOffer = preferredRetailerOffer(product);
+                const directOfferLabel = directOffer ? offerHandoffLabel(directOffer) : 'a current retailer';
                 return (
                 <View key={product.id} style={[styles.productCard, layout.shopGrid && styles.productGridItem]}>
                   <View style={styles.productHeading}>
-                    <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOffer?.domain ?? 'a current retailer'}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, searchTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [styles.productThumbnailLink, pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
+                    <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOfferLabel}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, searchTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [styles.productThumbnailLink, pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
                         <ProductThumbnail key={`${product.id}-${product.imageUrl ?? ''}`} imageUrl={product.imageUrl} />
                     </Pressable>
                     <View style={styles.productInfo}>
                       <Text style={styles.productBrand}>{productLabel(product.brand)}</Text>
-                      <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOffer?.domain ?? 'a current retailer'}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, searchTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
+                      <Pressable accessibilityRole="link" accessibilityLabel={`Open ${product.title} at ${directOfferLabel}`} accessibilityHint="Checks this exact product before opening the retailer. The retailer confirms final price and checkout." accessibilityState={{ disabled: !storefrontReady || refreshingProductId !== null }} onPress={() => openProductAtRetailer(product, searchTicket)} disabled={!storefrontReady || refreshingProductId !== null} style={({ pressed }) => [pressed && styles.pressed, (!storefrontReady || refreshingProductId !== null) && styles.disabled]}>
                         <Text style={styles.productName}>{product.title}</Text>
                       </Pressable>
-                      {directOffer && <Text style={styles.productLinkHint}>Shop at {directOffer.domain} ↗</Text>}
+                      {directOffer && <Text style={styles.productLinkHint}>Shop at {directOfferLabel} ↗</Text>}
                     </View>
                     <Pressable
                       accessibilityRole="button"

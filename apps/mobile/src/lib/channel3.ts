@@ -96,12 +96,13 @@ function parseOffer(value: unknown, expectedCurrency: 'GBP' | 'USD'): Channel3Of
   const currency = typeof value.price.currency === 'string' ? value.price.currency.toUpperCase() : '';
   if (!url || typeof price !== 'number' || !Number.isFinite(price) || price < 0 || currency !== expectedCurrency) return null;
 
-  // Retailer metadata is display-only; handoff validation and authorization use url.
+  // Bind the displayed retailer to the destination host. The Channel3 affiliate
+  // host is the only supported case where the advertised retailer may differ.
   const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
   const supplied = typeof value.domain === 'string' && /^[a-z0-9.-]{1,253}$/i.test(value.domain)
     && safeChannel3Url(`https://${value.domain}`)
     ? value.domain.toLowerCase().replace(/^www\./, '').replace(/\.$/, '') : null;
-  const domain = supplied ?? host;
+  const domain = supplied && (supplied === host || host === 'buy.trychannel3.com') ? supplied : host;
 
   const availability = value.availability === 'InStock' || value.availability === 'OutOfStock'
     ? value.availability
