@@ -4,7 +4,7 @@ Updated 2026-11-09. This is the working scope for the PayPal hackathon concept. 
 
 ## Current development checkpoint — 9 November 2026
 
-The private review branch `codex/paypal-upgrade-20261109` is pushed at `0553e99`. Its isolated local checkout now has an uncommitted PayPal-specific OAuth code and user-info adapter for both web and native runtimes, based on PayPal's documented `/connect`, token-service, and Identity API flow. Targeted ESLint and website TypeScript checks pass. This is source-level readiness only: no tests, production build, buyer consent, signed native acceptance, or deployment occurred; customer login remains disabled. The current local diff is not on GitHub or Render. See [customer login setup](CUSTOMER-LOGIN-SETUP.md) for the compatibility finding and remaining acceptance gates.
+The private review branch `codex/paypal-upgrade-20261109` now contains the PayPal-specific OAuth code and user-info adapter for web and native runtimes, based on PayPal's documented `/connect`, token-service, and Identity API flow, plus the clarified Business reporting authorization boundary. Targeted ESLint and website TypeScript checks passed for the adapter; `git diff --check` passed for the later documentation update. This is source-level readiness only: no tests, production build, buyer consent, signed native acceptance, or deployment occurred; customer login remains disabled. The isolated checkout is clean and its reviewed changes are pushed to GitHub; this branch has not been deployed to Render. See [customer login setup](CUSTOMER-LOGIN-SETUP.md) and [Business data](PAYPAL-BUSINESS-DATA.md) for the remaining acceptance gates.
 
 ## Product boundaries
 
