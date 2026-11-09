@@ -10,6 +10,8 @@ The mobile Shop now mirrors the website's mutually exclusive Browse/Search flow.
 
 A concise-copy pass across web and mobile removes repeated disconnected-account, wallet-draft, cash-balance, region, and market-source explanations. It keeps the live-versus-fictional report labels, clipboard/storage warnings, and the separate public candle-source disclosure. Targeted web ESLint and TypeScript, mobile ESLint and TypeScript, and `git diff --check` pass. No automated tests, production build, or device visual review ran; current-source Xiaomi/tablet acceptance remains open.
 
+On 2026-11-09, the current isolated web branch was reviewed in a narrow local browser preview. CoinGecko's 1-week range rendered 42 four-hour candles. Binance Spot returned complete BTC/USDT windows: 480 3-minute, 288 5-minute, and 96 15-minute candles for one day, plus 672 15-minute candles for seven days. Candle count, OHLC, UTC close time, feed, and retrieval details were visible. SMA 20 appeared in both Line and Candles; hovering and wheel zoom reduced the visible range from 60 candles to 24 around the pointer. This is web-preview evidence only; the direct Binance selector remains 3m/5m/15m, and Xiaomi/tablet acceptance remains open.
+
 ## Product boundaries
 
 - Venmo remains the customer's wallet and payment surface. This concept does not connect to a Venmo account, hold keys, execute crypto trades, or complete retailer checkout.
