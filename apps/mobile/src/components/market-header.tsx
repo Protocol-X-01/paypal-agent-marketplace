@@ -4,7 +4,7 @@ import { CurrencyPicker, CurrencyPreferenceNotice } from '@/components/currency-
 import type { Palette } from '@/lib/palette';
 import { useThemedStyles } from '@/lib/theme-context';
 
-export function MarketHeader() {
+export function MarketHeader({ showCurrencyControls = true }: { showCurrencyControls?: boolean }) {
   const styles = useThemedStyles(createStyles);
   return (
     <>
@@ -16,9 +16,9 @@ export function MarketHeader() {
             <Text style={styles.product}>MARKETS · CONCEPT</Text>
           </View>
         </View>
-        <CurrencyPicker />
+        {showCurrencyControls && <CurrencyPicker />}
       </View>
-      <CurrencyPreferenceNotice />
+      {showCurrencyControls && <CurrencyPreferenceNotice />}
     </>
   );
 }

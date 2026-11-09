@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
@@ -16,6 +17,7 @@ import { estimateHoldingValue, estimatePortfolio } from '@/lib/portfolio-value';
 import { palette } from '@/lib/palette';
 import { useResponsiveLayout } from '@/lib/responsive-layout';
 import { prepareVenmoDraft, VENMO_USERNAME_GUIDANCE, venmoUsernameNeedsReview, type VenmoDraftAmount, type VenmoDraftRecipient } from '@/lib/venmo-draft-amount';
+import { consumeVenmoSendIntent } from '@/lib/venmo-send-intent';
 import {
   createVenmoContactsRepository,
   MAX_CONTACT_DISPLAY_NAME_LENGTH,
@@ -97,6 +99,8 @@ export default function PortfolioScreen() {
 export function PortfolioContent() {
   const styles = useAppearanceStyles(baseStyles);
   const colors = usePalette();
+  const routeParams = useLocalSearchParams<{ sendIntent?: string | string[] }>();
+  const sendIntent = typeof routeParams.sendIntent === 'string' ? routeParams.sendIntent : null;
   const { storageFence, revision } = useCustomerSession();
   const contactsRepository = useMemo(() => {
     // The fence object is stable; a session revision must bind a new generation.
@@ -110,6 +114,7 @@ export function PortfolioContent() {
   const sectionPositions = useRef<{ holdings: number | null; venmo: number | null }>({ holdings: null, venmo: null });
   const sectionNavigationHeight = useRef(0);
   const sectionLayoutReady = useRef({ navigation: false, holdings: false, venmo: false });
+  const handledSendIntentRef = useRef<string | null>(null);
   const [sectionNavigationReady, setSectionNavigationReady] = useState(false);
   const [recipient, setRecipient] = useState('');
   const recipientRef = useRef('');
@@ -212,6 +217,54 @@ export function PortfolioContent() {
       animated: true,
     });
   };
+
+  useEffect(() => {
+    if (!sectionNavigationReady || !sendIntent || sendIntent.length > 64) return;
+    const frame = requestAnimationFrame(() => {
+      if (handledSendIntentRef.current === sendIntent) return;
+      const amount = consumeVenmoSendIntent(sendIntent);
+      handledSendIntentRef.current = sendIntent;
+      if (amount) {
+        const applyAmount = () => {
+          draftAmountRef.current = amount;
+          setDraftAmount(amount);
+          setCopyMessage('Draft amount updated. Nothing was sent.');
+        };
+        if (draftAmountRef.current && draftAmountRef.current !== amount) {
+          const keepCurrentAmount = () => setCopyMessage('Your existing draft amount is unchanged.');
+          const confirmReplacement = 'A different amount is already in your draft. Replace the amount? Nothing will be sent.';
+          if (Platform.OS === 'web') {
+            if (typeof window !== 'undefined' && window.confirm(confirmReplacement)) applyAmount();
+            else keepCurrentAmount();
+          } else {
+            Alert.alert(
+              'Replace draft amount?',
+              confirmReplacement,
+              [
+                { text: 'Keep current', style: 'cancel', onPress: keepCurrentAmount },
+                { text: 'Replace amount', onPress: applyAmount },
+              ],
+            );
+          }
+        } else {
+          draftAmountRef.current = amount;
+          setDraftAmount(amount);
+          setCopyMessage(null);
+        }
+      } else {
+        setCopyMessage('The amount handoff expired. Enter it again to continue.');
+      }
+      const position = sectionPositions.current.venmo;
+      if (position !== null) {
+        portfolioScrollRef.current?.scrollTo({
+          y: Math.max(0, position - sectionNavigationHeight.current - 8),
+          animated: true,
+        });
+      }
+      router.setParams({ sendIntent: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sectionNavigationReady, sendIntent]);
 
   const copyDraft = async () => {
     if (!copyMounted.current || !contactsRepository.isCurrent()) return;
