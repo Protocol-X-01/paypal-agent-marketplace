@@ -51,7 +51,7 @@ function InsightPanelView({ kind, selection, enabled = true }: InsightPanelProps
   return <section className={styles.panel} aria-labelledby={headingId}>
     <div className={styles.heading}>
       <div><p className={styles.eyebrow}><span aria-hidden="true">✧</span> AI ASSISTANCE</p><h2 id={headingId}>{report ? "A clearer read of this report." : "Put the market in perspective."}</h2>
-        <p className={styles.intro}>{report ? "Generate an explanation of the selected fictional report. Only the example period and filters are used." : "Generate a short explanation from a separate public OHLC snapshot for this asset and range. Its candle samples may differ from the price line. Your holdings and personal data are not used."}</p></div>
+        <p className={styles.intro}>{report ? "Explanation of the selected fictional report; period and filters only." : "A separate public OHLC snapshot; candle samples may differ from the price line. No holdings or personal data used."}</p></div>
       <span className={styles.badge}>{report ? "Fictional report" : "Public market data"}</span>
     </div>
     <div className={styles.action}><button type="button" disabled={!enabled || pending} aria-busy={pending} onClick={() => void generate()}>{pending ? "Preparing your summary…" : response ? "Generate a new summary" : report ? "Summarize fictional report" : "Generate market overview"}<span aria-hidden="true">{pending ? "◌" : "↗"}</span></button><span>{enabled ? "AI explanation · OpenAI" : report ? "Select the fictional preview to use AI assistance." : "AI assistance is unavailable for this view."}</span></div>

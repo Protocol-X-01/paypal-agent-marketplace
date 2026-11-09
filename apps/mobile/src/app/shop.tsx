@@ -1042,7 +1042,7 @@ export default function ShopScreen() {
                 </Pressable>;
               })}
             </View>
-            <Text style={styles.storefrontFootnote}>{storefrontReady ? `Offers refresh · lists stay here · ${SHOP_STOREFRONTS[storefront].currency}.${query.trim() ? ' Review price limits.' : ''}` : 'Loading region…'}</Text>
+            <Text style={styles.storefrontFootnote}>{storefrontReady ? `Offers refresh · ${SHOP_STOREFRONTS[storefront].currency}.${query.trim() ? ' Check price limits.' : ''}` : 'Loading region…'}</Text>
             {(storefrontStatus === 'invalid' || storefrontStatus === 'unavailable') && <Text style={styles.storefrontNotice} accessibilityRole="summary" accessibilityLiveRegion="polite">{storefrontStatus === 'invalid' ? 'The saved shopping region could not be read. Select a region to replace it.' : 'Your shopping region could not be read or saved. This choice applies for this session.'}</Text>}
           </View>
 

@@ -443,7 +443,7 @@ export function BusinessContent() {
           <View style={layout.pairedPanels ? styles.businessOverviewPanel : undefined}>
           <View style={styles.businessOverview}>
             <View style={styles.businessOverviewTop}>
-              <View><Text style={styles.businessBalanceLabel}>PAYPAL BALANCE</Text><Text style={styles.businessBalance} accessibilityLabel="Balance unavailable">—</Text><Text style={styles.businessBalanceNote}>Account not connected</Text></View>
+              <View><Text style={styles.businessBalanceLabel}>PAYPAL BALANCE</Text><Text style={styles.businessBalance} accessibilityLabel="Balance unavailable">—</Text></View>
               <Text style={styles.businessSource}>{reportKind === 'example' ? 'FICTIONAL EXAMPLE' : reportKind === 'self' ? 'AGGREGATE CSV · UNVERIFIED' : paypalOnly ? 'PAYPAL EXPORT · UNVERIFIED' : 'ACCOUNT PREVIEW'}</Text>
             </View>
             <View style={styles.businessMetrics}>
@@ -738,7 +738,6 @@ const baseStyles = StyleSheet.create({
   businessOverviewTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   businessBalanceLabel: { color: '#D4E8FF', fontSize: 10, lineHeight: 15, fontWeight: '800', letterSpacing: 0.8 },
   businessBalance: { color: '#FFFFFF', fontSize: 31, lineHeight: 37, fontWeight: '800', marginTop: 4 },
-  businessBalanceNote: { color: '#D4E8FF', fontSize: 11, lineHeight: 16 },
   businessSource: { flexShrink: 1, color: '#FFFFFF', borderWidth: 1, borderColor: '#6B9AD0', borderRadius: 12, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 6, fontSize: 9, fontWeight: '800' },
   businessMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 18 },
   businessMetric: { flexGrow: 1, flexBasis: '29%', minWidth: 88, padding: 10, borderWidth: 1, borderColor: '#4679B7', borderRadius: 11, backgroundColor: '#164F9A' },

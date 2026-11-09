@@ -8,6 +8,8 @@ The private review branch `codex/paypal-upgrade-20261109` now contains the PayPa
 
 The mobile Shop now mirrors the website's mutually exclusive Browse/Search flow. The selected view is saved on the device; choosing a curated category switches to Browse, while submitting a search switches to Search, and only that view's results are rendered. Mobile lint, mobile TypeScript, and `git diff --check` pass for this change. Automated tests, a production build, and current-source Xiaomi/tablet visual acceptance were not performed; device review remains open.
 
+A concise-copy pass across web and mobile removes repeated disconnected-account, wallet-draft, cash-balance, region, and market-source explanations. It keeps the live-versus-fictional report labels, clipboard/storage warnings, and the separate public candle-source disclosure. Targeted web ESLint and TypeScript, mobile ESLint and TypeScript, and `git diff --check` pass. No automated tests, production build, or device visual review ran; current-source Xiaomi/tablet acceptance remains open.
+
 ## Product boundaries
 
 - Venmo remains the customer's wallet and payment surface. This concept does not connect to a Venmo account, hold keys, execute crypto trades, or complete retailer checkout.

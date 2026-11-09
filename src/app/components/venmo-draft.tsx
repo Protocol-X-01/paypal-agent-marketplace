@@ -271,7 +271,7 @@ export default function VenmoDraft() {
         <div className={styles.headingCopy}>
           <p className={styles.eyebrow}>VENMO PAYMENT DRAFT</p>
           <h3 id="venmo-draft-title">Prepare a payment in Venmo</h3>
-          <p>Enter a recipient and amount here, then review and send in Venmo yourself.</p>
+          <p>Draft here; review and send in Venmo.</p>
         </div>
         <span className={styles.draftBadge}>Draft only · no payment sent</span>
       </header>
@@ -359,10 +359,6 @@ export default function VenmoDraft() {
             <span>{savedContactWarning}</span>
             <button type="button" className={styles.secondaryButton} onClick={() => { setSavedContactWarningAcknowledged(true); setCopyMessage(""); setCopyFailed(false); }}>I checked this username in Venmo</button>
           </div>}
-          <div className={styles.reviewNotice}>
-            <strong>Draft only · no payment sent</strong>
-            <span>Open Venmo yourself and check the recipient before deciding whether to send.</span>
-          </div>
           {recipientCheck.ok && !followsPublishedUsernameGuidance(recipient) && (
             <p className={styles.recipientNotice} role="status">This username differs from Venmo’s current published format. Check it carefully in Venmo.</p>
           )}
@@ -385,7 +381,7 @@ export default function VenmoDraft() {
           </dl>
 
           <p className={styles.nextStep}>
-            Copy a field for entry in Venmo, or copy the full draft for reference. Amounts are copied as USD digits and cents. Clipboard text may remain after you leave Portfolio. This app does not save the draft, open Venmo, or send a payment.
+            Check the recipient in Venmo before sending. Amounts copy as USD digits and cents.
           </p>
 
           <div className={styles.actions} aria-busy={copyBusy}>
@@ -404,7 +400,7 @@ export default function VenmoDraft() {
 
       {savedContactWarning && !reviewing && <p className={styles.recipientNotice} role="alert">{savedContactWarning}</p>}
       <SavedVenmoContacts disabled={reviewing} selectedContact={selectedContactForScope} onSelect={selectSavedContact} onContactsChanged={onSavedContactsChanged} />
-      <p className={styles.privacyNote}>The payment draft clears when you leave Portfolio; copied text may remain on your clipboard. Saved usernames stay in this browser on this device, scoped to the current guest or verified PayPal session. Browser storage is not encrypted and does not sync. No device contacts are imported.</p>
+      <p className={styles.privacyNote}>Draft clears when you leave Portfolio. Clipboard may retain copied text. Usernames stay on this device, scoped to the guest or verified session; browser storage is unencrypted and unsynced. Device contacts are not imported.</p>
     </section>
   );
 }

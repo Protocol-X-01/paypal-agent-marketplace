@@ -621,7 +621,6 @@ export default function MarketsScreen() {
         <View style={styles.sectionHeading}>
           <View>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Tracked assets</Text>
-            <Text style={styles.sectionSubtitle}>Prices are reference values, not transaction quotes.</Text>
           </View>
         </View>
 

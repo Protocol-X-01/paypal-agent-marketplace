@@ -35,14 +35,14 @@ function Session({ currency, portfolioTotal, portfolioAvailable }: Props) {
   return <section className={styles.panel} aria-labelledby="personal-lite-title">
     <div className={styles.heading}><div><p className={styles.eyebrow}>PERSONAL · PLAYGROUND</p><h2 id="personal-lite-title">Explore a simple plan.</h2></div><span className={styles.badge}>SESSION ONLY</span></div>
     <div className={styles.source}>
-      <div><strong>Choose a starting amount</strong><p>No connected cash balance is available in this preview.</p></div>
+      <div><strong>Choose a starting amount</strong><p>No cash balance is connected.</p></div>
       <p className={styles.sourceValue}>{currency}: {digits === null ? "currency precision unavailable" : digits === 0 ? "whole units only" : `up to ${digits} decimal places`}. Use a decimal point without thousands separators.</p>
       <div className={styles.sourceOptions} role="group" aria-label="Starting amount source">
         <button type="button" aria-pressed={source === "manual"} onClick={() => setSource("manual")}>Enter an amount</button>
         <button type="button" aria-pressed={source === "portfolio"} disabled={portfolio === null} onClick={() => setSource("portfolio")}>Use portfolio estimate</button>
       </div>
       {source === "manual" ? <MoneyField id="lite-start" label="Starting amount" value={startText} onChange={setStartText} currency={currency} /> : <p className={styles.sourceValue}>{portfolio === null ? "The complete portfolio estimate is unavailable." : `Rounded estimate: ${formatLiteMoney(portfolio, currency)}. This is not a cash balance.`}</p>}
-      {source === "manual" && <p className={styles.sourceValue}>A portfolio estimate is optional and may include crypto value; it is not cash.</p>}
+      {source === "manual" && <p className={styles.sourceValue}>Optional portfolio estimates may include crypto; they are not cash.</p>}
     </div>
     <div className={styles.calculators}>
       <section className={styles.calculator} aria-labelledby="lite-cashflow-title"><p className={styles.eyebrow}>CASH FLOW SCENARIO</p><h3 id="lite-cashflow-title">Plan what remains.</h3><div className={styles.fields}><MoneyField id="lite-income" label="Planned income" value={incomeText} onChange={setIncomeText} currency={currency} /><MoneyField id="lite-spending" label="Planned spending" value={spendingText} onChange={setSpendingText} currency={currency} /></div><div className={styles.result} aria-live="polite"><span>Scenario closing amount</span><strong>{closing === null ? "—" : formatLiteMoney(closing, currency)}</strong><small>{closing === null ? "Complete all three amounts to calculate." : "Starting amount + income − spending"}</small></div></section>

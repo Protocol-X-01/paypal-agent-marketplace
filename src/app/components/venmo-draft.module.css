@@ -242,22 +242,6 @@
   background: var(--surface-blue);
 }
 
-.reviewNotice {
-  display: grid;
-  gap: 4px;
-  padding: 13px 15px;
-  color: var(--blue-text);
-  background: var(--surface-blue);
-  border-left: 3px solid #2470d0;
-  border-radius: 8px;
-}
-
-.reviewNotice strong {
-  font-size: 12px;
-  font-weight: 740;
-}
-
-.reviewNotice span,
 .nextStep {
   color: var(--draft-muted);
   font-size: 11px;

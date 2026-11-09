@@ -489,25 +489,24 @@ export default function BusinessMonitoring({ draftRef, onDraftChange }: { draftR
         </div>
         <span className={styles.connectionBadge}>
           <span className={styles.statusDot} aria-hidden="true" />
-          Account not connected
+          Not connected
         </span>
       </header>
 
       <div className={styles.connectionNotice} role="status">
         <span className={styles.noticeIcon} aria-hidden="true">i</span>
         <div className={styles.noticeCopy}>
-          <strong>No PayPal business account is connected.</strong>
           <p>{hasReport
-            ? "Your report is self-provided, unverified, and stays on this screen. It is not a live account balance."
+            ? "Self-provided · unverified · screen-only · live balance unavailable."
             : showSampleData
-              ? "The figures below are fictional examples and are not PayPal account activity."
-              : "Explore an example or choose an aggregate report. This preview does not retrieve live account data."}</p>
+              ? "Fictional sample · no account activity."
+              : "Preview only · no live account data."}</p>
         </div>
       </div>
 
       <section className={styles.accountOverview} aria-labelledby="business-overview-title">
         <div className={styles.overviewTop}>
-          <div><p id="business-overview-title">PAYPAL BALANCE</p><strong aria-label="Balance unavailable">—</strong><span>Account not connected</span></div>
+          <div><p id="business-overview-title">PAYPAL BALANCE</p><strong aria-label="Balance unavailable">—</strong></div>
           <div className={styles.overviewSource}>{importedData ? "AGGREGATE CSV · UNVERIFIED" : paypalOnly ? "PAYPAL EXPORT · UNVERIFIED" : showSampleData ? "FICTIONAL EXAMPLE" : "ACCOUNT PREVIEW"}</div>
         </div>
         <div className={styles.overviewMetrics}>
