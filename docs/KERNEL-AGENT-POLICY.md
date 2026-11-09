@@ -1,13 +1,13 @@
 # Kernel agent account policy
 
 **Status:** design only; no Kernel account is connected to this application.
-**Reviewed:** 7 November 2026
+**Reviewed:** 9 November 2026
 
 ## Wallet and account boundary
 
-Venmo remains the customer’s wallet and payment surface. PayPal Markets is a market-information and product-discovery companion; it does not trade crypto, move funds, or connect to a customer’s wallet.
+Venmo remains the customer’s wallet and payment surface. The user clarified that any future Kernel smart account in this app is separate and agent-only; this app does not need a second customer-owned Kernel wallet or a MetaMask connection. PayPal Markets is currently a market-information and product-discovery companion; it does not trade crypto, move funds, or connect to a customer’s wallet.
 
-If a future agent action needs an on-chain account, it must use a separate Kernel smart account owned for that agent capability. It must not be a mirror of the customer’s Venmo balance or a means of accessing customer-held assets. The earlier “one for user, one for agent” idea is unresolved: the later product direction keeps Venmo as the customer wallet and focuses this app on market information. No customer-owned Kernel account is connected or assumed; confirm that as a separate product choice before provisioning either account.
+If a future agent action needs an on-chain account, it must use a separate Kernel smart account owned for that agent capability. It must not be a mirror of the customer’s Venmo balance or a means of accessing customer-held assets. No customer-owned Kernel account is planned, connected or assumed.
 
 The current codebase has no ZeroDev SDK integration or Kernel transaction route. The empty `KERNEL_API_KEY` example is a provider-credential placeholder, not a signer, wallet key, or permission grant. This document records an intended boundary; it does not prove a provider account, key, policy, or account has been created.
 
@@ -22,6 +22,12 @@ The existing optional market-insight route accepts only a supported asset, displ
 - no access to Venmo, PayPal customer balances, contacts, or merchant transactions.
 
 This is a deny-by-default design target, not an inspected live Kernel policy.
+
+## Future PayPal merchant purchase direction
+
+The user suggested considering PYUSD as the only agent payment asset and PayPal-supported merchants as the purchase destination, with Channel3 as a discovery source. Treat that as a candidate product boundary, not spending authorization or proof that any listed offer can be paid with PayPal or PYUSD. Channel3 supplies product discovery and affiliate-tracked retailer links; a catalog listing does not establish checkout eligibility, a PayPal payment API, merchant consent, or an agent purchase method.
+
+Before adding a purchase action, verify the exact retailer and product, that retailer’s PayPal checkout and PYUSD availability for the selected region, the payment contract and network, quote and conversion fees, refund/cancellation behavior, and Channel3 attribution terms. Refresh the offer before presenting it, display the full amount and destination, require the user’s confirmation for every purchase, then record a durable order/action result. Do not authorize subscriptions, recurring charges, transfers, arbitrary token approvals, or another asset by implication.
 
 ## Future permission design
 
@@ -43,7 +49,7 @@ The agent must not receive arbitrary contract execution, unrestricted delegate c
 
 ## Explicitly deferred
 
-AI payments, subscription creation or cancellation, checkout, contact payments, automatic transfers, wallet funding, and any mainnet execution remain out of scope until the user schedules that work and separately approves the concrete policy and first transaction. Zapier calendar or GitHub credentials do not grant Kernel authority.
+AI payments, subscription creation or cancellation, checkout, contact payments, automatic transfers, wallet funding, and any mainnet execution remain disabled until that work is scheduled and the concrete provider, account binding, and policy are approved. PYUSD-only is a suggested constraint, not a final asset/network selection. Zapier calendar or GitHub credentials do not grant Kernel authority.
 
 ## Readiness gates
 
