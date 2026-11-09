@@ -143,9 +143,9 @@ export function CandleChart({ candles, currency, quote, intervalMinutes, isPaypa
   const rsiY = (value: number) => 8 + (100 - value) / 100 * (RSI_HEIGHT - 16);
   const gaps = visible.map((candle, index) => index > 0 && candle.timestamp - visible[index - 1]!.timestamp > intervalMs * 1.5 ? viewport.start + index : -1).filter((index) => index >= 0);
 
-  const chooseAt = useCallback((locationX: number) => {
-    if (!(layoutWidth > 0)) return;
-    const ratio = ((locationX / layoutWidth) * WIDTH - PAD_X) / (WIDTH - PAD_X * 2);
+  const chooseAt = useCallback((locationX: number, measuredWidth = layoutWidth) => {
+    if (!(measuredWidth > 0) || !Number.isFinite(measuredWidth) || !Number.isFinite(locationX)) return;
+    const ratio = ((locationX / measuredWidth) * WIDTH - PAD_X) / (WIDTH - PAD_X * 2);
     const index = candleIndexAtRatio(ratio, viewport.start, viewport.end);
     if (index !== null) setSelection((current) => ({ ...current, selectedIndex: index }));
   }, [layoutWidth, viewport.start, viewport.end]);
@@ -221,7 +221,20 @@ export function CandleChart({ candles, currency, quote, intervalMinutes, isPaypa
             if (event.nativeEvent.actionName === 'increment') stepSelection(1);
             if (event.nativeEvent.actionName === 'decrement') stepSelection(-1);
           }}
-          onPress={(event) => chooseAt(event.nativeEvent.locationX)}>
+          onPress={(event) => {
+            if (Platform.OS === 'web') {
+              // React Native Web delivers a DOM MouseEvent for onPress rather
+              // than the normalized responder event used by drag gestures.
+              const mouse = event.nativeEvent as unknown as { clientX?: number; detail?: number };
+              const target = event.currentTarget as unknown as { getBoundingClientRect?: () => { left: number; width: number } };
+              if (mouse.detail === 0 || typeof mouse.clientX !== 'number' || !Number.isFinite(mouse.clientX) || typeof target?.getBoundingClientRect !== 'function') return;
+              const rect = target.getBoundingClientRect();
+              if (!Number.isFinite(rect.left)) return;
+              chooseAt(mouse.clientX - rect.left, rect.width);
+            } else {
+              chooseAt(event.nativeEvent.locationX);
+            }
+          }}>
           <Svg width="100%" height={chartHeight} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" pointerEvents="none" {...decorativeSvgAccessibilityProps}>
             {[0, 1, 2, 3].map((step) => <Line key={step} x1={PAD_X} y1={PAD_Y + step / 3 * (HEIGHT - PAD_Y * 2)} x2={WIDTH - PAD_X} y2={PAD_Y + step / 3 * (HEIGHT - PAD_Y * 2)} stroke={colors.plotGrid} strokeWidth={1} />)}
             {showUsdPeg && <Line x1={PAD_X} x2={WIDTH - PAD_X} y1={priceY(1)} y2={priceY(1)} stroke={colors.warning} strokeWidth={2} strokeDasharray="7 5" />}
