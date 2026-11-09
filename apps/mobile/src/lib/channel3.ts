@@ -12,6 +12,7 @@ export const MAX_PRODUCTS_PER_COLLECTION = 30;
 export const MAX_COLLECTION_NAME_LENGTH = 40;
 
 const MAX_COLLECTIONS_BYTES = 500_000;
+const MAX_CHANNEL3_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 export interface Channel3Offer {
   url: string;
@@ -140,6 +141,114 @@ function apiError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function exceedsChannel3ResponseLimit(text: string): boolean {
+  if (text.length > MAX_CHANNEL3_RESPONSE_BYTES) return true;
+  if (text.length * 3 <= MAX_CHANNEL3_RESPONSE_BYTES) return false;
+  let bytes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length
+        && text.charCodeAt(i + 1) >= 0xdc00 && text.charCodeAt(i + 1) <= 0xdfff) {
+      bytes += 4;
+      i += 1;
+    } else bytes += 3;
+    if (bytes > MAX_CHANNEL3_RESPONSE_BYTES) return true;
+  }
+  return false;
+}
+
+function requestChannel3Json(
+  url: string,
+  options: { method: 'GET' | 'POST'; headers: Record<string, string>; body?: string },
+  signal: AbortSignal,
+): Promise<{ status: number; payload: unknown }> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    let settled = false;
+    const finishError = (error: Error, abort = false) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      if (abort) {
+        try { request.abort(); } catch { /* The request may not have opened yet. */ }
+      }
+      reject(error);
+    };
+    const finishSuccess = (value: { status: number; payload: unknown }) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => {
+      const error = new Error('Channel3 request cancelled.');
+      error.name = 'AbortError';
+      finishError(error, true);
+    };
+
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      request.open(options.method, url);
+      request.responseType = 'text';
+      for (const [name, value] of Object.entries(options.headers)) request.setRequestHeader(name, value);
+    } catch {
+      finishError(new TypeError('Check your connection and try again.'), true);
+      return;
+    }
+
+    request.onreadystatechange = () => {
+      if (request.readyState !== 2 || settled) return;
+      const header = request.getResponseHeader('Content-Length');
+      if (header === null) return;
+      const length = Number(header);
+      if (!/^\d+$/.test(header) || !Number.isSafeInteger(length) || length > MAX_CHANNEL3_RESPONSE_BYTES) {
+        finishError(new Error('The product catalog returned too much data. Try a narrower selection.'), true);
+      }
+    };
+    request.onprogress = (event) => {
+      if (!settled && (event.loaded > MAX_CHANNEL3_RESPONSE_BYTES || exceedsChannel3ResponseLimit(request.responseText))) {
+        finishError(new Error('The product catalog returned too much data. Try a narrower selection.'), true);
+      }
+    };
+    request.onerror = () => finishError(new TypeError('Check your connection and try again.'));
+    request.onabort = () => {
+      if (!settled) {
+        const error = new Error('Channel3 request cancelled.');
+        error.name = 'AbortError';
+        finishError(error);
+      }
+    };
+    request.onload = () => {
+      if (settled) return;
+      const text = request.responseText;
+      if (exceedsChannel3ResponseLimit(text)) {
+        finishError(new Error('The product catalog returned too much data. Try a narrower selection.'));
+        return;
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        finishError(new Error('The product catalog returned an unexpected response.'));
+        return;
+      }
+      finishSuccess({ status: request.status, payload });
+    };
+    try {
+      request.send(options.body ?? null);
+    } catch {
+      finishError(new TypeError('Check your connection and try again.'), true);
+    }
+  });
+}
+
 function parsePriceRange(value: unknown): Channel3PriceRange | null | undefined {
   if (value === null) return null;
   if (!isRecord(value)) return undefined;
@@ -167,26 +276,17 @@ export async function searchChannel3(queryValue: string, storefront: ShopStorefr
   else signal?.addEventListener('abort', abort, { once: true });
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/marketplace/search`, {
+    const { status, payload } = await requestChannel3Json(`${getApiBaseUrl()}/api/marketplace/search`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, limit: 24, storefront, ...(options.priceRange ? { priceRange: options.priceRange } : {}), ...(options.pageToken ? { pageToken: options.pageToken } : {}) }),
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    }, controller.signal);
 
-    if (response.status === 404) throw new Error('The shop service needs an update before regional search can load. Please try again later.');
-    if (response.status === 429) throw new Error('Search is temporarily limited. Wait a minute, then try again.');
-    if (response.status === 503) throw new Error('The product catalog is temporarily unavailable. Try again later.');
+    if (status === 404) throw new Error('The shop service needs an update before regional search can load. Please try again later.');
+    if (status === 429) throw new Error('Search is temporarily limited. Wait a minute, then try again.');
+    if (status === 503) throw new Error('The product catalog is temporarily unavailable. Try again later.');
 
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error('The product catalog returned an unexpected response.');
-    }
-
-    if (!response.ok) {
+    if (status < 200 || status >= 300) {
       throw new Error(apiError(payload, 'The product catalog could not load this search.'));
     }
 
@@ -253,27 +353,18 @@ export async function fetchChannel3Catalog(section: Channel3CatalogSection | nul
   else signal?.addEventListener('abort', abort, { once: true });
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/marketplace/catalog?${params}`, {
+    const { status, payload } = await requestChannel3Json(`${getApiBaseUrl()}/api/marketplace/catalog?${params}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    }, controller.signal);
 
-    if (response.status === 404) {
+    if (status === 404) {
       throw new Error('The shop service needs an update before curated picks can load. Please try again later.');
     }
-    if (response.status === 429) throw new Error('Curated picks are temporarily limited. Wait a minute, then try again.');
-    if (response.status === 503) throw new Error('Curated picks are temporarily unavailable. Try again later.');
+    if (status === 429) throw new Error('Curated picks are temporarily limited. Wait a minute, then try again.');
+    if (status === 503) throw new Error('Curated picks are temporarily unavailable. Try again later.');
 
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error('The curated catalog returned an unexpected response.');
-    }
-
-    if (!response.ok) {
+    if (status < 200 || status >= 300) {
       throw new Error(apiError(payload, 'The curated catalog could not load this section.'));
     }
 
