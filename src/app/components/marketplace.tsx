@@ -6,7 +6,7 @@ import { formatPriceRange, isMarketplacePriceRange, parsePriceRangeInputs, sameP
 import { fetchMarketplaceJson, MarketplaceRequestTimeoutError } from "@/lib/marketplace-request";
 import { fetchMarketplaceImage, isFreshVerifiedOffer, matchCurrentOffer, primaryMarketplaceImage } from "@/lib/marketplace-safety";
 import { MAX_COLLECTIONS, MAX_COLLECTION_NAME_LENGTH, MAX_ITEMS, needsSavedIdentityReview, parseProduct, readCollections, serializeCollections, snapshotProduct, type Offer, type Product, type SavedItem, type ShoppingCollection } from "@/lib/marketplace-storage";
-import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS } from "@/lib/channel3-catalog";
+import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS, getChannel3SeasonalEdit } from "@/lib/channel3-catalog";
 import { collectionLocksAvailable, COLLECTIONS_CHANGED_EVENT, SHOPPING_LISTS_STORAGE_KEY, tryCollectionLock } from "@/lib/collection-lock";
 import { LOCAL_DATA_RESET_SIGNAL } from "@/lib/portfolio-input";
 import { MAX_RETAINED_COLLECTION_DRAFT_LENGTH } from "@/lib/customer-shopping-draft-memory";
@@ -924,6 +924,24 @@ export default function Marketplace() {
       : catalogError
         ? `${activeCatalogTitle} could not load. See the message below and try again.`
         : "";
+  const seasonalEdit = getChannel3SeasonalEdit(new Date(), storefront);
+  const seasonalSectionIds = new Set(seasonalEdit.sectionIds);
+  const seasonalSections = CURATED_SECTIONS.filter((section) => seasonalSectionIds.has(section.id));
+  const otherSections = CURATED_SECTIONS.filter((section) => !seasonalSectionIds.has(section.id));
+  const renderCuratedSection = (section: (typeof CURATED_SECTIONS)[number]) => (
+    <button
+      type="button"
+      key={section.id}
+      className={catalogSection === section.id ? styles.curatedCategorySelected : styles.curatedCategory}
+      aria-pressed={catalogSection === section.id}
+      disabled={catalogBusy}
+      onClick={() => { chooseDiscoveryMode("browse"); void browseCuratedCatalog(section.id, null); }}
+    >
+      <span className={styles.curatedGlyph}><CuratedGlyph kind={section.glyph} /></span>
+      <span className={styles.curatedCategoryCopy}><strong>{section.title}</strong></span>
+      <span className={styles.curatedArrow} aria-hidden="true">↗</span>
+    </button>
+  );
   const destination = collections.find((list) => list.id === destinationId) ?? collections[0] ?? null;
   const items: SavedItem[] = useMemo(() => activeCollection ? activeCollection.items : (results?.products ?? []).map((product) => ({ product, retrievedAt: results?.retrievedById.get(product.id) ?? "", savedAt: "", storefront: results?.storefront ?? null })), [activeCollection, results]);
   const retailers = useMemo(() => [...new Set(items.flatMap((item) => item.product.offers.map((offer) => offer.domain)))].sort(), [items]);
@@ -1132,21 +1150,17 @@ export default function Marketplace() {
 
         {(catalogSection || catalogRetailer) && <button type="button" className={styles.curatedBackButton} onClick={clearCuratedSelection} disabled={catalogBusy}><span aria-hidden="true">←</span> Browse all categories and retailers</button>}
         {!catalogSection && !catalogRetailer && <>
-        <div className={styles.curatedCategories} role="group" aria-label="Shared catalog categories">
-          {CURATED_SECTIONS.map((section) => (
-            <button
-              type="button"
-              key={section.id}
-              className={catalogSection === section.id ? styles.curatedCategorySelected : styles.curatedCategory}
-              aria-pressed={catalogSection === section.id}
-              disabled={catalogBusy}
-              onClick={() => { chooseDiscoveryMode("browse"); void browseCuratedCatalog(section.id, null); }}
-            >
-              <span className={styles.curatedGlyph}><CuratedGlyph kind={section.glyph} /></span>
-              <span className={styles.curatedCategoryCopy}><strong>{section.title}</strong></span>
-              <span className={styles.curatedArrow} aria-hidden="true">↗</span>
-            </button>
-          ))}
+        <div>
+          <span className={styles.eyebrow}>SEASONAL · {seasonalEdit.label.toUpperCase()}</span>
+          <div className={styles.curatedCategories} role="group" aria-label={`Seasonal ${seasonalEdit.label} categories`}>
+            {seasonalSections.map(renderCuratedSection)}
+          </div>
+        </div>
+        <div>
+          <span className={styles.eyebrow}>ALL CATEGORIES</span>
+          <div className={styles.curatedCategories} role="group" aria-label="All shared catalog categories">
+            {otherSections.map(renderCuratedSection)}
+          </div>
         </div>
 
         <div className={styles.retailerChoices} role="group" aria-label="Shop by retailer">

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetch as expoFetch } from 'expo/fetch';
 
 import { searchChannel3, fetchChannel3Catalog, createCustomerCollectionsRepository, planProductSave, newCollection, MAX_COLLECTIONS, MAX_COLLECTION_NAME_LENGTH, type Channel3Catalog, type Channel3CatalogSection, type Channel3CatalogRetailer, type Channel3Offer, type Channel3PriceRange, type Channel3Product, type SavedProduct, type ShoppingCollection } from '@/lib/channel3';
-import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS } from '@/lib/channel3-shelves';
+import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS, getChannel3SeasonalEdit } from '@/lib/channel3-shelves';
 import { isFreshVerifiedOffer, VERIFIED_OFFERS_TTL_MS } from '@/lib/channel3-offers';
 import { createChannel3ImageLoader, type Channel3ImageLease } from '@/lib/channel3-image';
 import { createStorefrontFence, DEFAULT_SHOP_STOREFRONT, loadShopStorefront, saveShopStorefront, SHOP_STOREFRONTS, type ShopStorefront, type StorefrontTicket } from '@/lib/shop-storefront';
@@ -942,6 +942,26 @@ export default function ShopScreen() {
   }
 
   const hasCollections = collections.length > 0;
+  const seasonalEdit = getChannel3SeasonalEdit(new Date(), storefront);
+  const seasonalSectionIds = new Set(seasonalEdit.sectionIds);
+  const seasonalCategories = CURATED_CATEGORIES.filter((category) => seasonalSectionIds.has(category.id));
+  const otherCategories = CURATED_CATEGORIES.filter((category) => !seasonalSectionIds.has(category.id));
+  const renderCuratedCategory = (category: typeof CURATED_CATEGORIES[number]) => {
+    const selected = curatedSection === category.id;
+    return (
+      <Pressable
+        key={category.id}
+        accessibilityRole="button"
+        accessibilityLabel={`${category.label} curated picks. ${category.description} Tap to load products.`}
+        accessibilityState={{ selected, disabled: curatedLoading || !storefrontReady }}
+        onPress={() => void loadCuratedSection(category.id, null)}
+        disabled={curatedLoading || !storefrontReady}
+        style={({ pressed }) => [styles.curatedChoice, selected && styles.curatedChoiceSelected, pressed && styles.pressed, (curatedLoading || !storefrontReady) && styles.disabled]}>
+        <Text style={[styles.curatedSymbol, selected && styles.curatedTextSelected]}>{category.symbol}</Text>
+        <Text style={[styles.curatedChoiceLabel, selected && styles.curatedTextSelected]}>{category.label}</Text>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -1003,28 +1023,17 @@ export default function ShopScreen() {
             <View style={styles.sectionHeadingRow}>
               <View style={styles.headingFlex}>
                 <Text accessibilityRole="header" style={styles.sectionTitle}>Curated picks</Text>
-                <Text style={styles.sectionSubtitle}>Pick a category or retailer; new picks replace current results.</Text>
+                <Text style={styles.sectionSubtitle}>Seasonal browse · {seasonalEdit.label} · {storefront}</Text>
               </View>
               <Text style={styles.curatedBadge}>CHANNEL3</Text>
             </View>
+            <Text style={styles.sectionSubtitle}>Seasonal</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedChoices}>
-              {CURATED_CATEGORIES.map((category) => {
-                const selected = curatedSection === category.id;
-                return (
-                  <Pressable
-                    key={category.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${category.label} curated picks. ${category.description} Tap to load products.`}
-                    accessibilityState={{ selected, disabled: curatedLoading || !storefrontReady }}
-                    onPress={() => void loadCuratedSection(category.id, null)}
-                    disabled={curatedLoading || !storefrontReady}
-                    style={({ pressed }) => [styles.curatedChoice, selected && styles.curatedChoiceSelected, pressed && styles.pressed, (curatedLoading || !storefrontReady) && styles.disabled]}
-                  >
-                    <Text style={[styles.curatedSymbol, selected && styles.curatedTextSelected]}>{category.symbol}</Text>
-                    <Text style={[styles.curatedChoiceLabel, selected && styles.curatedTextSelected]}>{category.label}</Text>
-                  </Pressable>
-                );
-              })}
+              {seasonalCategories.map(renderCuratedCategory)}
+            </ScrollView>
+            <Text style={styles.sectionSubtitle}>All categories</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedChoices}>
+              {otherCategories.map(renderCuratedCategory)}
             </ScrollView>
             <Text style={styles.sectionSubtitle}>US retailers</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.curatedChoices}>

@@ -129,6 +129,30 @@ export const CHANNEL3_CURATED_RETAILERS = [
 export type Channel3CuratedSection = (typeof CHANNEL3_CURATED_SECTIONS)[number];
 export type Channel3CuratedRetailer = (typeof CHANNEL3_CURATED_RETAILERS)[number];
 
+export type Channel3Season = "winter" | "spring" | "summer" | "fall";
+
+const SEASONAL_SECTION_IDS: Record<Channel3Season, readonly string[]> = {
+  winter: ["audio", "kitchen", "toys", "jewelry"],
+  spring: ["fitness", "outdoors", "pets", "beauty"],
+  summer: ["travel", "outdoors", "phones", "shoes"],
+  fall: ["computers", "workspace", "fashion", "kitchen"],
+};
+
+export function getChannel3SeasonalEdit(date: Date = new Date(), storefront: "US" | "GB" = "US") {
+  const month = date.getUTCMonth();
+  const season: Channel3Season = month === 11 || month <= 1
+    ? "winter"
+    : month <= 4
+      ? "spring"
+      : month <= 7
+        ? "summer"
+        : "fall";
+  const label = season === "fall" && storefront === "GB"
+    ? "Autumn"
+    : season.charAt(0).toUpperCase() + season.slice(1);
+  return { season, label, sectionIds: SEASONAL_SECTION_IDS[season] } as const;
+}
+
 export function findChannel3CuratedSection(id: string | null | undefined): Channel3CuratedSection | undefined {
   return CHANNEL3_CURATED_SECTIONS.find(section => section.id === id);
 }
