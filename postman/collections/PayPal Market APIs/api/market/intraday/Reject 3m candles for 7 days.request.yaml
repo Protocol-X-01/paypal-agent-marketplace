@@ -1,0 +1,25 @@
+$kind: http-request
+url: '{{baseUrl}}/api/market/intraday/:coinId?interval=3m&days=7'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: interval
+    value: 3m
+  - key: days
+    value: '7'
+pathVariables:
+  - key: coinId
+    value: bitcoin
+settings: {}
+order: 23000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Rejects seven days of 3-minute candles instead of truncating", function () {
+        pm.response.to.have.status(400);
+        const body = pm.response.json();
+        pm.expect(body.error.code).to.eql("unsupported_window");
+      });

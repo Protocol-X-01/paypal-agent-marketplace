@@ -1,0 +1,32 @@
+$kind: http-request
+url: '{{baseUrl}}/api/market/intraday/:coinId?interval=1h&days=7'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: interval
+    value: 1h
+  - key: days
+    value: '7'
+pathVariables:
+  - key: coinId
+    value: bitcoin
+settings: {}
+order: 22200
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Returns complete hourly BTCUSDT candles for seven days", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.source).to.eql("Binance Spot");
+        pm.expect(body.quote).to.eql("USDT");
+        pm.expect(body.interval).to.eql("1h");
+        pm.expect(body.intervalMinutes).to.eql(60);
+        pm.expect(body.days).to.eql(7);
+        pm.expect(body.count).to.eql(168);
+        pm.expect(body.candles).to.be.an("array").with.lengthOf(168);
+        pm.expect(body.coveredEnd - body.coveredStart).to.eql(7 * 86400000);
+      });

@@ -75,10 +75,9 @@ export function CandleIndicatorControls({ indicators, onIndicatorChange, candleC
 }
 
 function intervalLabel(minutes: number): string {
-  if (minutes === 3 || minutes === 5 || minutes === 15) return `${minutes}-minute`;
-  if (minutes === 30) return '30-minute';
-  if (minutes === 240) return '4-hour';
-  return '4-day';
+  if (minutes < 60) return `${minutes}-minute`;
+  if (minutes % 1440 === 0) return `${minutes / 1440}-day`;
+  return `${minutes / 60}-hour`;
 }
 
 function linePath(values: readonly (number | null)[], candles: readonly Candle[], start: number, end: number, intervalMs: number, x: (index: number) => number, y: (value: number) => number): string {

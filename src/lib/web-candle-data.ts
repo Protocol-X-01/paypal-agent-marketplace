@@ -13,7 +13,8 @@ export type AutoCandleHistory = {
   timestampKind: "close";
   candles: Candle[];
 };
-export type IntradayInterval = "3m" | "5m" | "15m";
+const INTRADAY_INTERVAL_MINUTES = { "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440 } as const;
+export type IntradayInterval = keyof typeof INTRADAY_INTERVAL_MINUTES;
 export type IntradayDays = 1 | 7;
 export type CandleIntervalChoice = "auto" | IntradayInterval;
 export type IntradaySelection = { interval: IntradayInterval; days: IntradayDays };
@@ -24,8 +25,8 @@ export type IntradayCandleHistory = {
   days: IntradayDays;
   source: "Binance Spot";
   interval: IntradayInterval;
-  intervalMinutes: 3 | 5 | 15;
-  candleIntervalMinutes: 3 | 5 | 15;
+  intervalMinutes: (typeof INTRADAY_INTERVAL_MINUTES)[IntradayInterval];
+  candleIntervalMinutes: (typeof INTRADAY_INTERVAL_MINUTES)[IntradayInterval];
   timestampKind: "close";
   observedAt: string;
   retrievedAt: string;
@@ -40,10 +41,21 @@ export type CandleWindow = { start: number; end: number };
 export type CandleViewSnapshot = { identity: string; startTimestamp: number; endTimestamp: number; selectedTimestamp: number; fullRange: boolean };
 export const MAX_CANDLE_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_CANDLE_COUNT = 1000;
+const SUPPORTED_INTRADAY_DAYS: Record<IntradayInterval, readonly IntradayDays[]> = {
+  "3m": [1], "5m": [1], "15m": [1, 7], "30m": [1, 7], "1h": [1, 7], "4h": [1, 7], "1d": [7],
+};
+
+export function supportsIntradayWindow(interval: CandleIntervalChoice, days: IntradayDays): boolean {
+  return interval !== "auto" && SUPPORTED_INTRADAY_DAYS[interval].includes(days);
+}
+
+export function preferredIntradayDays(interval: IntradayInterval): IntradayDays {
+  return interval === "1d" ? 7 : 1;
+}
 
 export function isSupportedIntradaySelection(coinId: TrackedCoin, selection: IntradaySelection): boolean {
-  return coinId !== "paypal-usd" && ["3m", "5m", "15m"].includes(selection.interval) &&
-    (selection.days === 1 || selection.days === 7 && selection.interval === "15m");
+  return coinId !== "paypal-usd" && Object.prototype.hasOwnProperty.call(INTRADAY_INTERVAL_MINUTES, selection.interval) &&
+    supportsIntradayWindow(selection.interval, selection.days);
 }
 
 export function candleSelectionIdentity({ coinId, currency, days, intraday }: CandleSelection): string {
@@ -95,7 +107,7 @@ export function parseCandleHistory(value: unknown, expected: Pick<AutoCandleHist
 export function parseIntradayCandleHistory(value: unknown, expected: { coinId: TrackedCoin } & IntradaySelection): IntradayCandleHistory {
   if (!isSupportedIntradaySelection(expected.coinId, expected) || !value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid intraday history");
   const data = value as Record<string, unknown>;
-  const minutes = expected.interval === "3m" ? 3 : expected.interval === "5m" ? 5 : 15;
+  const minutes = INTRADAY_INTERVAL_MINUTES[expected.interval];
   const intervalMs = minutes * 60_000;
   const count = expected.days * 86_400_000 / intervalMs;
   const validTime = (time: unknown): time is number => typeof time === "number" && Number.isSafeInteger(time) && time > 0 && Number.isFinite(new Date(time).getTime());

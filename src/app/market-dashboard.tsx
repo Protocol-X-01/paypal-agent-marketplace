@@ -19,7 +19,7 @@ import { marketChartColorsFor, marketChartThemeFor } from "@/lib/market-chart-th
 import { agChartPlotBounds } from "@/lib/chart-wheel";
 import type { ChartDays, ChartPoint, MarketChart, MarketQuote, MarketQuotes } from "@/lib/market-data";
 import { formatChartAxisTime, formatChartSampleTime, formatMarketMoney as money, formatMarketProviderUpdateTime, formatMarketRetrievalTime, formatPortfolioMoney, formatUsdtPrice } from "@/lib/market-format";
-import { candleSelectionIdentity } from "@/lib/web-candle-data";
+import { candleSelectionIdentity, preferredIntradayDays, supportsIntradayWindow, type CandleIntervalChoice } from "@/lib/web-candle-data";
 import { selectMarketHeadline } from "@/lib/market-headline";
 import { calculatePriceIndicators, hasPriceIndicators, indicatorSegments, lineIndicatorOverlays, needsCandleHistory, type LineIndicatorOverlay } from "@/lib/price-indicators";
 import { calculateHoldingValue, calculatePortfolio, type PortfolioSummary } from "@/lib/portfolio-summary";
@@ -90,6 +90,10 @@ function compactMoney(value: number | null | undefined, currency: MarketCurrency
 
 function chartValue(value: number, metric: ChartMetric, currency: MarketCurrency, precisePrice = false) {
   return metric === "price" ? money(value, currency, precisePrice ? 4 : 0) : compactMoney(value, currency);
+}
+
+function preferredIntradayWindow(interval: CandleIntervalChoice): 1 | 7 {
+  return interval !== "auto" ? preferredIntradayDays(interval) : 1;
 }
 
 function portfolioStatus(portfolio: PortfolioSummary, loading: boolean, currency: MarketCurrency, inputMessage = "") {
@@ -385,6 +389,10 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
   const [intradayDays, setIntradayDays] = usePublicChartControl(publicChart, onPublicChartChange, "intradayDays");
   const lineHistoryEnabled = chartMetric !== "price" || priceStyle !== "candles";
   const [chartViewport, setChartViewport] = usePublicChartControl(publicChart, onPublicChartChange, "viewport");
+  function chooseCandleInterval(next: CandleIntervalChoice) {
+    if (next !== "auto" && !supportsIntradayWindow(next, intradayDays)) setIntradayDays(preferredIntradayWindow(next));
+    setCandleInterval(next);
+  }
   const [loadingMarket, setLoadingMarket] = useState(true);
   const [marketFailure, setMarketFailure] = useState<{ currency: MarketCurrency; message: string } | null>(null);
   const [overviewRefresh, setOverviewRefresh] = useState(0);
@@ -880,7 +888,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
   const minuteLast = minuteHistory?.candles.at(-1);
   const displayedChange = minuteCandles ? minuteHistory ? chartPercentageChange(minuteHistory.candles.map((candle) => ({ timestamp: candle.timestamp, value: candle.close }))) : null : chartChange;
   const displayedRangeLabel = minuteCandles ? `${intradayDays}-day candle window` : selectedRangeLabel;
-  const displayedProvenance = minuteCandles ? minuteLast ? `Last closed candle ${fullTimestamp(minuteLast.timestamp)} · retrieved ${fullTimestamp(minuteHistory?.retrievedAt ?? null)}` : "Complete minute history unavailable until loaded" : headlineProvenance;
+  const displayedProvenance = minuteCandles ? minuteLast ? `Last closed candle ${fullTimestamp(minuteLast.timestamp)} · retrieved ${fullTimestamp(minuteHistory?.retrievedAt ?? null)}` : "Complete Binance history unavailable until loaded" : headlineProvenance;
   const indicatorValues = useMemo(() => candleHistory ? calculatePriceIndicators(candleHistory) : null, [candleHistory]);
   const indicatorStart = displayedChartSeries[0]?.timestamp;
   const indicatorEnd = displayedChartSeries[displayedChartSeries.length - 1]?.timestamp;
@@ -1119,7 +1127,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
                   </div></div>}
                 </div>
 
-                {selectedChartMetric === "price" && priceStyle === "candles" && <CandleFeedControls coinId={selectedId} interval={candleInterval} days={intradayDays} onIntervalChange={setCandleInterval} onDaysChange={setIntradayDays} />}
+                {selectedChartMetric === "price" && priceStyle === "candles" && <CandleFeedControls coinId={selectedId} interval={candleInterval} days={intradayDays} onIntervalChange={chooseCandleInterval} onDaysChange={setIntradayDays} />}
 
                 <div className="chart-legend-row"><span className="chart-kind"><span className={displayedChange !== null && displayedChange < 0 ? "chart-kind-dot down" : "chart-kind-dot"} style={selectedChartMetric !== "price" || priceStyle === "line" ? { background: "#00CCFF" } : undefined} /> {selectedMetricLabel}{minuteCandles ? " · USDT" : stablecoinPriceChart ? <span className="peg-reference"> · $1.00 peg reference</span> : null}</span>{selectedChartMetric === "price" && <PriceIndicatorControls indicators={priceIndicators} onChange={setPriceIndicators} history={candleHistory} />}</div>
                 {selectedChartMetric === "price" && priceStyle === "line" && indicatorEnabled && <LineIndicatorStatus request={candleRequest} indicators={priceIndicators} values={indicatorValues} window={indicatorWindow} approximateLine={chartMatches && chartSeriesSource === "market_overview_sparkline"} lineAvailable={timestampedPriceLine} precisePrice={selectedIsStablecoin} onCandles={() => setPriceStyle("candles")} />}

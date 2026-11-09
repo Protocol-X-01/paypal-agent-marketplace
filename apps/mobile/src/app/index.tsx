@@ -29,7 +29,9 @@ import {
   metricLabel,
   metricValueLabel,
   pointsForMetric,
+  preferredIntradayDays,
   selectHeadlineMetric,
+  supportsIntradayWindow,
   type ChartDays,
   type CoinId,
   type IntradayDays,
@@ -253,7 +255,7 @@ export default function MarketsScreen() {
   const anyIndicator = Object.values(candleIndicators).some(Boolean);
   const estimatedLine = chart.data?.seriesSource === 'market_overview_sparkline';
   const intradaySelected = visibleMetric === 'price' && chartMode === 'candles' && candleInterval !== 'auto';
-  const intradayWindowValid = candleInterval !== 'auto' && (intradayDays === 1 || candleInterval === '15m');
+  const intradayWindowValid = candleInterval !== 'auto' && supportsIntradayWindow(candleInterval, intradayDays);
   const needsCandles = currencyReady && visibleMetric === 'price'
     && ((chartMode === 'candles' && candleInterval === 'auto') || (chartMode === 'line' && anyIndicator));
   const intradayFeedEnabled = intradaySelected && intradayWindowValid && selectedCoin !== 'paypal-usd';
@@ -310,6 +312,7 @@ export default function MarketsScreen() {
   function chooseCandleInterval(interval: 'auto' | IntradayInterval) {
     if (interval === candleInterval) return;
     if (interval !== 'auto') intradayResource.retry();
+    if (interval !== 'auto' && !supportsIntradayWindow(interval, intradayDays)) setIntradayDays(preferredIntradayDays(interval));
     setCandleInterval(interval);
   }
 
@@ -462,7 +465,7 @@ export default function MarketsScreen() {
           {visibleMetric === 'price' && chartMode === 'candles' && <View>
             <Text style={styles.candleControlLabel}>Candle interval</Text>
             <View style={styles.chartModeRow} accessibilityLabel="Candle interval">
-              {(['auto', '3m', '5m', '15m'] as const).map((interval) => <NativeButton
+              {(['auto', '3m', '5m', '15m', '30m', '1h', '4h', '1d'] as const).map((interval) => <NativeButton
                 key={interval}
                 label={interval === 'auto' ? 'Auto' : interval}
                 selected={candleInterval === interval}
@@ -471,18 +474,18 @@ export default function MarketsScreen() {
               />)}
             </View>
             {candleInterval !== 'auto' && <>
-              <Text style={styles.candleControlLabel}>Intraday window · Binance Spot / USDT</Text>
-              <View style={styles.chartModeRow} accessibilityLabel="Intraday history window">
+              <Text style={styles.candleControlLabel}>History window · Binance Spot / USDT</Text>
+              <View style={styles.chartModeRow} accessibilityLabel="Candle history window">
                 {([1, 7] as const).map((window) => <NativeButton
                   key={window}
                   label={window === 1 ? '1D' : '7D'}
                   selected={intradayDays === window}
-                  disabled={window === 7 && candleInterval !== '15m'}
+                  disabled={!supportsIntradayWindow(candleInterval, window)}
                   compact
                   onPress={() => chooseIntradayDays(window)}
                 />)}
               </View>
-              <Text style={styles.fallbackNote}>7D is available for 15m candles only. USDT is a crypto quote, not USD.</Text>
+              <Text style={styles.fallbackNote}>Binance Spot · USDT, separate from USD. 3m/5m use 1D; 1d uses 7D.</Text>
             </>}
           </View>}
 
@@ -547,14 +550,14 @@ export default function MarketsScreen() {
           </> : intradaySelected ? <>
             {selectedCoin === 'paypal-usd' ? (
               <View style={styles.chartError} accessibilityRole="summary">
-                <Text style={styles.chartErrorTitle}>Minute candles unavailable for PYUSD</Text>
-                <Text style={styles.chartErrorText}>This feed does not offer PayPal USD. Choose Auto for CoinGecko candles.</Text>
+                <Text style={styles.chartErrorTitle}>Binance candles unavailable for PYUSD</Text>
+                <Text style={styles.chartErrorText}>Binance Spot has no PayPal USD pair. Choose Auto for CoinGecko candles.</Text>
                 <View style={styles.chartRetry}><NativeButton label="Use Auto" onPress={() => chooseCandleInterval('auto')} compact /></View>
               </View>
             ) : !intradayWindowValid ? (
               <View style={styles.chartError} accessibilityRole="summary">
                 <Text style={styles.chartErrorTitle}>Choose a supported window</Text>
-                <Text style={styles.chartErrorText}>Choose 1D for 3m or 5m candles, or choose 15m for 7D.</Text>
+                <Text style={styles.chartErrorText}>Choose a supported candle window. 3m/5m use 1D; 1d uses 7D.</Text>
               </View>
             ) : intradayResource.data ? (
               <CandleChart
@@ -657,7 +660,7 @@ export default function MarketsScreen() {
         <View style={styles.disclosure}>
           <Text style={styles.disclosureTitle}>A reference view, built for clarity</Text>
           <Text style={styles.disclosureText}>
-            Prices and automatic charts come from CoinGecko. Minute candles use Binance Spot USDT, a separate crypto quote. Availability, prices, and features may vary by region and account. This screen does not trade, connect a wallet, or initiate a payment.
+            Prices and automatic charts come from CoinGecko. Binance Spot candles use USDT, a separate crypto quote. Availability, prices, and features may vary by region and account. This screen does not trade, connect a wallet, or initiate a payment.
           </Text>
         </View>
       </ScrollView>

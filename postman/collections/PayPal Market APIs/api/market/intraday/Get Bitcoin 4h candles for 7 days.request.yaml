@@ -1,0 +1,42 @@
+$kind: http-request
+url: '{{baseUrl}}/api/market/intraday/:coinId?interval=4h&days=7'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: interval
+    value: 4h
+  - key: days
+    value: '7'
+pathVariables:
+  - key: coinId
+    value: bitcoin
+settings: {}
+order: 22000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Returns complete 4-hour BTCUSDT candles for seven days", function () {
+        pm.response.to.have.status(200);
+        const body = pm.response.json();
+        pm.expect(body.coinId).to.eql("bitcoin");
+        pm.expect(body.source).to.eql("Binance Spot");
+        pm.expect(body.quote).to.eql("USDT");
+        pm.expect(body.interval).to.eql("4h");
+        pm.expect(body.intervalMinutes).to.eql(240);
+        pm.expect(body.days).to.eql(7);
+        pm.expect(body.timestampKind).to.eql("close");
+        pm.expect(body.count).to.eql(42);
+        pm.expect(body.candles).to.be.an("array").with.lengthOf(42);
+        pm.expect(body.coveredEnd - body.coveredStart).to.eql(7 * 86400000);
+        body.candles.forEach(function (candle, index) {
+          pm.expect(candle.timestamp).to.eql(body.coveredStart + (index + 1) * 4 * 60 * 60 * 1000);
+          [candle.open, candle.high, candle.low, candle.close].forEach(function (value) {
+            pm.expect(Number.isFinite(value) && value >= 0).to.eql(true);
+          });
+          pm.expect(candle.low).to.be.at.most(Math.min(candle.open, candle.close));
+          pm.expect(candle.high).to.be.at.least(Math.max(candle.open, candle.close));
+        });
+      });

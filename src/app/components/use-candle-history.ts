@@ -28,10 +28,10 @@ export function useCandleHistory({ coinId, currency, days, intraday, enabled = t
     const minuteSelection = interval !== undefined ? { interval, days: historyDays as 1 | 7 } : undefined;
     const autoCurrency = historyCurrency ?? "USD";
     const url = minuteSelection ? `/api/market/intraday/${encodeURIComponent(coinId)}?interval=${minuteSelection.interval}&days=${minuteSelection.days}` : `/api/market/candles/${encodeURIComponent(coinId)}?days=${historyDays}&currency=${encodeURIComponent(autoCurrency)}`;
-    let message: string | undefined = minuteSelection ? "Complete intraday history is unavailable for this window. No candles are filled or replaced." : undefined;
+    let message: string | undefined = minuteSelection ? "Complete Binance candle history is unavailable for this window. No candles are filled or replaced." : undefined;
     fetch(url, { cache: "no-store", credentials: "same-origin", mode: "same-origin", redirect: "error", signal: controller.signal })
       .then((response) => {
-        if (minuteSelection && !response.ok) message = response.status === 429 ? "Intraday history is rate limited. Please wait before retrying." : "Complete intraday history is unavailable for this window. No candles are filled or replaced.";
+        if (minuteSelection && !response.ok) message = response.status === 429 ? "Binance candle history is rate limited. Please wait before retrying." : "Complete Binance candle history is unavailable for this window. No candles are filled or replaced.";
         return readCandleResponse(response, controller.signal);
       })
       .then((data) => minuteSelection ? parseIntradayCandleHistory(data, { coinId, ...minuteSelection }) : parseCandleHistory(data, { coinId, currency: autoCurrency, days: historyDays }))
@@ -43,7 +43,7 @@ export function useCandleHistory({ coinId, currency, days, intraday, enabled = t
 
   const retry = () => setAttempt((value) => value + 1);
   if (!enabled) return { status: "idle", retry };
-  if (!supported) return { status: "error", message: coinId === "paypal-usd" ? "Minute candles are unavailable for PayPal USD on this feed. Choose Auto for CoinGecko history." : "This minute interval supports a one-day window. Choose 1 day or 15-minute candles for 7 days.", retry };
+  if (!supported) return { status: "error", message: coinId === "paypal-usd" ? "Binance Spot candles are unavailable for PayPal USD. Choose Auto for CoinGecko history." : "This interval does not support that history window. Choose a 1-day window for 3m/5m or 7 days for 1d.", retry };
   if (state.key !== identity || state.status === "loading") return { status: "loading", retry };
   if (state.status === "error") return { status: "error", ...(state.message ? { message: state.message } : {}), retry };
   return { status: "ready", history: state.history, retry };

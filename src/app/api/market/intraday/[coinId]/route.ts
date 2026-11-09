@@ -3,7 +3,7 @@ import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors
 import { getTrustedClientAddress, takeClientRequestLimit } from '@/lib/request-limits';
 import {
   getIntradayCandles, IntradayError, isIntradayCoin, isIntradayInterval,
-  type IntradayDays,
+  isSupportedIntradayWindow, type IntradayDays,
 } from '@/lib/binance-intraday';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ coinId: string }> }) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const rawDays = query.get('days');
   if (rawDays !== '1' && rawDays !== '7') return invalid('unsupported_days', 'Choose a supported history range.');
   const days = Number(rawDays) as IntradayDays;
-  if (days === 7 && interval !== '15m') return invalid('unsupported_window', 'Seven days requires 15-minute candles.');
+  if (!isSupportedIntradayWindow(interval, days)) return invalid('unsupported_window', 'Choose an available history window for this interval.');
   const address = getTrustedClientAddress(request);
   const clientBudget = takeClientRequestLimit(request, 'binance-intraday', 6);
   if (!clientBudget.allowed) {

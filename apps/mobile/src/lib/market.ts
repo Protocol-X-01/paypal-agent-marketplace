@@ -69,14 +69,24 @@ export interface MarketCandles {
   candles: Candle[];
 }
 
-export type IntradayInterval = '3m' | '5m' | '15m';
+const INTRADAY_INTERVAL_MINUTES = { '3m': 3, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440 } as const;
+export type IntradayInterval = keyof typeof INTRADAY_INTERVAL_MINUTES;
 export type IntradayDays = 1 | 7;
+const SUPPORTED_INTRADAY_DAYS: Record<IntradayInterval, readonly IntradayDays[]> = {
+  '3m': [1], '5m': [1], '15m': [1, 7], '30m': [1, 7], '1h': [1, 7], '4h': [1, 7], '1d': [7],
+};
+export function supportsIntradayWindow(interval: IntradayInterval, days: IntradayDays): boolean {
+  return SUPPORTED_INTRADAY_DAYS[interval].includes(days);
+}
+export function preferredIntradayDays(interval: IntradayInterval): IntradayDays {
+  return interval === '1d' ? 7 : 1;
+}
 export interface IntradayCandles {
   coinId: Exclude<CoinId, 'paypal-usd'>;
   source: 'Binance Spot';
   quote: 'USDT';
   interval: IntradayInterval;
-  intervalMinutes: 3 | 5 | 15;
+  intervalMinutes: (typeof INTRADAY_INTERVAL_MINUTES)[IntradayInterval];
   days: IntradayDays;
   timestampKind: 'close';
   observedAt: string;
@@ -217,20 +227,23 @@ export function isMarketCandles(value: unknown): value is MarketCandles {
 
 /** Intraday history is a separate USDT-quoted feed with a complete, closed window. */
 export function isIntradayCandles(value: unknown): value is IntradayCandles {
-  if (!isRecord(value) || !isCoinId(value.coinId) || value.coinId === 'paypal-usd'
+  if (!isRecord(value) || typeof value.interval !== 'string' || !Object.prototype.hasOwnProperty.call(INTRADAY_INTERVAL_MINUTES, value.interval)) return false;
+  const interval = value.interval as IntradayInterval;
+  const intervalMinutes = INTRADAY_INTERVAL_MINUTES[interval];
+  if ((value.days !== 1 && value.days !== 7) || !supportsIntradayWindow(interval, value.days)) return false;
+  const days = value.days as IntradayDays;
+  if (!isCoinId(value.coinId) || value.coinId === 'paypal-usd'
       || value.source !== 'Binance Spot' || value.quote !== 'USDT'
-      || (value.interval !== '3m' && value.interval !== '5m' && value.interval !== '15m')
-      || (value.days !== 1 && value.days !== 7) || (value.days === 7 && value.interval !== '15m')
-      || typeof value.intervalMinutes !== 'number' || value.intervalMinutes !== Number(value.interval.slice(0, -1)) || value.timestampKind !== 'close'
+      || typeof value.intervalMinutes !== 'number' || value.intervalMinutes !== intervalMinutes || value.timestampKind !== 'close'
       || !isUtcTimestamp(value.observedAt) || !isUtcTimestamp(value.retrievedAt)
       || !Number.isSafeInteger(value.coveredStart) || !Number.isSafeInteger(value.coveredEnd)
       || typeof value.coveredStart !== 'number' || typeof value.coveredEnd !== 'number'
       || value.coveredStart <= 0 || !Number.isFinite(new Date(value.coveredEnd).getTime())
       || !Array.isArray(value.candles) || !Number.isSafeInteger(value.count)
       || value.count !== value.candles.length || value.candles.length === 0 || value.candles.length > 1000) return false;
-  const intervalMs = value.intervalMinutes * 60_000;
-  if (value.coveredStart % intervalMs !== 0 || value.coveredEnd - value.coveredStart !== value.days * 86_400_000
-      || value.candles.length !== value.days * 86_400_000 / intervalMs
+  const intervalMs = intervalMinutes * 60_000;
+  if (value.coveredStart % intervalMs !== 0 || value.coveredEnd - value.coveredStart !== days * 86_400_000
+      || value.candles.length !== days * 86_400_000 / intervalMs
       || value.coveredEnd > new Date(value.observedAt).getTime() - 1000) return false;
   const start = value.coveredStart;
   return value.candles.every((candle, index) => {
@@ -417,7 +430,7 @@ function requestCandles<T>(path: string, validate: (value: unknown) => value is 
       if (settled) return;
       if (exceedsMarketBodyLimit(request.responseText)) return finishError('The candlestick response was too large.');
       if (request.status === 404) return finishError('Candlestick data is not available on this version of the market service yet.');
-      if (request.status === 429) return finishError(intraday ? 'Intraday market data is rate limited. Please try again later.' : 'Market data is busy right now. Try refreshing in a minute.');
+      if (request.status === 429) return finishError(intraday ? 'Binance candle data is rate limited. Please try again later.' : 'Market data is busy right now. Try refreshing in a minute.');
       if (request.status >= 500) {
         if (intraday && request.status === 503) {
           try {

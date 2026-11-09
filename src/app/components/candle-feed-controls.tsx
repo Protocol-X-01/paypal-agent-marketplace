@@ -1,7 +1,7 @@
 "use client";
 
 import type { TrackedCoin } from "@/lib/market-assets";
-import type { CandleIntervalChoice, IntradayDays } from "@/lib/web-candle-data";
+import { supportsIntradayWindow, type CandleIntervalChoice, type IntradayDays } from "@/lib/web-candle-data";
 import styles from "./candle-feed-controls.module.css";
 
 export default function CandleFeedControls({ coinId, interval, days, onIntervalChange, onDaysChange }: {
@@ -12,13 +12,13 @@ export default function CandleFeedControls({ coinId, interval, days, onIntervalC
   return <div className={styles.controls}>
     <div className={styles.groups}>
       <div className={styles.group}><span>Candle interval</span><div role="group" aria-label="Candle interval and source">
-        {(["auto", "3m", "5m", "15m"] as const).map((choice) => <button key={choice} type="button" aria-pressed={interval === choice} disabled={coinId === "paypal-usd" && choice !== "auto"} onClick={() => onIntervalChange(choice)}>{choice === "auto" ? "Auto · CoinGecko" : choice}</button>)}
+        {(["auto", "3m", "5m", "15m", "30m", "1h", "4h", "1d"] as const).map((choice) => <button key={choice} type="button" aria-pressed={interval === choice} disabled={coinId === "paypal-usd" && choice !== "auto"} onClick={() => onIntervalChange(choice)}>{choice === "auto" ? "Auto · CoinGecko" : choice}</button>)}
       </div></div>
-      {minute && <div className={styles.group}><span>Intraday window</span><div role="group" aria-label="Intraday history window">
-        <button type="button" aria-pressed={days === 1} onClick={() => onDaysChange(1)}>1 day</button>
-        <button type="button" aria-pressed={days === 7} disabled={interval !== "15m"} onClick={() => onDaysChange(7)}>7 days · 15m only</button>
+      {minute && <div className={styles.group}><span>History window</span><div role="group" aria-label="Candle history window">
+        <button type="button" aria-pressed={days === 1} disabled={!supportsIntradayWindow(interval, 1)} onClick={() => onDaysChange(1)}>1 day</button>
+        <button type="button" aria-pressed={days === 7} disabled={!supportsIntradayWindow(interval, 7)} onClick={() => onDaysChange(7)}>7 days</button>
       </div></div>}
     </div>
-    <p className={styles.note}>{coinId === "paypal-usd" ? "PayPal USD uses Auto CoinGecko history; this minute feed has no PYUSD pair." : minute ? "Binance Spot · USDT quote, separate from USD. 3m and 5m support 1 day; 15m supports 1 or 7 days. Complete trade candles only." : "Auto uses CoinGecko’s interval for the selected range. Minute candles use a separate USDT exchange feed and window."}</p>
+    <p className={styles.note}>{coinId === "paypal-usd" ? "PayPal USD uses Auto CoinGecko history; Binance Spot has no PYUSD pair." : minute ? "Binance Spot · USDT, separate from USD · closed candles only. 3m/5m use 1D; 1d uses 7D." : "Auto uses CoinGecko’s interval for the selected range. Binance Spot uses a separate USDT feed."}</p>
   </div>;
 }
