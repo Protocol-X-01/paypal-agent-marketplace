@@ -172,6 +172,19 @@ async function fetchSimilarProductsPage(title: string, storefront: Storefront, s
   return page;
 }
 
+async function fetchCurrentMarketplaceProduct(productId: string, storefront: Storefront, signal: AbortSignal) {
+  const params = new URLSearchParams({ storefront });
+  const { response, body } = await fetchMarketplaceJson(`/api/marketplace/products/${encodeURIComponent(productId)}?${params}`, { method: "GET" }, signal);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(response.status === 429 ? "Product checks are temporarily limited. Try again shortly." : "Current product offers could not be refreshed. Please try again shortly.");
+  if (!record(body) || body.provider !== "Channel3" || body.storefront !== storefront || body.currency !== storefrontCurrency(storefront) ||
+    typeof body.retrievedAt !== "string" || !Number.isFinite(Date.parse(body.retrievedAt)) || !record(body.product) || body.product.id !== productId) {
+    throw new Error("Current product details did not match this item and storefront. Please try again.");
+  }
+  const product = parseProduct(body.product, storefrontCurrency(storefront));
+  return product ? { product, retrievedAt: body.retrievedAt } : null;
+}
+
 function parseCuratedCatalog(value: unknown, section: CatalogSectionId | null, storefront: Storefront, retailer: CatalogRetailerId | null, paged = false): CuratedCatalog | null {
   if (
     !record(value) || value.provider !== "Channel3" || value.section !== section || (value.retailer ?? null) !== retailer ||
@@ -864,37 +877,15 @@ export default function Marketplace() {
       else setNotice(message);
     };
     try {
-      let refreshed: Product | null = null;
-      let currentUrl: string | null = null;
-      let retrievedAt = "";
+      const exactResult = await fetchCurrentMarketplaceProduct(product.id, requestedStorefront, controller.signal);
+      if (!requestIsCurrent()) { closeHandoff(); return; }
+      const refreshed = exactResult?.product ?? null;
+      const retrievedAt = exactResult?.retrievedAt ?? "";
       const checkedCandidates: Product[] = [];
-      let pageToken: string | undefined;
-      const seenTokens = new Set<string>();
-      // Each page is rate-limited and scoped by the server to the same collection.
-      // Stopping after three pages is inconclusive, not proof of catalog removal.
-      for (let page = 0; page < 3; page++) {
-        const { response, body } = await fetchMarketplaceJson("/api/marketplace/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: searchQuery, limit: 24, storefront: requestedStorefront, ...(pageToken ? { pageToken } : {}) }),
-        }, controller.signal);
-        if (!requestIsCurrent()) { closeHandoff(); return; }
-        if (!response.ok) {
-          throw new Error(response.status === 429 ? "Search is temporarily limited. Wait a minute, then try again." : "Current offers could not be refreshed. Please try again shortly.");
-        }
-        if (!record(body) || body.provider !== "Channel3" || body.query !== searchQuery || body.storefront !== requestedStorefront || body.currency !== storefrontCurrency(requestedStorefront) || !Array.isArray(body.products) || typeof body.retrievedAt !== "string" || (body.nextPageToken !== undefined && body.nextPageToken !== null && (typeof body.nextPageToken !== "string" || !body.nextPageToken || body.nextPageToken.length > 6144))) {
-          throw new Error("The offers did not match this search or storefront. Please try again.");
-        }
-        const candidates = body.products.slice(0, 24).map((candidate) => parseProduct(candidate, storefrontCurrency(requestedStorefront))).filter((candidate): candidate is Product => candidate !== null);
-        for (const candidate of candidates) if (!checkedCandidates.some((item) => item.id === candidate.id)) checkedCandidates.push(candidate);
-        const match = matchCurrentOffer(candidates, product.id, allowAlternateInStock ? undefined : retailerDomain, allowAlternateInStock ? undefined : preferredUrl, allowAlternateInStock);
-        refreshed = match.product;
-        currentUrl = match.url;
-        retrievedAt = body.retrievedAt;
-        if (refreshed || typeof body.nextPageToken !== "string" || seenTokens.has(body.nextPageToken)) break;
-        seenTokens.add(body.nextPageToken);
-        pageToken = body.nextPageToken;
-      }
+      const match = refreshed
+        ? matchCurrentOffer([refreshed], product.id, allowAlternateInStock ? undefined : retailerDomain, allowAlternateInStock ? undefined : preferredUrl, allowAlternateInStock)
+        : { product: null, url: null };
+      const currentUrl = match.url;
       if (!refreshed) {
         const receivedAt = currentTimeMs();
         let similarPage: Awaited<ReturnType<typeof fetchSimilarProductsPage>> = null;

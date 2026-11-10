@@ -215,14 +215,58 @@ async function call(path: string, body: Record<string, unknown>): Promise<C3Sear
   }
   // Preserve each retailer's advertised rate independently. Missing/invalid is
   // unknown, never a fabricated zero or a percentage converted twice.
-  return { ...payload, products: payload.products.map((product) => ({ ...product,
-    ...(Array.isArray(product.offers) ? { offers: product.offers.map((offer: unknown) => {
-      if (!offer || typeof offer !== "object" || Array.isArray(offer)) return offer;
-      if (!("max_commission_rate" in offer)) return offer;
-      const rate = offer.max_commission_rate;
-      return { ...offer, max_commission_rate: typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : null };
-    }) } : {}),
-  })) } as C3SearchResponse;
+  return { ...payload, products: payload.products.map(normalizeProductCommission) } as C3SearchResponse;
+}
+
+function normalizeProductCommission(product: unknown): unknown {
+  if (!product || typeof product !== "object" || Array.isArray(product)) return product;
+  const record = product as Record<string, unknown>;
+  if (!Array.isArray(record.offers)) return product;
+  return { ...record, offers: record.offers.map((offer: unknown) => {
+    if (!offer || typeof offer !== "object" || Array.isArray(offer)) return offer;
+    if (!("max_commission_rate" in offer)) return offer;
+    const rate = offer.max_commission_rate;
+    return { ...offer, max_commission_rate: typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : null };
+  }) };
+}
+
+/** Fresh Channel3 product details for a handoff; offer URLs are never cached. */
+export async function retrieveProduct(productId: string, locale: Channel3Locale): Promise<C3Product | null> {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(productId)) throw new Error("Channel3 product ID is invalid");
+  const apiKey = process.env.CHANNEL3_API_KEY;
+  if (!apiKey) throw new Error("Channel3 is not configured");
+
+  const base = process.env.CHANNEL3_BASE_URL ?? DEFAULT_BASE;
+  let baseUrl: URL;
+  try { baseUrl = new URL(base); }
+  catch { throw new Error("Channel3 base URL is invalid"); }
+  if (baseUrl.protocol !== "https:") throw new Error("Channel3 base URL must use HTTPS");
+
+  const endpoint = new URL(`v1/products/${encodeURIComponent(productId)}`, `${baseUrl.toString().replace(/\/+$/, "")}/`);
+  endpoint.search = new URLSearchParams(locale).toString();
+  const deadline = AbortSignal.timeout(CHANNEL3_REQUEST_TIMEOUT_MS);
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: { "x-api-key": apiKey },
+    cache: "no-store",
+    redirect: "error",
+    signal: deadline,
+  });
+  if (response.status === 404) {
+    try { void response.body?.cancel().catch(() => undefined); } catch { /* The body may already be unavailable. */ }
+    return null;
+  }
+  if (!response.ok) {
+    try { void response.body?.cancel().catch(() => undefined); } catch { /* The body may already be unavailable. */ }
+    throw new Error(`Channel3 product request failed (${response.status})`);
+  }
+
+  const payload = await readChannel3Json(response, deadline);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+    !("id" in payload) || payload.id !== productId || !("title" in payload) || typeof payload.title !== "string") {
+    throw new Error("Channel3 product response is invalid");
+  }
+  return normalizeProductCommission(payload) as C3Product;
 }
 
 function filters(includeUsed?: boolean) {

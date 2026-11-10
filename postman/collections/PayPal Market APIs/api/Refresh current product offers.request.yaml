@@ -1,0 +1,11 @@
+$kind: http-request
+description: Retrieves fresh product details by a Channel3 product ID before retailer handoff. The response is not cached; Channel3 availability is not a retailer guarantee.
+url: '{{baseUrl}}/api/marketplace/products/:productId?storefront=US'
+method: GET
+headers:
+  Accept: application/json
+pathVariables:
+  - key: productId
+    value: 'SET_FROM_CHANNEL3_SEARCH'
+settings: {}
+order: 5000

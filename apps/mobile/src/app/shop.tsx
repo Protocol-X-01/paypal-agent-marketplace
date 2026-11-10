@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetch as expoFetch } from 'expo/fetch';
 
-import { searchChannel3, fetchChannel3Catalog, createCustomerCollectionsRepository, planProductSave, newCollection, MAX_COLLECTIONS, MAX_COLLECTION_NAME_LENGTH, type Channel3Catalog, type Channel3CatalogSection, type Channel3CatalogRetailer, type Channel3Offer, type Channel3PriceRange, type Channel3Product, type SavedProduct, type ShoppingCollection } from '@/lib/channel3';
+import { searchChannel3, retrieveChannel3Product, fetchChannel3Catalog, createCustomerCollectionsRepository, planProductSave, newCollection, MAX_COLLECTIONS, MAX_COLLECTION_NAME_LENGTH, type Channel3Catalog, type Channel3CatalogSection, type Channel3CatalogRetailer, type Channel3Offer, type Channel3PriceRange, type Channel3Product, type SavedProduct, type ShoppingCollection } from '@/lib/channel3';
 import { CHANNEL3_CURATED_SECTIONS, CHANNEL3_CURATED_RETAILERS, getChannel3SeasonalEdit } from '@/lib/channel3-shelves';
 import { VERIFIED_OFFERS_TTL_MS } from '@/lib/channel3-offers';
 import { createChannel3ImageLoader, type Channel3ImageLease } from '@/lib/channel3-image';
@@ -1008,22 +1008,9 @@ export default function ShopScreen() {
       }
     }
     try {
-      const query = product.title.trim().slice(0, 120);
-      let exactMatch: Channel3Product | undefined;
+      const exactMatch = await retrieveChannel3Product(product.id, ticket.storefront, controller.signal);
+      if (!privateCurrent() || controller.signal.aborted || !storefrontFence.current.isCurrent(ticket) || recheckRequest.current !== controller) { closeHandoff(); return; }
       const checkedCandidates: Channel3Product[] = [];
-      let pageToken: string | undefined;
-      const seenTokens = new Set<string>();
-      // Each page is a separate rate-limited, collection-scoped request.
-      // Bound the work: a miss is inconclusive, not proof of removal.
-      for (let page = 0; page < 3; page++) {
-        const result = await searchChannel3(query, ticket.storefront, controller.signal, pageToken ? { pageToken } : {});
-        if (!privateCurrent() || controller.signal.aborted || !storefrontFence.current.isCurrent(ticket) || recheckRequest.current !== controller) { closeHandoff(); return; }
-        for (const candidate of result.products) if (!checkedCandidates.some((item) => item.id === candidate.id)) checkedCandidates.push(candidate);
-        exactMatch = result.products.find((item) => item.id === product.id);
-        if (exactMatch || !result.nextPageToken || seenTokens.has(result.nextPageToken)) break;
-        seenTokens.add(result.nextPageToken);
-        pageToken = result.nextPageToken;
-      }
       if (!exactMatch) {
         let similar = findSimilarInStockProducts(product, checkedCandidates);
         let similarError = similar.length ? '' : 'No similar in-stock items were found in the checked results.';

@@ -339,6 +339,49 @@ export async function searchChannel3(queryValue: string, storefront: ShopStorefr
   }
 }
 
+export async function retrieveChannel3Product(productId: string, storefront: ShopStorefront, signal?: AbortSignal): Promise<Channel3Product | null> {
+  if (!safeProductId(productId)) throw new Error('Choose a valid product from the marketplace.');
+  if (!isShopStorefront(storefront)) throw new Error('Choose a supported shop region.');
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const params = new URLSearchParams({ storefront });
+    const { status, payload } = await requestChannel3Json(`${getApiBaseUrl()}/api/marketplace/products/${encodeURIComponent(productId)}?${params}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    }, controller.signal);
+
+    if (status === 404) return null;
+    if (status === 429) throw new Error('Product checks are temporarily limited. Wait a minute, then try again.');
+    if (status === 503) throw new Error('Current product offers could not be refreshed. Try again later.');
+    if (status < 200 || status >= 300) throw new Error(apiError(payload, 'Current product offers could not be refreshed.'));
+    if (!isRecord(payload) || payload.provider !== 'Channel3' || payload.storefront !== storefront ||
+      payload.currency !== SHOP_STOREFRONTS[storefront].currency || typeof payload.retrievedAt !== 'string' ||
+      payload.retrievedAt.length > 64 || !Number.isFinite(Date.parse(payload.retrievedAt)) || !('product' in payload)) {
+      throw new Error('Current product details did not match this item and storefront. Please try again.');
+    }
+    const product = parseProduct(payload.product, SHOP_STOREFRONTS[storefront].currency, payload.retrievedAt);
+    if (!product || product.id !== productId) throw new Error('Current product details did not match this item. Please try again.');
+    return product;
+  } catch (error) {
+    if (signal?.aborted) {
+      const cancelled = new Error('Product check cancelled.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
+    if (error instanceof Error && error.name === 'AbortError') throw new Error('Checking current offers took too long. Check your connection and try again.');
+    if (error instanceof TypeError) throw new Error('Check your connection and try again.');
+    throw error instanceof Error ? error : new Error('Current product offers could not be refreshed.');
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
 export async function fetchChannel3Catalog(section: Channel3CatalogSection | null, storefront: ShopStorefront, signal?: AbortSignal, options: { retailer?: Channel3CatalogRetailer | null; pageToken?: string } = {}): Promise<Channel3Catalog> {
   if (!isShopStorefront(storefront)) throw new Error('Choose a supported shop region.');
   const retailer = options.retailer ?? null;

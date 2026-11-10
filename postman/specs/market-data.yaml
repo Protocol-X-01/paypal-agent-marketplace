@@ -536,6 +536,104 @@ paths:
                 type: string
         "403":
           description: Origin, method, or requested header is not allowed
+  /api/marketplace/products/{productId}:
+    get:
+      operationId: getCurrentMarketplaceProduct
+      summary: Recheck current offers for one product
+      description: >-
+        Retrieves full current Channel3 product details by a stable product ID
+        returned by a previous search or catalog browse. Use this at display and
+        retailer-handoff time instead of reusing a stored offer URL. The
+        Channel3 API key remains server-side. Explicit GB or US storefronts
+        select GBP or USD. A product with no offer in that storefront returns
+        404; it must not fall back to an older URL. Results are no-store and
+        share the marketplace rate limit. This is a fresh Channel3 report, not
+        a guarantee of retailer-side inventory; the retailer confirms final
+        price and availability.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
+        - name: storefront
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/MarketplaceStorefront"
+      responses:
+        "200":
+          description: Fresh product details and current Channel3 offers
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceProductRefreshResponse"
+        "400":
+          description: Product ID or storefront is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "403":
+          description: Origin and Host headers are both present but identify different hosts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "404":
+          description: Product has no current Channel3 result in the requested storefront
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "429":
+          description: Shared marketplace request limit reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "503":
+          description: Channel3 is not configured, unavailable, timed out, or returned an invalid product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+    options:
+      operationId: preflightMarketplaceProduct
+      summary: Check whether the mobile web client may retrieve a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
+      responses:
+        "204":
+          description: Preflight approved for an exact allowlisted origin
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+        "403":
+          description: Origin, method, or requested header is not allowed
   /api/marketplace/catalog:
     get:
       operationId: browseCuratedCatalog
@@ -1043,6 +1141,24 @@ components:
           maxItems: 24
           items:
             $ref: "#/components/schemas/MarketplaceProduct"
+    MarketplaceProductRefreshResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, storefront, currency, retrievedAt, product]
+      properties:
+        provider:
+          type: string
+          const: Channel3
+        storefront:
+          $ref: "#/components/schemas/MarketplaceStorefront"
+        currency:
+          type: string
+          enum: [GBP, USD]
+        retrievedAt:
+          type: string
+          format: date-time
+        product:
+          $ref: "#/components/schemas/MarketplaceProduct"
     MarketplaceProduct:
       type: object
       additionalProperties: true
