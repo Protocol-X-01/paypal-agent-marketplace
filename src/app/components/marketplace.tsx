@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { isStorefront, storefrontCurrency, STOREFRONT_STORAGE_KEY, type Storefront } from "@/lib/channel3-storefront";
 import { formatPriceRange, isMarketplacePriceRange, parsePriceRangeInputs, samePriceRange, type MarketplacePriceRange } from "@/lib/marketplace-price-range";
 import { fetchMarketplaceJson, MarketplaceRequestTimeoutError } from "@/lib/marketplace-request";
@@ -64,34 +64,38 @@ const SIMILAR_STOP_WORDS = new Set(["the", "and", "for", "with", "from", "new", 
 function productWords(value: string) { return new Set((value.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((word) => !SIMILAR_STOP_WORDS.has(word))); }
 function similarProductQuery(value: string) {
   const words = productWords(value);
-  return SIMILAR_FAMILIES.find((family) => family.terms.some((term) => words.has(term)))?.query ?? null;
+  const family = SIMILAR_FAMILIES.find((item) => item.terms.some((term) => words.has(term)));
+  if (family) return family.query;
+  const fallback = [...words].slice(0, 5).join(" ").slice(0, 80).trim();
+  return fallback.length >= 3 ? fallback : null;
 }
 function findSimilarInStockProducts(source: Product, candidates: readonly Product[]) {
-  const sourceWords = productWords(source.title);
+  const sourceWords = productWords(`${source.brand ?? ""} ${source.title}`);
   const families = SIMILAR_FAMILIES.filter((family) => family.terms.some((term) => sourceWords.has(term)));
   const seen = new Set<string>();
   return candidates.flatMap((candidate) => {
     if (candidate.id === source.id || seen.has(candidate.id) || !candidate.offers.some((offer) => offer.url && offer.availability === "InStock")) return [];
-    const candidateWords = productWords(candidate.title);
+    const candidateWords = productWords(`${candidate.brand ?? ""} ${candidate.title}`);
     const sharedWords = [...sourceWords].filter((word) => candidateWords.has(word)).length;
     const sharedFamily = families.some((family) => family.terms.some((term) => candidateWords.has(term)));
     if (!sharedFamily && sharedWords < 2) return [];
     seen.add(candidate.id);
-    return [{ product: candidate, score: sharedWords + (sharedFamily ? 4 : 0) }];
+    const sameBrand = Boolean(source.brand && candidate.brand && source.brand.toLowerCase() === candidate.brand.toLowerCase());
+    return [{ product: candidate, score: sharedWords + (sharedFamily ? 4 : 0) + (sameBrand ? 2 : 0) }];
   }).sort((left, right) => right.score - left.score || left.product.title.localeCompare(right.product.title)).slice(0, 3).map(({ product }) => product);
 }
 
 function currentTimeMs() { return Date.now(); }
 
 const CURATED_SECTIONS = CHANNEL3_CURATED_SECTIONS.map(section => ({ id: section.id, title: section.title, detail: section.description, glyph: section.id }));
-const COMMISSION_LEGEND = "★ Max advertised commission; we may earn from links. Not cashback; rates vary.";
-function commissionLabel(rate: number | null | undefined) { return typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1 ? `★ Up to ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(rate * 100)}%` : "★ Rate unavailable"; }
+const COMMISSION_LEGEND = "★ Retailer-advertised max rate; may change. We may earn a commission on qualifying purchases. Not cashback.";
+function commissionLabel(rate: number | null | undefined) { return typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1 ? `★ ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(rate * 100)}%` : "★ —"; }
 function commissionDescription(rate: number | null | undefined) {
   const label = commissionLabel(rate);
-  return label === "★ Rate unavailable" ? "Advertised affiliate commission rate unavailable." : `${label.slice(2)} maximum advertised affiliate commission. Not customer cashback; rates and actual earnings may vary.`;
+  return label === "★ —" ? "Advertised affiliate commission rate unavailable." : `Maximum advertised affiliate commission ${label.slice(2)}.`;
 }
 function commissionRate(rate: number | null | undefined) {
-  return <span className={styles.commission} title={commissionDescription(rate)}><span aria-hidden="true">{commissionLabel(rate)}</span><span className={styles.srOnly}>{commissionDescription(rate)}</span></span>;
+  return <span className={styles.commission} role="img" aria-label={commissionDescription(rate)}>{commissionLabel(rate)}</span>;
 }
 function isProductRefreshing(product: Product, key: string | null) {
   return key === `${product.id}:collection` || key === `${product.id}:similar` || product.offers.some((offer) => key === `${product.id}:${offer.domain}`);
@@ -105,6 +109,14 @@ function productCountLabel(count: number) { return `${count} ${count === 1 ? "pr
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function marketplaceRequestError(error: unknown, fallback: string, timeoutMessage: string) {
+  if (error instanceof MarketplaceRequestTimeoutError) return timeoutMessage;
+  if (error instanceof TypeError || (error instanceof Error && /^(failed to fetch|load failed|network request failed)$/i.test(error.message.trim()))) {
+    return "Check your connection and try again.";
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 /** Keep the first copy of each product and the time its own page was received. */
@@ -146,6 +158,20 @@ function parseSearchPage(value: unknown, query: string, storefront: Storefront):
   };
 }
 
+async function fetchSimilarProductsPage(title: string, storefront: Storefront, signal: AbortSignal) {
+  const query = similarProductQuery(title);
+  if (!query) return null;
+  const { response, body } = await fetchMarketplaceJson("/api/marketplace/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, limit: SEARCH_PAGE_SIZE, storefront }),
+  }, signal);
+  if (!response.ok) throw new Error(response.status === 429 ? "Similar-item search is temporarily limited. Try again shortly." : "Similar items could not be refreshed right now.");
+  const page = parseSearchPage(body, query, storefront);
+  if (!page) throw new Error("Similar items did not match this storefront. Try again.");
+  return page;
+}
+
 function parseCuratedCatalog(value: unknown, section: CatalogSectionId | null, storefront: Storefront, retailer: CatalogRetailerId | null, paged = false): CuratedCatalog | null {
   if (
     !record(value) || value.provider !== "Channel3" || value.section !== section || (value.retailer ?? null) !== retailer ||
@@ -185,7 +211,7 @@ function preferredRetailerOffer(offers: readonly Offer[]): Offer | null {
 }
 
 function offerChoiceLabel(action: string, product: Product, offer: Offer, index: number) {
-  return `${action} offer ${index + 1} for ${product.title}, ${offerHandoffLabel(offer)}, ${money(offer.price.price, offer.price.currency)} ${offer.price.currency}, ${offer.availability === "InStock" ? "reported in stock" : "reported out of stock"}, ${commissionDescription(offer.max_commission_rate)}`;
+  return `${action} offer ${index + 1} for ${product.title}, ${offerHandoffLabel(offer)}, ${money(offer.price.price, offer.price.currency)} ${offer.price.currency}, ${offer.availability === "InStock" ? "reported in stock" : "reported out of stock"}, ${commissionLabel(offer.max_commission_rate)}`;
 }
 
 function dateLabel(value: string) {
@@ -703,7 +729,7 @@ export default function Marketplace() {
       if (!page) throw new Error("The results did not match this storefront or search. Please try again.");
       replaceResults({ query: searchQuery, retrievedAt: page.retrievedAt, storefront: requestedStorefront, priceRange: page.priceRange, ...mergeProductPage(null, page.products, page.retrievedAt), nextPageToken: page.nextPageToken, pagesLoaded: 1, pagination: page.pagination });
     } catch (cause) {
-      if (!controller.signal.aborted) setError(cause instanceof MarketplaceRequestTimeoutError ? "Product search took too long. Please try again." : cause instanceof Error ? cause.message : "Product search is unavailable right now.");
+      if (!controller.signal.aborted) setError(marketplaceRequestError(cause, "Product search is unavailable right now.", "Product search took too long. Check your connection and try again."));
     } finally {
       if (request.current === controller) {
         request.current = null;
@@ -742,7 +768,7 @@ export default function Marketplace() {
     } catch (cause) {
       if (!controller.signal.aborted && searchMoreRequest.current === controller) {
         setSearchMoreStatus("");
-        setSearchMoreError(cause instanceof MarketplaceRequestTimeoutError ? "Loading more results took too long. Please try again." : cause instanceof Error ? cause.message : "More search results are unavailable. Try again.");
+        setSearchMoreError(marketplaceRequestError(cause, "More search results are unavailable. Try again.", "Loading more results took too long. Check your connection and try again."));
       }
     } finally {
       if (searchMoreRequest.current === controller) {
@@ -792,7 +818,7 @@ export default function Marketplace() {
       setCatalog({ ...parsed, ...merged, pagesLoaded: (previous?.pagesLoaded ?? 0) + 1, nextPageToken: merged.products.length >= SEARCH_MAX_PRODUCTS || parsed.nextPageToken === previous?.nextPageToken ? null : parsed.nextPageToken });
     } catch (cause) {
       if (!controller.signal.aborted && catalogRequest.current === controller && storefrontRef.current === requestedStorefront) {
-        const message = cause instanceof MarketplaceRequestTimeoutError ? "The curated catalog took too long. Please try again." : cause instanceof Error ? cause.message : "This curated section is unavailable right now.";
+        const message = marketplaceRequestError(cause, "This curated section is unavailable right now.", "The curated catalog took too long. Check your connection and try again.");
         if (append) setCatalogMoreError(message); else setCatalogError(message);
       }
     } finally {
@@ -870,22 +896,48 @@ export default function Marketplace() {
         pageToken = body.nextPageToken;
       }
       if (!refreshed) {
-        const sourceSnapshot = source === "catalog" ? catalog : resultsRef.current;
         const receivedAt = currentTimeMs();
-        const candidateSnapshot = mergeProductPage(null, checkedCandidates, retrievedAt || new Date(receivedAt).toISOString());
-        const suggestions = findSimilarInStockProducts(product, [...checkedCandidates, ...(sourceSnapshot?.storefront === requestedStorefront ? sourceSnapshot.products : [])]);
-        setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: suggestions, snapshot: { ...candidateSnapshot, storefront: requestedStorefront }, visible: true, loading: false, error: suggestions.length ? "" : "No similar in-stock items were found in the checked results.", unconfirmed: true } }));
+        let similarPage: Awaited<ReturnType<typeof fetchSimilarProductsPage>> = null;
+        let suggestions = findSimilarInStockProducts(product, checkedCandidates);
+        let similarError = "No similar in-stock items were found in the checked results.";
+        if (!suggestions.length && similarProductQuery(product.title)) {
+          try {
+            similarPage = await fetchSimilarProductsPage(product.title, requestedStorefront, controller.signal);
+            if (!requestIsCurrent()) { closeHandoff(); return; }
+            if (similarPage) suggestions = findSimilarInStockProducts(product, similarPage.products);
+          } catch (cause) {
+            if (!requestIsCurrent()) { closeHandoff(); return; }
+            similarError = marketplaceRequestError(cause, "Similar items could not be refreshed right now.", "Similar-item search took too long. Check your connection and try again.");
+          }
+        }
+        let candidateSnapshot = mergeProductPage(null, checkedCandidates, retrievedAt || new Date(receivedAt).toISOString());
+        if (similarPage) candidateSnapshot = mergeProductPage(candidateSnapshot, similarPage.products, similarPage.retrievedAt);
+        setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: suggestions, snapshot: { ...candidateSnapshot, storefront: requestedStorefront }, visible: true, loading: false, error: suggestions.length ? "" : similarError, unconfirmed: true } }));
+        focusSimilarAlternatives(product.id);
         closeHandoff();
-        feedback("We couldn’t confirm this exact item. Similar options are shown below when available.");
+        feedback("Sorry, we couldn’t confirm this exact listing in the latest results. Similar options are shown below when available.");
         return;
       }
 
       const receivedAt = currentTimeMs();
+      // Keep the complete fresh offer set for fallback decisions. A retailer
+      // catalog view may intentionally display only its selected merchant.
+      const currentOffers = refreshed.offers;
+      const hasInStockLinks = refreshed.offers.some((offer) => offer.url && offer.availability === "InStock");
+      const hasReportedInStockOffer = refreshed.offers.some((offer) => offer.availability === "InStock");
+      const selectedRetailerOffers = retailerDomain ? currentOffers.filter((offer) => offer.domain === retailerDomain) : [];
+      const selectedRetailerHasInStockLink = selectedRetailerOffers.some((offer) => offer.url && offer.availability === "InStock");
+      const selectedRetailerUnavailable = Boolean(retailerDomain && !selectedRetailerHasInStockLink);
+      const alternateExactOffer = selectedRetailerUnavailable
+        ? preferredRetailerOffer(currentOffers.filter((offer) => offer.domain !== retailerDomain))
+        : null;
       let updated = refreshed;
       if (source === "catalog") {
         if (requestedSelection?.retailer) {
           const listedRetailers = new Set(product.offers.map((offer) => offer.domain));
-          updated = { ...updated, offers: updated.offers.filter((offer) => listedRetailers.has(offer.domain)) };
+          // Expose fresh same-item offers after the selected retailer fails its
+          // check, but let the customer choose which retailer to open.
+          updated = { ...updated, offers: selectedRetailerUnavailable ? currentOffers : updated.offers.filter((offer) => listedRetailers.has(offer.domain)) };
         }
         setCatalog((current) => current?.storefront === requestedStorefront && current.retrievedById.has(product.id)
           ? { ...current, ...replaceProductSnapshot(current, updated, retrievedAt, receivedAt) }
@@ -901,36 +953,53 @@ export default function Marketplace() {
           replaceResults({ ...current, ...replaceProductSnapshot(current, updated, retrievedAt, receivedAt) });
         }
       }
-      const hasInStockLinks = updated.offers.some((offer) => offer.url && offer.availability === "InStock");
-      const selectedRetailerUnavailable = Boolean(retailerDomain && !currentUrl);
-      const sourceSnapshot = source === "catalog" ? catalog : resultsRef.current;
-      const candidateSnapshot = mergeProductPage(null, checkedCandidates, retrievedAt || new Date(receivedAt).toISOString());
-      const similarProducts = findSimilarInStockProducts(product, [...checkedCandidates, ...(sourceSnapshot?.storefront === requestedStorefront ? sourceSnapshot.products : [])]);
+      const shouldShowSimilarOptions = !hasInStockLinks || selectedRetailerUnavailable;
+      let similarPage: Awaited<ReturnType<typeof fetchSimilarProductsPage>> = null;
+      let similarProducts = findSimilarInStockProducts(product, checkedCandidates);
+      let similarError = "No similar in-stock items were found in the checked results.";
+      if (shouldShowSimilarOptions && !similarProducts.length && similarProductQuery(product.title)) {
+        try {
+          similarPage = await fetchSimilarProductsPage(product.title, requestedStorefront, controller.signal);
+          if (!requestIsCurrent()) { closeHandoff(); return; }
+          if (similarPage) similarProducts = findSimilarInStockProducts(product, similarPage.products);
+        } catch (cause) {
+          if (!requestIsCurrent()) { closeHandoff(); return; }
+          similarError = marketplaceRequestError(cause, "Similar items could not be refreshed right now.", "Similar-item search took too long. Check your connection and try again.");
+        }
+      }
+      let candidateSnapshot = mergeProductPage(null, checkedCandidates, retrievedAt || new Date(receivedAt).toISOString());
+      if (similarPage) candidateSnapshot = mergeProductPage(candidateSnapshot, similarPage.products, similarPage.retrievedAt);
       setSimilarOfferSets((current) => ({ ...current, [product.id]: {
         products: similarProducts,
         snapshot: { ...candidateSnapshot, storefront: requestedStorefront },
-        visible: !hasInStockLinks || selectedRetailerUnavailable,
+        visible: shouldShowSimilarOptions,
         loading: false,
-        error: similarProducts.length ? "" : "No similar in-stock items were found in the checked results.",
+        error: similarProducts.length ? "" : similarError,
         unconfirmed: false,
       } }));
+      if (shouldShowSimilarOptions) focusSimilarAlternatives(product.id);
       if (handoffWindow) {
-        if (currentUrl && !handoffWindow.closed) {
+        const handoffUrl = currentUrl;
+        if (handoffUrl && !handoffWindow.closed) {
           handoffWindow.opener = null;
-          handoffWindow.location.replace(currentUrl);
+          handoffWindow.location.replace(handoffUrl);
+          feedback("Offers rechecked. Review the current price before visiting the retailer.");
         } else if (!currentUrl) {
           closeHandoff();
-          feedback(retailerDomain
-            ? hasInStockLinks ? "Sorry, that retailer no longer reports this item in stock. Current offers and similar options are below." : "Sorry, that retailer has no in-stock link for this item. Similar options are below."
-            : "Sorry, no in-stock retailer offers are available for this item. Similar options are below.");
+          feedback(alternateExactOffer
+            ? `Sorry, ${retailerDomain} no longer reports this item in stock. The same item is reported in stock at ${alternateExactOffer.domain}; choose that offer below.`
+            : retailerDomain
+            ? selectedRetailerHasInStockLink ? `Sorry, we couldn’t confirm a safe current link at ${retailerDomain}. Review the refreshed offers below.` : "Sorry, we couldn’t confirm a current in-stock offer at that retailer. Similar options are below."
+            : hasReportedInStockOffer ? "Sorry, a safe in-stock retailer link could not be confirmed. Similar options are below." : "Sorry, no in-stock retailer offers are available for this item. Similar options are below.");
         }
-      } else if (!hasInStockLinks) feedback("Sorry, Channel3 reports no in-stock offers for this item. Similar options are below when available.");
-      else if (selectedRetailerUnavailable) feedback("Sorry, that retailer no longer reports this item in stock. Current offers and similar options are below.");
+      } else if (alternateExactOffer) feedback(`Sorry, ${retailerDomain} no longer reports this item in stock. The same item is reported in stock at ${alternateExactOffer.domain}; choose that offer below.`);
+      else if (!hasInStockLinks) feedback(hasReportedInStockOffer ? "Sorry, a safe in-stock retailer link could not be confirmed. Similar options are below when available." : "Sorry, Channel3 reports no in-stock offers for this item. Similar options are below when available.");
+      else if (selectedRetailerUnavailable) feedback("Sorry, we couldn’t confirm a current in-stock offer at that retailer. Current offers and similar options are below.");
       else feedback("Offers rechecked. Review the current price before visiting the retailer.");
     } catch (cause) {
       closeHandoff();
       if (requestIsCurrent()) {
-        feedback(cause instanceof MarketplaceRequestTimeoutError ? "Checking current offers took too long. Please try again." : cause instanceof Error ? cause.message : "Current offers could not be refreshed.", true);
+        feedback(marketplaceRequestError(cause, "Current offers could not be refreshed.", "Checking current offers took too long. Check your connection and try again."), true);
       }
     } finally {
       if (request.current === controller) {
@@ -948,57 +1017,65 @@ export default function Marketplace() {
     queryInput.current?.focus();
   }
 
+  function setHandoffError(productId: string, source: "catalog" | "workspace", message: string) {
+    if (source === "catalog") setCatalogFeedback({ productId, message, error: true });
+    else { setError(message); setNotice(""); }
+  }
+
   function retailerLinkProps(product: Product, offer: Offer, snapshot: (RetrievedProducts & { storefront: Storefront }) | null, source: "catalog" | "workspace", disclosureId: string, allowAlternateInStock = false) {
     const updating = isProductRefreshing(product, refreshingKey);
-    function checkFreshness(event: MouseEvent<HTMLAnchorElement>) {
-      if (updating) { event.preventDefault(); return; }
-      event.preventDefault();
+    function checkFreshness() {
+      if (updating) return;
       const current = snapshot?.storefront === storefrontRef.current && renderedPrivateScopeGeneration === privateScopeGeneration.current;
       if (!current) return;
       const retailerDomain = allowAlternateInStock ? undefined : offer.domain;
       const preferredUrl = allowAlternateInStock ? undefined : offer.url ?? undefined;
-      if (event.type === "contextmenu") {
-        void refreshProductOffers(product, retailerDomain, source, undefined, preferredUrl, null, allowAlternateInStock);
+      const handoffWindow = window.open("about:blank", "_blank");
+      if (!handoffWindow) {
+        setHandoffError(product.id, source, "Your browser blocked the retailer tab. Allow pop-ups, then check this offer again.");
         return;
       }
-      if (event.type === "auxclick" && event.button !== 1) return;
-      const handoffWindow = window.open("about:blank", "_blank");
-      if (handoffWindow) {
-        handoffWindow.opener = null;
-        handoffWindow.document.title = "PayPal Markets";
-      }
+      handoffWindow.opener = null;
+      handoffWindow.document.title = "PayPal Markets";
       void refreshProductOffers(product, retailerDomain, source, undefined, preferredUrl, handoffWindow, allowAlternateInStock);
     }
     return {
-      href: updating ? undefined : offer.url ?? undefined,
-      "aria-disabled": updating || undefined,
-      tabIndex: updating ? -1 : undefined,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      referrerPolicy: "no-referrer" as const,
+      type: "button" as const,
+      disabled: updating,
       onClick: checkFreshness,
-      onAuxClick: checkFreshness,
-      onContextMenu: checkFreshness,
       "aria-describedby": disclosureId,
     };
   }
 
+  function checkProductFromCard(product: Product, source: "catalog" | "workspace", retailerDomain?: string, allowAlternateInStock = false) {
+    const handoffWindow = window.open("about:blank", "_blank");
+    if (handoffWindow) {
+      handoffWindow.opener = null;
+      handoffWindow.document.title = "PayPal Markets";
+    } else { setHandoffError(product.id, source, "Your browser blocked the retailer tab. Allow pop-ups, then check this offer again."); return; }
+    void refreshProductOffers(product, retailerDomain, source, undefined, undefined, handoffWindow, allowAlternateInStock);
+  }
+
+  function focusSimilarAlternatives(productId: string) {
+    window.requestAnimationFrame(() => {
+      const section = document.getElementById(`marketplace-similar-${productId}`);
+      section?.scrollIntoView({ behavior: "smooth", block: "center" });
+      section?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    });
+  }
+
   async function toggleSimilarAlternatives(product: Product, source: "catalog" | "workspace", pageSnapshot: (RetrievedProducts & { storefront: Storefront }) | null) {
     const existing = similarOfferSets[product.id];
-    if (existing?.visible) {
+    const currentSnapshot = pageSnapshot?.storefront === storefrontRef.current ? pageSnapshot : null;
+    if (pageSnapshot && !currentSnapshot) return;
+    if (existing?.visible && existing.products.length) {
       setSimilarOfferSets((current) => ({ ...current, [product.id]: { ...current[product.id], visible: false } }));
       return;
     }
-    const currentSnapshot = pageSnapshot?.storefront === storefrontRef.current ? pageSnapshot : null;
-    const cached = findSimilarInStockProducts(product, [...(existing?.products ?? []), ...(currentSnapshot?.products ?? [])]);
-    if (cached.length) {
-      const snapshot = existing?.snapshot.storefront === storefrontRef.current ? existing.snapshot : currentSnapshot ?? existing?.snapshot;
-      if (snapshot) setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: cached, snapshot, visible: true, loading: false, error: "", unconfirmed: existing?.unconfirmed } }));
-      return;
-    }
+    if (existing?.loading) return;
     const searchQuery = similarProductQuery(product.title);
     if (!searchQuery) {
-      const snapshot = currentSnapshot ?? { ...mergeProductPage(null, [], new Date().toISOString()), storefront: storefrontRef.current };
+      const snapshot = { ...mergeProductPage(null, [], new Date().toISOString()), storefront: storefrontRef.current };
       setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: [], snapshot, visible: true, loading: false, error: "No similar in-stock items were found in this list. Try a broader product search.", unconfirmed: existing?.unconfirmed } }));
       return;
     }
@@ -1008,7 +1085,7 @@ export default function Marketplace() {
     const controller = new AbortController();
     request.current = controller;
     setRefreshingKey(`${product.id}:similar`);
-    setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: [], snapshot: currentSnapshot ?? { ...mergeProductPage(null, [], new Date().toISOString()), storefront: requestedStorefront }, visible: true, loading: true, error: "", unconfirmed: existing?.unconfirmed } }));
+    setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: [], snapshot: { ...mergeProductPage(null, [], new Date().toISOString()), storefront: requestedStorefront }, visible: true, loading: true, error: "", unconfirmed: existing?.unconfirmed } }));
     try {
       const { response, body } = await fetchMarketplaceJson("/api/marketplace/search", {
         method: "POST",
@@ -1024,8 +1101,8 @@ export default function Marketplace() {
       setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: suggestions, snapshot, visible: true, loading: false, error: suggestions.length ? "" : "No similar items are currently reported in stock.", unconfirmed: existing?.unconfirmed } }));
     } catch (cause) {
       if (!controller.signal.aborted && request.current === controller) {
-        const snapshot = currentSnapshot ?? { ...mergeProductPage(null, [], new Date().toISOString()), storefront: requestedStorefront };
-        setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: [], snapshot, visible: true, loading: false, error: cause instanceof MarketplaceRequestTimeoutError ? "Searching for similar items took too long. Please try again." : cause instanceof Error ? cause.message : "Similar items could not be loaded right now.", unconfirmed: existing?.unconfirmed } }));
+        const snapshot = { ...mergeProductPage(null, [], new Date().toISOString()), storefront: requestedStorefront };
+        setSimilarOfferSets((current) => ({ ...current, [product.id]: { products: [], snapshot, visible: true, loading: false, error: marketplaceRequestError(cause, "Similar items could not be loaded right now.", "Searching for similar items took too long. Check your connection and try again."), unconfirmed: existing?.unconfirmed } }));
       }
     } finally {
       if (request.current === controller) { request.current = null; setRefreshingKey(null); }
@@ -1035,13 +1112,14 @@ export default function Marketplace() {
   function renderSimilarAlternatives(product: Product, source: "catalog" | "workspace", pageSnapshot: (RetrievedProducts & { storefront: Storefront }) | null) {
     const stored = similarOfferSets[product.id];
     const currentSnapshot = pageSnapshot?.storefront === storefront ? pageSnapshot : null;
-    const candidates = findSimilarInStockProducts(product, [...(stored?.products ?? []), ...(currentSnapshot?.products ?? [])]);
+    const storedMatchesStorefront = stored?.snapshot.storefront === storefront;
+    const candidates = storedMatchesStorefront && stored?.visible ? stored.products : [];
     const unavailable = !product.offers.some((offer) => offer.url && offer.availability === "InStock");
     if (!stored && !unavailable) return null;
-    const snapshot = stored?.snapshot.storefront === storefront ? stored.snapshot : currentSnapshot;
-    return <section className={styles.similarAlternatives} aria-label={`Similar items for ${product.title}`}>
+    const snapshot = storedMatchesStorefront ? stored?.snapshot : currentSnapshot;
+    return <section id={`marketplace-similar-${product.id}`} className={styles.similarAlternatives} aria-label={`Similar items for ${product.title}`}>
       <button type="button" className={styles.similarToggle} onClick={() => void toggleSimilarAlternatives(product, source, currentSnapshot)} aria-expanded={Boolean(stored?.visible)} disabled={refreshingKey !== null}>
-        {stored?.visible ? "Hide similar items" : unavailable ? "Find similar in-stock items" : "Sold out? Find similar"}
+        {stored?.loading ? "Finding similar items…" : stored?.visible ? candidates.length ? "Hide similar items" : "Try similar search again" : unavailable ? "Find similar in-stock items" : "Sold out? Find similar"}
       </button>
       {unavailable && !stored?.visible && <p className={styles.smallCopy}>Sorry, Channel3 reports no in-stock link for this item.</p>}
       {stored?.visible && <div className={styles.similarPanel}>
@@ -1050,10 +1128,10 @@ export default function Marketplace() {
           const offer = preferredRetailerOffer(candidate.offers);
           const candidateSnapshot = currentSnapshot?.products.some((item) => item.id === candidate.id) ? currentSnapshot : snapshot;
           if (!offer || !candidateSnapshot) return null;
-          return <li key={candidate.id}><a className={styles.offerLink} {...retailerLinkProps(candidate, offer, candidateSnapshot, source, "offers-commission-legend")} aria-label={`Check and open ${candidate.title} at ${offerHandoffLabel(offer)}`}>
+          return <li key={candidate.id}><button className={styles.offerLink} {...retailerLinkProps(candidate, offer, candidateSnapshot, source, "marketplace-commission-legend")} aria-label={`Check and open ${candidate.title} at ${offerHandoffLabel(offer)}`}>
             <span>{candidate.title}<small>{offerHandoffLabel(offer)} · Reported in stock</small></span>
             <strong>{money(offer.price.price, offer.price.currency)}<small>{offer.price.currency}</small></strong>
-          </a></li>;
+          </button></li>;
         })}</ul> : <span>{stored?.error || "No similar in-stock items were found in the current list."}</span>}
       </div>}
     </section>;
@@ -1288,6 +1366,7 @@ export default function Marketplace() {
           <button type="button" aria-pressed={discoveryMode === "browse"} onClick={() => chooseDiscoveryMode("browse")}><strong>Browse categories</strong><span aria-hidden="true">▦</span></button>
           <button type="button" aria-pressed={discoveryMode === "search"} onClick={() => chooseDiscoveryMode("search")}><strong>Search products</strong><span aria-hidden="true">⌕</span></button>
         </div>
+        <p id="marketplace-commission-legend" className={styles.commissionLegend} role="note">{COMMISSION_LEGEND}</p>
         <div className={styles.storefrontControl}>
           <label htmlFor="shopping-storefront">Shopping storefront</label>
           <select id="shopping-storefront" value={storefrontReady ? storefront : ""} disabled={!storefrontReady || catalogBusy} onChange={(event) => { if (isStorefront(event.currentTarget.value)) chooseStorefront(event.currentTarget.value); }}>
@@ -1344,7 +1423,6 @@ export default function Marketplace() {
         </div>
         </>}
         {catalogRetailer && storefront === "GB" && <p className={styles.curatedPrivacyNote}>These US retailers may have no UK offers. Your region has not changed. <button type="button" onClick={() => chooseStorefront("US", true)}>Choose United States storefront</button></p>}
-        <p id="catalog-commission-legend" className={styles.commissionLegend}>{COMMISSION_LEGEND}</p>
         {catalogError && (
           <div className={styles.curatedError} role="alert">
             <p>{catalogError}</p>
@@ -1375,17 +1453,18 @@ export default function Marketplace() {
                   const directOffer = availabilityUnconfirmed ? null : preferredRetailerOffer(product.offers);
                   const productLinkOffer = availabilityUnconfirmed ? null : directOffer ?? product.offers.find((candidate) => candidate.url && candidate.availability === "InStock") ?? null;
                   const offer = directOffer ?? product.offers[0];
-                  const affiliateDisclosureId = "catalog-commission-legend";
+                  const affiliateDisclosureId = "marketplace-commission-legend";
                   const savedIn = collections.find((list) => list.items.some((item) => item.product.id === product.id));
                   const savedNeedsReview = savedIn?.items.some((item) => item.product.id === product.id && needsSavedIdentityReview(item)) ?? false;
+                  const checkedRetailer = catalog.retailer ? product.offers[0]?.domain : undefined;
                   return (
                     <article className={styles.curatedProduct} key={product.id} aria-busy={isProductRefreshing(product, refreshingKey)}>
                       <div className={styles.productImage}>
                         {image ? productLinkOffer ? (
-                          <a className={styles.productImageLink} {...retailerLinkProps(product, productLinkOffer, catalog, "catalog", affiliateDisclosureId, !catalog.retailer)} aria-label={directOffer ? `Open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
+                          <button className={styles.productImageLink} {...retailerLinkProps(product, productLinkOffer, catalog, "catalog", affiliateDisclosureId, !catalog.retailer)} aria-label={directOffer ? `Check and open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
                             <ProductImage src={image} alt={product.title} />
-                          </a>
-                        ) : <ProductImage src={image} alt={product.title} /> : <span className={styles.imageFallback}><BagIcon /><span>Image unavailable</span></span>}
+                          </button>
+                        ) : <button type="button" className={`${styles.productImageLink} ${styles.productImageCheck}`} onClick={() => checkProductFromCard(product, "catalog", checkedRetailer, !catalog.retailer)} disabled={refreshingKey !== null} aria-label={`Check ${product.title}; if unavailable, find similar in-stock items`}><ProductImage src={image} alt="" /></button> : <span className={styles.imageFallback}><BagIcon /><span>Image unavailable</span></span>}
                         <span className={styles.curatedProductBadge}>SHARED PICK</span>
                         <button
                           type="button"
@@ -1400,19 +1479,19 @@ export default function Marketplace() {
                       </div>
                       <div className={styles.productBody}>
                         <div className={styles.productHeading}><h4>{productLinkOffer ? (
-                          <a className={styles.productTitleLink} {...retailerLinkProps(product, productLinkOffer, catalog, "catalog", affiliateDisclosureId, !catalog.retailer)} aria-label={directOffer ? `Open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
+                          <button className={styles.productTitleLink} {...retailerLinkProps(product, productLinkOffer, catalog, "catalog", affiliateDisclosureId, !catalog.retailer)} aria-label={directOffer ? `Check and open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
                             {product.title}
-                          </a>
-                        ) : product.title}</h4>{primaryOfferPrice(offer, isProductRefreshing(product, refreshingKey), false, availabilityUnconfirmed)}</div>
+                          </button>
+                        ) : <button type="button" className={styles.productTitleCheck} onClick={() => checkProductFromCard(product, "catalog", checkedRetailer, !catalog.retailer)} disabled={refreshingKey !== null} aria-label={`Check ${product.title}; if unavailable, find similar in-stock items`}>{product.title}</button>}</h4>{primaryOfferPrice(offer, isProductRefreshing(product, refreshingKey), false, availabilityUnconfirmed)}</div>
                         {offer ? (
                           <div className={styles.offerPrice}>
-                            <span>{availabilityUnconfirmed ? "Earlier report · current availability unconfirmed" : offer.availability === "InStock" ? "Reported in stock" : "Reported out of stock"}</span><span className={styles.commission}>{commissionRate(offer.max_commission_rate)}</span>
+                            <span>{availabilityUnconfirmed ? "Earlier report · current availability unconfirmed" : offer.availability === "InStock" ? "Reported in stock" : "Reported out of stock"}</span>{product.offers.length <= 1 && <span className={styles.commission}>{commissionRate(offer.max_commission_rate)}</span>}
                           </div>
                         ) : <p className={styles.smallCopy}>Current retailer prices are not available for this product.</p>}
                         {directOffer ? (
-                          <a className={styles.retailerLink} {...retailerLinkProps(product, directOffer, catalog, "catalog", affiliateDisclosureId)} aria-label={`Visit ${offerHandoffLabel(directOffer)} for ${product.title}`}>
-                            <span>Visit {offerHandoffLabel(directOffer)}</span><span aria-hidden="true">↗</span>
-                          </a>
+                          <button className={styles.retailerLink} {...retailerLinkProps(product, directOffer, catalog, "catalog", affiliateDisclosureId)} aria-label={`Check and visit ${offerHandoffLabel(directOffer)} for ${product.title}`}>
+                            <span>Check &amp; visit {offerHandoffLabel(directOffer)}</span><span aria-hidden="true">↗</span>
+                          </button>
                         ) : <button type="button" className={styles.retailerLink} onClick={() => void refreshProductOffers(product, undefined, "catalog")} disabled={refreshingKey !== null}>
                           <span>{isProductRefreshing(product, refreshingKey) ? "Refreshing offers…" : "Refresh offers"}</span><span aria-hidden="true">↻</span>
                         </button>}
@@ -1423,10 +1502,10 @@ export default function Marketplace() {
                               {product.offers.map((retailOffer, index) => (
                                 <li key={`${retailOffer.domain}-${index}`}>
                                   {!availabilityUnconfirmed && retailOffer.url && retailOffer.availability === "InStock" ? (
-                                    <a className={styles.offerLink} {...retailerLinkProps(product, retailOffer, catalog, "catalog", affiliateDisclosureId)} aria-label={offerChoiceLabel("Visit", product, retailOffer, index)}>
+                                    <button className={styles.offerLink} {...retailerLinkProps(product, retailOffer, catalog, "catalog", affiliateDisclosureId)} aria-label={offerChoiceLabel("Check and visit", product, retailOffer, index)}>
                                       <span>{retailOffer.domain}<small>Offer {index + 1} · {retailOffer.availability === "InStock" ? "Reported in stock" : "Reported out of stock"}</small></span>
                                       <strong>{money(retailOffer.price.price, retailOffer.price.currency)}<small>{retailOffer.price.currency}</small><small>{commissionRate(retailOffer.max_commission_rate)}</small></strong>
-                                    </a>
+                                    </button>
                                   ) : <div className={styles.offerSnapshot}><span>{retailOffer.domain}<small>Offer {index + 1} · {availabilityUnconfirmed ? "Earlier report · availability unconfirmed" : retailOffer.availability === "InStock" ? "Reported in stock · no link" : "Reported out of stock"}</small></span><strong>{money(retailOffer.price.price, retailOffer.price.currency)}<small>{retailOffer.price.currency}</small><small>{commissionRate(retailOffer.max_commission_rate)}</small></strong></div>}
                                 </li>
                               ))}
@@ -1484,7 +1563,6 @@ export default function Marketplace() {
               <button className={styles.deleteButton} type="button" disabled={!canMutateCollections} onClick={beginDeleteCollection}>Delete collection</button>
             </div>}
           </div>
-          {(activeCollection || results) && <p id="offers-commission-legend" className={styles.commissionLegend}>{COMMISSION_LEGEND}</p>}
           {renameOpen && activeCollection && <form className={styles.renameForm} onSubmit={renameCollection}>
             <label htmlFor="rename-collection">Collection name<input id="rename-collection" value={renameDraft} onChange={(event) => { if (collectionViewVersion !== collectionVersion.current || renameTargetId.current !== activeCollection.id || !scopeIsCurrent()) return; renameDraftRef.current = event.target.value; setRenameDraft(event.target.value); }} aria-invalid={renameDraft.trim().length > MAX_COLLECTION_NAME_LENGTH} aria-describedby={renameDraft.trim().length > MAX_COLLECTION_NAME_LENGTH ? "rename-collection-error" : undefined} required autoFocus />{renameDraft.trim().length > MAX_COLLECTION_NAME_LENGTH && <span id="rename-collection-error" className={styles.nameError}>Keep collection names to {MAX_COLLECTION_NAME_LENGTH} characters.</span>}</label>
             <button type="submit" disabled={!canMutateCollections || !renameDraft.trim()}>Save name</button>
@@ -1520,7 +1598,7 @@ export default function Marketplace() {
               const savedConflict = !activeCollection && Boolean(savedItem && needsSavedIdentityReview(savedItem));
               const saved = Boolean(savedItem) && !savedConflict;
               const identityNeedsReview = Boolean(activeCollection && needsSavedIdentityReview(item));
-              const affiliateDisclosureId = "offers-commission-legend";
+              const affiliateDisclosureId = "marketplace-commission-legend";
               const availabilityLabel = availabilityUnconfirmed
                 ? "Earlier report · current availability unconfirmed"
                 : offer?.availability === "InStock"
@@ -1529,26 +1607,26 @@ export default function Marketplace() {
               return <article className={styles.product} key={product.id} aria-busy={isProductRefreshing(product, refreshingKey)}>
                 <div className={styles.productImage}>
                   {image ? productLinkOffer ? (
-                    <a className={styles.productImageLink} {...retailerLinkProps(product, productLinkOffer, results, "workspace", affiliateDisclosureId, !activeCollection)} aria-label={directOffer ? `Open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
+                    <button className={styles.productImageLink} {...retailerLinkProps(product, productLinkOffer, results, "workspace", affiliateDisclosureId, !activeCollection)} aria-label={directOffer ? `Check and open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
                       <ProductImage src={image} alt={product.title} />
-                    </a>
-                  ) : <ProductImage src={image} alt={product.title} /> : <span className={styles.imageFallback}><BagIcon /><span>Image unavailable</span></span>}
+                    </button>
+                  ) : identityNeedsReview ? <ProductImage src={image} alt={product.title} /> : <button type="button" className={`${styles.productImageLink} ${styles.productImageCheck}`} onClick={() => checkProductFromCard(product, "workspace", undefined, true)} disabled={refreshingKey !== null} aria-label={`Check ${product.title}; if unavailable, find similar in-stock items`}><ProductImage src={image} alt="" /></button> : <span className={styles.imageFallback}><BagIcon /><span>Image unavailable</span></span>}
                   <button type="button" className={`${styles.saveButton} ${saved ? styles.saved : ""}`} onClick={() => toggleSave(item)} disabled={!canMutateCollections || savedConflict} aria-pressed={saved} aria-label={savedConflict ? `Choose a different collection to save ${product.title}` : `${saved ? "Remove" : "Save"} ${product.title} ${saved ? "from" : "to"} ${target?.name ?? "Favorites"}`}><span aria-hidden="true">{saved ? "✓" : "+"}</span>{savedConflict ? "Choose another list" : saved ? "Saved" : "Save"}</button>
                 </div>
                 <div className={styles.productBody}>
                   <div className={styles.productHeading}><h4>{productLinkOffer ? (
-                    <a className={styles.productTitleLink} {...retailerLinkProps(product, productLinkOffer, results, "workspace", affiliateDisclosureId, !activeCollection)} aria-label={directOffer ? `Open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
+                    <button className={styles.productTitleLink} {...retailerLinkProps(product, productLinkOffer, results, "workspace", affiliateDisclosureId, !activeCollection)} aria-label={directOffer ? `Check and open ${product.title} at ${offerHandoffLabel(directOffer)}` : `Check current availability for ${product.title}`}>
                       {product.title}
-                    </a>
-                  ) : product.title}</h4>{primaryOfferPrice(offer, isProductRefreshing(product, refreshingKey), Boolean(activeCollection), availabilityUnconfirmed)}</div>
-                  {offer && <div className={styles.offerPrice}><span>{availabilityLabel}</span><span className={styles.commission}>{commissionRate(offer.max_commission_rate)}</span></div>}
+                    </button>
+                  ) : identityNeedsReview ? product.title : <button type="button" className={styles.productTitleCheck} onClick={() => checkProductFromCard(product, "workspace", undefined, true)} disabled={refreshingKey !== null} aria-label={`Check ${product.title}; if unavailable, find similar in-stock items`}>{product.title}</button>}</h4>{primaryOfferPrice(offer, isProductRefreshing(product, refreshingKey), Boolean(activeCollection), availabilityUnconfirmed)}</div>
+                  {offer && <div className={styles.offerPrice}><span>{availabilityLabel}</span>{item.offers.length <= 1 && <span className={styles.commission}>{commissionRate(offer.max_commission_rate)}</span>}</div>}
                   {savedConflict && <p className={styles.smallCopy}>An older item with this identifier is saved in this collection. Choose another collection to save this result without changing it.</p>}
                   {identityNeedsReview ? <><p className={styles.smallCopy}>This older saved item needs review: its original identifier may be incomplete. Search again and compare the results. Save a reviewed match in a different collection to keep this item.</p><button type="button" className={styles.retailerLink} onClick={() => prepareSavedItemSearch(product)}>Search for this item again <span aria-hidden="true">↗</span></button></> : activeCollection ? <button type="button" className={styles.retailerLink} onClick={() => void refreshProductOffers(product, undefined, "workspace", item)} disabled={refreshingKey !== null} aria-label={`Find current retailer offers for ${product.title}`}>
                     {refreshingKey === `${product.id}:collection` ? "Refreshing current offers…" : "Find current offers on Channel3"}<span aria-hidden="true">↻</span>
                   </button> : directOffer ? (
-                    <a className={styles.retailerLink} {...retailerLinkProps(product, directOffer, results, "workspace", affiliateDisclosureId)} aria-label={`Visit ${offerHandoffLabel(directOffer)} for ${product.title}`}>
-                      <span>Visit {offerHandoffLabel(directOffer)}</span><span aria-hidden="true">↗</span>
-                    </a>
+                    <button className={styles.retailerLink} {...retailerLinkProps(product, directOffer, results, "workspace", affiliateDisclosureId)} aria-label={`Check and visit ${offerHandoffLabel(directOffer)} for ${product.title}`}>
+                      <span>Check &amp; visit {offerHandoffLabel(directOffer)}</span><span aria-hidden="true">↗</span>
+                    </button>
                   ) : !activeCollection ? <button type="button" className={styles.retailerLink} onClick={() => void refreshProductOffers(product, undefined, "workspace")} disabled={refreshingKey !== null}>
                     <span>{isProductRefreshing(product, refreshingKey) ? "Refreshing offers…" : "Refresh offers"}</span><span aria-hidden="true">↻</span>
                   </button> : <p className={styles.smallCopy}>A retailer link is not available for this product.</p>}
@@ -1565,10 +1643,10 @@ export default function Marketplace() {
                       <ul>{item.offers.map((retailOffer, index) => (
                         <li key={`${retailOffer.domain}-${index}`}>
                           {!activeCollection && !availabilityUnconfirmed && retailOffer.url && retailOffer.availability === "InStock" ? (
-                            <a className={styles.offerLink} {...retailerLinkProps(product, retailOffer, results, "workspace", affiliateDisclosureId)} aria-label={offerChoiceLabel("Visit", product, retailOffer, index)}>
+                            <button className={styles.offerLink} {...retailerLinkProps(product, retailOffer, results, "workspace", affiliateDisclosureId)} aria-label={offerChoiceLabel("Check and visit", product, retailOffer, index)}>
                               <span>{retailOffer.domain}<small>Offer {index + 1} · {retailOffer.availability === "InStock" ? "Reported in stock" : "Reported out of stock"}</small></span>
                               <strong>{money(retailOffer.price.price, retailOffer.price.currency)}<small>{retailOffer.price.currency}</small><small>{commissionRate(retailOffer.max_commission_rate)}</small></strong>
-                            </a>
+                            </button>
                           ) : (
                             <div className={styles.offerSnapshot}>
                               <span>{retailOffer.domain}<small>Offer {index + 1} · {availabilityUnconfirmed ? "Earlier report · availability unconfirmed" : retailOffer.availability === "InStock" ? activeCollection ? "Saved · reported in stock then" : "Reported in stock · no link" : activeCollection ? "Saved · reported out of stock then" : "Reported out of stock"}</small></span>

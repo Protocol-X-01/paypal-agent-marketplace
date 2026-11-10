@@ -268,6 +268,12 @@ export function PortfolioContent() {
 
   const copyDraft = async () => {
     if (!copyMounted.current || !contactsRepository.isCurrent()) return;
+    const recipientRisk = draftRecipientNoticeForHandle(recipientRef.current);
+    if (recipientRisk) {
+      setDraftRecipientNotice(recipientRisk);
+      setCopyMessage('Check this username in Venmo, then confirm the check before copying.');
+      return;
+    }
     const currentDraft = prepareVenmoDraft(recipientRef.current, draftNoteRef.current, draftAmountRef.current);
     if (!currentDraft.ok) return;
     if (!beginDraftCopy()) {
@@ -307,6 +313,16 @@ export function PortfolioContent() {
     const risks = draftRecipientRisksRef.current;
     if (risks.acknowledgedHandle === handle) return null;
     return risks.handles.get(handle) ?? (risks.overflow ? DRAFT_RECIPIENT_OVERFLOW_NOTICE : null);
+  };
+
+  const confirmDraftRecipientReview = () => {
+    if (!copyMounted.current || !contactsRepository.isCurrent()) return;
+    const handle = canonicalDraftHandle(recipientRef.current);
+    if (!handle || !draftRecipientNoticeForHandle(recipientRef.current)) return;
+    draftRecipientRisksRef.current.acknowledgedHandle = handle;
+    setDraftRecipientNotice(null);
+    markDraftEdited();
+    setCopyMessage(`You confirmed checking @${handle} in Venmo. Review the draft before copying.`);
   };
 
   const recordDraftRecipientRisk = (value: string, message: string) => {
@@ -611,9 +627,8 @@ export function PortfolioContent() {
     recipientRef.current = verified.handle;
     setRecipient(verified.handle);
     const risks = draftRecipientRisksRef.current;
-    const selectedHandle = canonicalDraftHandle(verified.handle);
-    risks.acknowledgedHandle = selectedHandle;
-    setDraftRecipientNotice(null);
+    risks.acknowledgedHandle = null;
+    setDraftRecipientNotice(draftRecipientNoticeForHandle(verified.handle));
     markDraftEdited();
     if (!isDraftCopyPending()) setCopyMessage(`Draft recipient set to @${verified.handle}. Nothing was sent.`);
   };
@@ -1133,7 +1148,16 @@ export function PortfolioContent() {
             />
             {recipientMessage && <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.draftAmountError}>{recipientMessage}</Text>}
             {venmoUsernameNeedsReview(recipient) && <Text accessibilityLiveRegion="polite" style={styles.contactsWarning}>{VENMO_USERNAME_GUIDANCE}</Text>}
-            {draftRecipientNotice && <Text accessibilityLiveRegion="polite" style={styles.contactsWarning}>{draftRecipientNotice}</Text>}
+            {draftRecipientNotice && <>
+              <Text accessibilityLiveRegion="polite" style={styles.contactsWarning}>{draftRecipientNotice}</Text>
+              <NativeButton
+                label="I checked this username in Venmo"
+                accessibilityLabel={`Confirm you checked @${canonicalDraftHandle(recipient)} in Venmo`}
+                onPress={confirmDraftRecipientReview}
+                variant="outlined"
+                compact
+              />
+            </>}
 
             <Text style={styles.fieldLabel}>Amount in USD (optional)</Text>
             <TextInput
@@ -1172,7 +1196,7 @@ export function PortfolioContent() {
             )}
 
             <View style={styles.copyButton}>
-              <NativeButton label={copyBusy ? 'Copying…' : 'Copy draft text'} onPress={() => void copyDraft()} disabled={!preparedDraft.ok || copyBusy} />
+              <NativeButton label={copyBusy ? 'Copying…' : 'Copy draft text'} onPress={() => void copyDraft()} disabled={!preparedDraft.ok || copyBusy || Boolean(draftRecipientNotice)} />
             </View>
             {copyMessage && <Text accessibilityLiveRegion="polite" style={styles.copyMessage}>{copyMessage}</Text>}
           </View>
