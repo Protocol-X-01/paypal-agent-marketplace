@@ -1,0 +1,24 @@
+{
+  "assets": [
+    {
+      "creative_prompt_summary": "Dark independent-concept cover for PayPal Markets: black and deep navy, electric blue and cyan, a market line chart, blue candles, allocation ring and shopping bag; clear INDEPENDENT CONCEPT label; no official logo.",
+      "dimensions": "1672x941",
+      "path": "artwork/concept-cover-wide.png",
+      "sha256": "b7d062f17d4ce490f53bad42e869a985e5b147f006a2e202cc58dadf805931fa"
+    },
+    {
+      "creative_prompt_summary": "Square companion artwork matching the dark cover, with PayPal Markets and INDEPENDENT CONCEPT text, blue/cyan market chart, candle, allocation ring and shopping bag; no official logo.",
+      "dimensions": "1254x1254",
+      "path": "artwork/concept-social-square.png",
+      "reference": {
+        "path": "artwork/concept-cover-wide.png",
+        "sha256": "b7d062f17d4ce490f53bad42e869a985e5b147f006a2e202cc58dadf805931fa"
+      },
+      "sha256": "f37ad12606187e8a856d962118f68b17cfb3e2922c6c3ea652df8c8efc2db762"
+    }
+  ],
+  "created_at": "2026-11-11T12:10:20Z",
+  "edition": "20261111-v9",
+  "rights_and_identity": "Original project concept artwork generated for this pack. No official PayPal/Venmo logo or mark was generated. No third-party licence, affiliation or endorsement is claimed.",
+  "tool": "OpenAI image_gen through Codex"
+}

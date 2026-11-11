@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-11-06T14:10:23.830246Z",
+  "base_commit": "1329b80bc75ab0b8192010aa1a5983cd111ec6e0",
+  "source_state": "Local development rendering of an uncommitted working tree; no frozen production build, deployment or release is established.",
+  "captures": [
+    {
+      "file": "web-home-sky-public.png",
+      "sha256": "4f910a0bdc5bc7c154bc07ba1f62520450f8d023605ae97edd96494f7b313b11",
+      "captured_at": "2026-11-06T14:06:40.936309Z",
+      "surface": "Local web homepage; default 1265 by 712 browser viewport",
+      "scope": "Public CoinGecko reference snapshot only; sky-blue price sparkline visually checked."
+    },
+    {
+      "file": "operations-fictional-public.png",
+      "sha256": "fac6d5416c205d9ff6fafa12f857d70ce6f4b9cd508be57bc9cbd40aacab1346",
+      "captured_at": "2026-11-06T14:05:10.215968Z",
+      "surface": "Separate local management app; default 1265 by 712 browser viewport",
+      "scope": "Explicit fictional preview; 30-day period; all account types and markets. No staff login or customer source."
+    },
+    {
+      "file": "operations-fictional-charts.png",
+      "sha256": "d91bef760770ef4c659fb7b73518d26d6de7243c3b88912780a25e2380ea8ac1",
+      "captured_at": "2026-11-06T14:06:49.487937Z",
+      "surface": "Separate local management app; scrolled default browser viewport",
+      "scope": "Explicit fictional cohorts and completed-event charts; same 30-day fixture and filters."
+    }
+  ],
+  "selected_source_files": [
+    {
+      "path": "src/app/page.tsx",
+      "sha256": "d9eb381c8c403cbdce523a6c896831925ee86e4fc580221dbf192765a5ffab3b"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "sha256": "e504511cb33d53363b9ad90e9089e7f751adc2043c2ae733aca2895fe75bcb3f"
+    },
+    {
+      "path": "src/app/home.module.css",
+      "sha256": "b050705b13f0ab042a070a92afb1fd0b0f6bf29737a92a61e6486cfc82a836dd"
+    },
+    {
+      "path": "src/app/components/live-markets.tsx",
+      "sha256": "f750c7f4894f4de680f4a55154d15de91b899f9df87a0280547663a9ef581e03"
+    },
+    {
+      "path": "src/app/globals.css",
+      "sha256": "52391ea5470cb69f74f5dede7bec9b49b54b42ab1b5f40121672d4e1e0383e5b"
+    },
+    {
+      "path": "apps/management/src/app/page.tsx",
+      "sha256": "8e4c901d350c69b59f827179f8e148fa3c7fd28e397400e7cff43e4b434b6960"
+    },
+    {
+      "path": "apps/management/src/app/layout.tsx",
+      "sha256": "073b1dec24e5cc0d20c8130cf01fad393d9d98327efc756c4b9964b5bd3eb190"
+    },
+    {
+      "path": "apps/management/src/app/globals.css",
+      "sha256": "8b301ae7575b16fbcd68f82e4d751674659f0a965beda5ecc7258322bd8e9dd8"
+    },
+    {
+      "path": "apps/management/src/app/management-dashboard.tsx",
+      "sha256": "279bf3372862a0f6174b6674a6fd017559e9991985508b96ee89ee7b7ae5ba61"
+    },
+    {
+      "path": "apps/management/src/lib/management-data.ts",
+      "sha256": "2985a625aeb32ae04e91c61850a0a8a40bb807bc042b5439abc08b7cb6b0b893"
+    }
+  ],
+  "known_limits": [
+    "The captures show only their stated local surfaces and data.",
+    "The Operations figures are invented fixture data.",
+    "AI response acceptance is incomplete; the configured environment key was rejected with HTTP 401.",
+    "Customer web sign-in has disabled-state HTTP checks, not a successful real PayPal login.",
+    "Native tablet and current device acceptance remain pending.",
+    "Minute-candle integration is still in progress and is not evidenced by these captures."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "review_time_utc": "2026-11-08T09:02:23Z",
+  "device": {
+    "model": "Xiaomi 22071212AG",
+    "android_version": "15",
+    "api_level": 35
+  },
+  "application": {
+    "package": "com.protocolx.paypalmarkets",
+    "version_name": "0.1.0",
+    "build_type": "debug",
+    "installed_apk_sha256": "ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42",
+    "local_apk_sha256": "ea6cce6f330ebd8cde561692957549ed43b792edaa29e4ccffc16c9eb6d8df42",
+    "exact_installed_and_local_apk_match": true,
+    "standalone_release_build": false
+  },
+  "source": {
+    "base_commit": "1329b80bc75ab0b8192010aa1a5983cd111ec6e0",
+    "working_tree": "dirty local main branch; this capture does not identify a published source revision",
+    "selected_file_sha256": {
+      "apps/mobile/src/app/index.tsx": "7784c404bd43ad0ee02b1ec52fc44595c8353f9c02a5e1a841fec2f132bab4d3",
+      "apps/mobile/src/components/market-chart.tsx": "c95341cd3cdbaa1e53491c31ceec247be36dc2195c7b2dfabd92ce91c74da5d2",
+      "apps/mobile/src/components/candle-chart.tsx": "c754c0054ff4c14563b7694f7674acfed20eff468e2f848c14796a597b2365ae",
+      "apps/mobile/src/lib/line-indicators.ts": "507f10bd56deb7e1e2ab520549b00026934183aa55bef78bafba9dfb213e0063",
+      "apps/mobile/src/lib/market-resource.ts": "0a3be098fad0a10bdeb30cc3711c9a1b5403d04aa8920bd7a3d4a6f0f39c2dd2"
+    }
+  },
+  "captures": [
+    {
+      "destination": "captures/native-markets-overview.png",
+      "sha256": "67f5cf3e02661459997d813c74e1b5423269714c2c476fa822dea89b5bb9d299",
+      "device_clock_minute_utc": "2026-11-08 09:01",
+      "scope": "Native Markets overview on public BTC/USD reference data. The screen showed CoinGecko response retrieval 2026-11-08T09:00:59.060Z and provider update 2026-11-08T08:59:57.000Z after the on-screen Refresh action."
+    },
+    {
+      "destination": "captures/native-markets-chart-indicators.png",
+      "sha256": "1e181fc3e9f6f6d2682d7a01a1e4467f88e7b588c42572494e7c75f4303421db",
+      "device_clock_minute_utc": "2026-11-08 09:01",
+      "scope": "BTC/USD one-week Line view. The selected sample was 120/120 of 120 plotted samples, 120 of 169 available samples visible, sample time 2026-11-08T08:00:20Z, line/chart retrieval 08:48:12.523Z, and sparkline retrieval 08:01:50.628Z. SMA 20, EMA 20, and RSI 14 were enabled and visible."
+    }
+  ],
+  "freshness_observation": "The explicit Refresh updated the overview quote and its provider/retrieval timestamps. The displayed historical chart and sparkline retained older, separately labelled retrieval times. This does not assert that the sources share a freshness interval or that any price is an execution quote.",
+  "privacy_scope": "No account sign-in, wallet balance, portfolio holding, contact, payment, or customer/business report was accessed. The reviewed captures show public market data and UI only; notification text is not visible."
+}

@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="publication-packs/README.md">
-    <img src="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/artwork/concept-cover-wide.png" alt="PayPal Markets — independent concept cover for Markets, Portfolio and Discover" width="880" />
+    <img src="publication-packs/releases/paypal-markets-CONCEPT-20261111-v9/artwork/concept-cover-wide.png" alt="PayPal Markets — independent concept cover for Markets, Portfolio and Discover" width="880" />
   </a>
 </p>
 
@@ -13,9 +13,9 @@
   &nbsp;·&nbsp;
   <a href="publication-packs/README.md"><strong>Explore the publication pack</strong></a>
   &nbsp;·&nbsp;
-  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8.zip"><strong>Download edition v8</strong></a>
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261111-v9.zip"><strong>Download edition v9</strong></a>
   &nbsp;·&nbsp;
-  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/README.md">Read its scope and evidence</a>
+  <a href="publication-packs/releases/paypal-markets-CONCEPT-20261111-v9/README.md">Read its scope and evidence</a>
 </p>
 
 > **Independent concept.** This project is not an official PayPal or Venmo product. No affiliation, endorsement or trademark licence is claimed.
@@ -45,7 +45,7 @@ Tracked assets match the seven cryptocurrencies listed on [PayPal's UK help page
 
 ## Start locally
 
-The [current local acceptance record](docs/LOCAL-UPGRADE-ACCEPTANCE-20261106.md) distinguishes implemented source, browser checks, device checks and remaining release gates. The published [PayPal Markets CONCEPT v8 pack](publication-packs/releases/paypal-markets-CONCEPT-20261108-v8/README.md) includes reviewed artwork, historical website imagery, Expo Web captures, fictional Operations previews, and a time-stamped native Android Markets capture. Browse the [GitHub gallery](publication-packs/START-HERE.md), download the [pack ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261108-v8.zip), or open the [publication-pack index](publication-packs/README.md). It does not imply PayPal affiliation, endorsement, or production readiness.
+The [current local acceptance record](docs/LOCAL-UPGRADE-ACCEPTANCE-20261106.md) distinguishes implemented source, browser checks, device checks and remaining release gates. The latest [PayPal Markets CONCEPT v9 pack](publication-packs/releases/paypal-markets-CONCEPT-20261111-v9/README.md) includes dark artwork, dated native Shop and Markets screens, historical Light-mode previews, fictional Operations examples, and a written US/USD website Shop review. Browse the [GitHub gallery](publication-packs/START-HERE.md), download the [v9 pack ZIP](publication-packs/releases/paypal-markets-CONCEPT-20261111-v9.zip), or open the [publication-pack index](publication-packs/README.md). The pack does not demonstrate live checkout or an agent-controlled spendable wallet.
 
 ```bash
 npm install

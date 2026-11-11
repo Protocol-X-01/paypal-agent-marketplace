@@ -1,0 +1,35 @@
+{
+  "base_commit": "ab53406c42dd8631238cedffcfcf222be39ada35",
+  "files": [
+    {
+      "path": "src/app/components/marketplace.tsx",
+      "sha256": "928a5b8b4c185eccc9673020238729bf33abc61c8629599798e638cd71425311"
+    },
+    {
+      "path": "src/app/components/marketplace.module.css",
+      "sha256": "3375743ec13aa6f1ff8167d618a22ff83c6393292cb5de77cd3dad3421d14b09"
+    },
+    {
+      "path": "src/app/components/site-shell.tsx",
+      "sha256": "8e69f1538b3454966f676a51f478d25df42d20b6cd5f926351830b61978187a0"
+    },
+    {
+      "path": "src/app/globals.css",
+      "sha256": "b0fc89394e8ee8d3b89bde94d32f4992632e3971cb3e13f255798c2256990cca"
+    },
+    {
+      "path": "apps/mobile/src/app/shop.tsx",
+      "sha256": "7ad86290b257884a70c0e2f31b7e67ec70bfd1bfc6f8aa1d0cb094b6326dba53"
+    },
+    {
+      "path": "apps/mobile/src/lib/channel3.ts",
+      "sha256": "b3e6ec0424219772d756be189f7bb2edae53971e60bcc23e635f13bdb021b9bf"
+    },
+    {
+      "path": "apps/mobile/src/lib/shop-storefront.ts",
+      "sha256": "9490f6b71b8dd7c02c49c5df211c010ae9d2ae2cdcd8132d04427e86f3132689"
+    }
+  ],
+  "recorded_at": "2026-11-11T12:10:20Z",
+  "working_tree_status": "Selected files are from a dirty local review checkout; this pack contains no application source or binary."
+}

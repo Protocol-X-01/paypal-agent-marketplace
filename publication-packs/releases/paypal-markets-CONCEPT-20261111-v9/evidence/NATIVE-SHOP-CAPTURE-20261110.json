@@ -1,0 +1,12 @@
+{
+  "artifact": "Installed app session; exact APK and runtime bundle identity were not recorded.",
+  "captured_at": "2026-11-10T06:27:00Z",
+  "limits": [
+    "Prices, stock and advertised commission values are a dated snapshot from 10 November 2026, not current retailer confirmation.",
+    "This screenshot proves only the installed screen presentation; it does not prove a successful retailer handoff or checkout."
+  ],
+  "scope": "Shop screen with Channel3-reported similar product choices and regular retailer cards. Visible USD prices, reported stock, starred advertised rates and check/refresh actions. No account balance or customer identity is visible.",
+  "screenshot_dimensions": "1220x2712",
+  "screenshot_sha256": "f372b3162e49c90f54824080d9fd4c82eb5ef8c46295e760aacabe8c1b5831cc",
+  "surface": "Xiaomi Android 15 phone, native PayPal Markets app screen, 1220 x 2712 pixels."
+}

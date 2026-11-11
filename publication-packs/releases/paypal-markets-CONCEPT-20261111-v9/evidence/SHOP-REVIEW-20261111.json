@@ -1,0 +1,24 @@
+{
+  "limits": [
+    "The browser screenshot was visually inspected but was not saved into this pack; this record is a written observation, not an image capture.",
+    "Search result count, product prices, reported stock and commissions are point-in-time values and may change.",
+    "The selected US/USD storefront does not guarantee domestic shipping or item-level PayPal eligibility; retailer geography may be ambiguous.",
+    "No retailer link was opened and no checkout or payment was attempted."
+  ],
+  "observed_search": {
+    "displayed_result_count": 24,
+    "maximum_price_filter": "USD 150",
+    "phrase": "wireless headphones",
+    "retrieved_at": "2026-11-11T12:09:56.795Z",
+    "shopping_storefront": "United States · USD"
+  },
+  "reviewed_at": "2026-11-11T12:10:20Z",
+  "source": "Dirty local review checkout based on ab53406c42dd8631238cedffcfcf222be39ada35; selected source hashes are in SOURCE-SNAPSHOT-20261111.json.",
+  "surface": "Local PayPal Markets website preview in a browser; Shop / Discover, narrow phone-sized viewport.",
+  "visual_observations": [
+    "Dark charcoal/blue layout keeps retailer product photography on bright image panels.",
+    "Product cards display the item name, visible USD price, reported stock, retailer and click-through action.",
+    "A compact starred commission note and one shared disclosure are visible above the results.",
+    "The shopping storefront is independent from the portfolio display-currency control; the latter showed GBP while the storefront showed US/USD."
+  ]
+}
