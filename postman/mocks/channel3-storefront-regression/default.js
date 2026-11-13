@@ -19,6 +19,20 @@ const server = http.createServer((req, res) => {
     const modeled = (country === 'GB' && currency === 'GBP' && language === 'en')
       || (country === 'US' && currency === 'USD' && language === 'en')
       || (country === 'DE' && currency === 'GBP' && language === 'de');
+    if (req.url === '/v1/search' && body.query === 'Please help me find comfortable over-ear headphones from Best Buy for travel under $150') {
+      if (country !== 'US' || currency !== 'USD' || language !== 'en' || body.config?.mode !== 'agentic'
+          || body.config?.collection_id !== 'fixture-collection' || body.limit !== 6
+          || body.filters?.price?.max_price !== 150 || body.filters?.website_ids?.[0] !== 'p1PB') {
+        return reply(501, { error: 'Synthetic assisted search is not modeled for this configuration.' });
+      }
+      return reply(200, { products: [{ id: 'fixture-agentic', title: 'Synthetic headphones', offers: [{
+        domain: 'bestbuy.com', url: 'https://bestbuy.com/synthetic-item', availability: 'InStock', condition: 'new',
+        price: { price: 99, currency: 'USD' },
+      }, {
+        domain: 'bestbuy.com', url: 'https://other.example/mismatched-item', availability: 'InStock', condition: 'new',
+        price: { price: 99, currency: 'USD' },
+      }] }], next_page_token: null });
+    }
     if (req.url === '/v1/search' && body.query === 'paged headphones') {
       if (country !== 'GB' || currency !== 'GBP' || language !== 'en' || body.config?.collection_id !== 'fixture-collection' || body.limit !== 1) {
         return reply(501, { error: 'Synthetic paged search is not modeled for this configuration.' });

@@ -35,6 +35,16 @@ export async function GET(request: NextRequest) {
   const cursor = params.get('pageToken');
   if (cursor !== null && (!cursor || cursor.length > 6144)) return json(request, { error: 'Restart this catalog selection to load more products.' }, { status: 400 });
 
+  let locale: ReturnType<typeof getChannel3Locale>;
+  try {
+    locale = getChannel3Locale(isStorefront(storefront) ? storefront : undefined);
+  } catch {
+    return json(request, { error: 'The curated catalog is temporarily unavailable. Please try again later.' }, { status: 503 });
+  }
+  if (retailer && !retailer.storefronts.some((country) => country === locale.country)) {
+    return json(request, { error: `This retailer is not available in the ${locale.country} storefront.` }, { status: 400 });
+  }
+
   if (!takeChannel3RateLimit(request)) {
     return json(
       request,
@@ -44,7 +54,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const locale = getChannel3Locale(isStorefront(storefront) ? storefront : undefined);
     const binding = JSON.stringify({ section: section?.id ?? null, categoryId: section?.categoryId ?? null, retailer: retailer?.id ?? null, websiteId: retailer?.websiteId ?? null, collectionId: getRequiredChannel3CollectionId(), locale, limit });
     const providerToken = cursor === null ? undefined : decodeCatalogPageToken(cursor, binding);
     if (providerToken === null) return json(request, { error: 'Restart this catalog selection to load more products.' }, { status: 400 });

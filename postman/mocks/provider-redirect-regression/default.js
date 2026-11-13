@@ -53,7 +53,7 @@ http.createServer((req, res) => {
       res.writeHead(307, { location: scenario === 'same' ? sameOriginTarget : crossOriginTarget });
       return res.end();
     }
-    if (group === 'c3search' || group === 'c3browse') return send(res, 200, { products: [{ id: 'synthetic-product' }] });
+    if (group === 'c3search' || group === 'c3browse') return send(res, 200, { products: [{ id: 'synthetic-product', title: 'Synthetic product', offers: [] }] });
     if (group === 'quotes') return send(res, 200, [{ id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', current_price: 100, market_cap: 100, total_volume: 10, high_24h: 110, low_24h: 90 }]);
     if (group === 'chart') return send(res, 200, { prices: [[1000, 100], [2000, 101]], market_caps: [[1000, 1000]], total_volumes: [[1000, 10]] });
     if (group === 'token') return send(res, 200, { access_token: 'synthetic-token', expires_in: 3600 });

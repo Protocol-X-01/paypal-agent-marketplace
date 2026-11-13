@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { decodeCatalogPageToken, encodeCatalogPageToken, getChannel3CollectionId, getChannel3Locale, search } from "@/lib/channel3";
+import { Channel3TimeoutError, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3CollectionId, getChannel3Locale, requestedChannel3Retailer, search } from "@/lib/channel3";
 import { intersectPriceRanges, MAX_MARKETPLACE_PRICE, parseNaturalPriceIntent } from "@/lib/marketplace-price-range";
 import { takeChannel3RateLimit } from "@/lib/channel3-rate-limit";
 import { acquireClientSlot } from "@/lib/request-limits";
@@ -8,6 +8,7 @@ import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors
 
 const inputSchema = z.object({
   query: z.string().trim().min(2).max(120),
+  mode: z.enum(["default", "agentic"]).optional(),
   limit: z.number().int().min(1).max(24).optional(),
   storefront: z.enum(["GB", "US"]).optional(),
   priceRange: z.object({
@@ -22,7 +23,7 @@ const inputSchema = z.object({
     }
   }).optional(),
   pageToken: z.string().min(1).max(6144).optional(),
-});
+}).strip();
 
 const MAX_SEARCH_BODY_BYTES = 8 * 1024;
 const BODY_READ_TIMEOUT_MS = 3_000;
@@ -160,7 +161,8 @@ export async function POST(request: NextRequest) {
       const invalidStorefront = parsed.error.issues.some((issue) => issue.path[0] === "storefront");
       const invalidPriceRange = parsed.error.issues.some((issue) => issue.path[0] === "priceRange");
       const invalidPageToken = parsed.error.issues.some((issue) => issue.path[0] === "pageToken");
-      return rejectRequest(request, invalidStorefront ? "Choose the GB or US storefront." : invalidPriceRange ? "Enter a valid price range in your storefront currency." : invalidPageToken ? "Restart this search to load more products." : "Enter a search phrase between 2 and 120 characters.", 400);
+      const invalidMode = parsed.error.issues.some((issue) => issue.path[0] === "mode");
+      return rejectRequest(request, invalidStorefront ? "Choose the GB or US storefront." : invalidPriceRange ? "Enter a valid price range in your storefront currency." : invalidPageToken ? "Restart this search to load more products." : invalidMode ? "Choose quick search or Channel3-assisted search." : "Enter a search phrase between 2 and 120 characters.", 400);
     }
     input = parsed.data;
   } finally {
@@ -170,6 +172,7 @@ export async function POST(request: NextRequest) {
   }
 
   const query = input.query;
+  const mode = input.mode ?? "default";
   const limit = input.limit ?? 6;
   let locale: ReturnType<typeof getChannel3Locale>;
   try {
@@ -184,7 +187,13 @@ export async function POST(request: NextRequest) {
     return json(request, { error: "The selected price range conflicts with the budget in your search." }, { status: 400 });
   }
   const priceRange = mergedPriceRange.range;
-  const providerQuery = intent.range ? intent.query || PRICE_ONLY_PROVIDER_QUERY : query;
+  const retailer = requestedChannel3Retailer(query);
+  if (retailer && locale.country !== retailer.storefront) {
+    return json(request, { error: `${retailer.title} offers are only available in the US storefront. Switch to US to continue.` }, { status: 400 });
+  }
+  // Agentic search plans from the shopper's full natural-language brief. The
+  // structured budget filter is still sent independently to Channel3.
+  const providerQuery = mode === "agentic" ? query : intent.range ? intent.query || PRICE_ONLY_PROVIDER_QUERY : query;
   if (!takeChannel3RateLimit(request)) {
     return json(
       request,
@@ -194,10 +203,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const binding = JSON.stringify({ kind: "search", query, providerQuery, priceRange, collectionId: getChannel3CollectionId() ?? null, locale, limit });
+    const binding = JSON.stringify({ kind: "search", query, providerQuery, mode, priceRange, retailer: retailer?.id ?? null, collectionId: getChannel3CollectionId() ?? null, locale, limit });
     const providerToken = input.pageToken === undefined ? undefined : decodeCatalogPageToken(input.pageToken, binding);
     if (providerToken === null) return json(request, { error: "Restart this search to load more products." }, { status: 400 });
-    const result = await search({ query: providerQuery, limit, mode: "default", locale, pageToken: providerToken, ...(priceRange ? { priceRange } : {}) });
+    const result = await search({ query: providerQuery, limit, mode, locale, pageToken: providerToken, ...(priceRange ? { priceRange } : {}), ...(retailer ? { retailerWebsiteId: retailer.websiteId, retailerDomain: retailer.domain } : {}) });
     if (providerToken && result.next_page_token === providerToken) throw new Error("Channel3 repeated its continuation");
     const nextPageToken = result.next_page_token ? encodeCatalogPageToken(result.next_page_token, binding) : null;
     const retrievedAt = new Date().toISOString();
@@ -209,6 +218,7 @@ export async function POST(request: NextRequest) {
         storefront: locale.country,
         currency: locale.currency,
         query,
+        ...(input.mode !== undefined ? { searchMode: mode } : {}),
         priceRange,
         retrievedAt,
         products: result.products.slice(0, limit),
@@ -216,7 +226,14 @@ export async function POST(request: NextRequest) {
       },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof Channel3TimeoutError) {
+      return json(
+        request,
+        { error: "Product search took too long. Please try again." },
+        { status: 504 },
+      );
+    }
     return json(
       request,
       { error: "The product catalog is temporarily unavailable. Please try again later." },

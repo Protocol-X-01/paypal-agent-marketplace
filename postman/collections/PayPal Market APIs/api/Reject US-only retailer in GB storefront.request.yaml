@@ -1,0 +1,23 @@
+$kind: http-request
+description: Reject an explicitly US-only retailer in the GB storefront before calling Channel3.
+url: '{{baseUrl}}/api/marketplace/catalog?retailer=target&storefront=GB'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: retailer
+    value: target
+  - key: storefront
+    value: GB
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("rejects the retailer and storefront mismatch before provider work", function () {
+        pm.response.to.have.status(400);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        pm.expect(pm.response.json().error).to.match(/not available in the GB storefront/i);
+      });
+settings: {}
+order: 2600

@@ -13,8 +13,9 @@ import market_currency_simulation as isolation
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = (
-    'src/lib/channel3.ts', 'src/lib/channel3-storefront.ts',
-    'src/lib/channel3-catalog.ts', 'src/lib/mobile-web-cors.ts', 'src/lib/request-limits.ts',
+    'src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/marketplace-safety.ts',
+    'src/lib/channel3-catalog.ts', 'src/lib/marketplace-price-range.ts',
+    'src/lib/mobile-web-cors.ts', 'src/lib/request-limits.ts',
     'src/app/api/marketplace/search/route.ts', 'src/app/api/marketplace/catalog/route.ts',
     'tests/channel3-response-https-driver.cjs',
 )

@@ -21,9 +21,11 @@ export function safeMarketplaceUrl(value: unknown): string | null {
 /** An offer may link to its listed retailer or Channel3's affiliate host. */
 export function safeMarketplaceOfferUrl(value: unknown, retailerDomain: string): string | null {
   const url = safeMarketplaceUrl(value);
-  if (!url) return null;
+  if (!url || typeof retailerDomain !== "string" || !/^[a-z0-9.-]{1,253}$/i.test(retailerDomain)) return null;
+  const domain = retailerDomain.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  if (!safeMarketplaceUrl(`https://${domain}`)) return null;
   const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
-  return hostname.replace(/^www\./, "") === retailerDomain || hostname === "buy.trychannel3.com" ? url : null;
+  return hostname.replace(/^www\./, "") === domain || hostname === "buy.trychannel3.com" ? url : null;
 }
 
 /** Restrict the initial image URL to Channel3's image host. */
