@@ -63,6 +63,7 @@
 .channelComparison { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .channelComparison h6 { margin: 0; color: var(--foreground); font-size: 13px; line-height: 1.4; }
 .channelComparison > p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.channelChart { width: 100%; height: 184px; margin: 10px 0 4px; }
 .channelComparison ul { display: grid; gap: 0; margin: 10px 0 0; padding: 0; list-style: none; }
 .channelComparison li { padding: 10px 0; border-top: 1px solid var(--line); }
 .channelSummary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
@@ -70,11 +71,6 @@
 .channelComparison li strong, .channelComparison li span { display: block; overflow-wrap: anywhere; }
 .channelComparison li strong { color: var(--foreground); font-size: 12px; line-height: 1.4; }
 .channelComparison li span { margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.channelBars { display: grid; gap: 5px; margin-top: 10px; }
-.channelBar { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 8px; }
-.channelComparison .channelBar span { margin: 0; font-size: 10px; }
-.channelTrack { height: 6px; overflow: hidden; border-radius: 999px; background: var(--surface-blue); }
-.channelTrack i { display: block; height: 100%; border-radius: inherit; }
 .gridNote { margin: 14px 0 10px; }
 .grid { width: 100%; min-width: 0; height: 320px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .mobileHint { display: none; margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }

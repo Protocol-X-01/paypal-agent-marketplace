@@ -72,6 +72,8 @@ test("both PayPal Activity previews label tiny changes as included report rows",
       "@/components/native-button": { NativeButton: "NativeButton" },
       "@/lib/business-percentage": nativePercentage,
       "@/lib/paypal-activity-clipboard": { canReadActivityClipboard: () => false, usableEndDate: () => false },
+      "@/lib/palette": { palette: { line: "#000", surface: "#111", blue: "#07e", blueWash: "#123" } },
+      "@/lib/theme-context": { useAppearanceStyles: (styles) => styles, usePalette: () => ({ muted: "#aaa" }) },
       "@/lib/report-lifecycle": { watchReportLifecycle() {} },
     })).PayPalActivityPanel({ onReportChange() {} });
     for (const tree of [web, native]) {
