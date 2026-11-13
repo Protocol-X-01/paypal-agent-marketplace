@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { Channel3TimeoutError, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3CollectionId, getChannel3Locale, requestedChannel3Retailer, search } from "@/lib/channel3";
+import { Channel3BudgetExceededError, Channel3TimeoutError, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3CollectionId, getChannel3Locale, requestedChannel3Retailer, search } from "@/lib/channel3";
 import { intersectPriceRanges, MAX_MARKETPLACE_PRICE, parseNaturalPriceIntent } from "@/lib/marketplace-price-range";
 import { takeChannel3RateLimit } from "@/lib/channel3-rate-limit";
 import { acquireClientSlot } from "@/lib/request-limits";
@@ -227,6 +227,12 @@ export async function POST(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof Channel3BudgetExceededError) {
+      return json(request, { error: "The shared product-search budget is temporarily exhausted. Please try again later." }, {
+        status: 429,
+        headers: { "Retry-After": String(error.retryAfterSeconds), "Cache-Control": "no-store" },
+      });
+    }
     if (error instanceof Channel3TimeoutError) {
       return json(
         request,

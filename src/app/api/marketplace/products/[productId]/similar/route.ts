@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { findSimilarProducts, getChannel3Locale } from "@/lib/channel3";
+import { Channel3BudgetExceededError, findSimilarProducts, getChannel3Locale } from "@/lib/channel3";
 import { isStorefront } from "@/lib/channel3-storefront";
 import { takeChannel3RateLimit } from "@/lib/channel3-rate-limit";
 import { safeMarketplaceOfferUrl } from "@/lib/marketplace-safety";
@@ -66,7 +66,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
       retrievedAt: new Date().toISOString(),
       products,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Channel3BudgetExceededError) {
+      return json(request, { error: "The shared product-search budget is temporarily exhausted. Please try again later." }, {
+        status: 429,
+        headers: { "Retry-After": String(error.retryAfterSeconds), "Cache-Control": "no-store" },
+      });
+    }
     return json(request, { error: "Similar products could not be refreshed. Please try again shortly." }, { status: 503 });
   }
 }

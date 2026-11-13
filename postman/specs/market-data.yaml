@@ -1,13 +1,28 @@
 openapi: 3.1.0
 info:
   title: PayPal Agent Marketplace Market Data API
-  version: 0.6.1
+  version: 0.6.2
   description: >-
     Public crypto market metrics and chart data for the mobile marketplace
     experience. Provider credentials remain on the server. These endpoints do
     not expose wallet balances or execute transactions. Cross-origin browser
     requests are restricted to exact origins in MOBILE_WEB_ORIGINS; local Expo
     origins are allowed only outside production. Credentialed CORS is disabled.
+    Production Channel3 marketplace requests use fixed UTC-epoch-aligned second,
+    minute, and day windows, not rolling windows. The app-owned demonstration
+    proposal is 2 requests per second, 30 per minute, and 100 per day; the
+    migration leaves all quotas NULL until an operator configures them. A
+    second-window cap of 2 permits up to 4 requests in a rolling second because
+    adjacent fixed windows can both be used. This is below Channel3's documented
+    default lookup limit of 5 per second only when no other client uses the same
+    API key. Minute/day boundaries can also allow nearly twice a configured
+    limit in rolling intervals. Verify current provider limits, reset semantics,
+    account billing, and any other API-key use before production configuration.
+    The backend counter includes only this deployment's Channel3 API calls; it
+    excludes product image/CDN downloads and requests after opening a retailer
+    page. See docs/CHANNEL3-SHARED-REQUEST-BUDGET.md and the official
+    https://channel3.ai/docs/faq/rate-limits and https://channel3.ai/docs/pricing
+    for current provider details.
 servers:
   - url: /
 paths:
@@ -434,8 +449,22 @@ paths:
         a token. Each continuation is a separate rate-limited request. Provider ranking and catalog contents
         can change between pages, so exhausting a bounded search does not prove
         that a product is absent from the collection.
-        All responses, including validation errors and preflights, carry
-        Cache-Control: no-store.
+        In production, each actual Channel3 request reserves one unit from each
+        shared deployment-wide fixed UTC second, minute, and day window before
+        fetch. The proposed app-owned demonstration caps are 2/second,
+        30/minute, and 100/day, but the migration leaves the values NULL and
+        production remains unavailable until an operator configures reviewed
+        values. The 2-per-fixed-second cap allows up to 4 calls in a rolling
+        second across a boundary; this is below Channel3's documented default
+        lookup limit of 5/second only if no other client uses the same API key.
+        The fixed minute/day windows can each allow nearly twice their limit in
+        a rolling interval around a reset. Verify the provider's current limits,
+        reset behavior, account plan and shared-key usage before configuration.
+        If any window is exhausted, the request returns 429 with Retry-After
+        and does not consume another window. Missing or invalid budget
+        configuration/storage fails closed with 503 before Channel3 is called.
+        Every continuation reserves another request. All responses,
+        including validation errors and preflights, carry Cache-Control: no-store.
       requestBody:
         required: true
         description: JSON request body, limited to 8192 UTF-8 bytes (8 KiB); the body must finish reading within 3 seconds. Unrecognized top-level fields are ignored and never forwarded to Channel3.
@@ -517,7 +546,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "429":
-          description: Search request limit reached
+          description: The per-client limiter or a shared fixed-second, fixed-minute, or UTC-day provider quota is exhausted; shared quota denials include Retry-After and consume none of the windows
           headers:
             Retry-After:
               description: Seconds to wait before retrying
@@ -530,8 +559,7 @@ paths:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
           description: >-
-            Channel3 search or its default locale is not configured correctly,
-            the provider is temporarily unavailable, its response exceeds the
+            Channel3 search, the shared production budget, or its default locale is not configured correctly; shared-budget storage failures fail closed before provider calls. The provider is temporarily unavailable, its response exceeds the
             app's limit, contains malformed UTF-8 or JSON, or has an invalid
             product shape, or the request-body reading capacity is temporarily
             full. The capacity
@@ -634,7 +662,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceProductUnavailableResponse"
         "429":
-          description: Shared marketplace request limit reached
+          description: Per-client or deployment-wide Channel3 quota is exhausted; the shared quota denial includes Retry-After
           headers:
             Retry-After:
               description: Seconds to wait before retrying
@@ -646,7 +674,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
-          description: Channel3 is not configured, unavailable, timed out, returned an invalid product, or no safe initial retailer link could be confirmed
+          description: Channel3 or production budget configuration/storage is unavailable, provider data is invalid, or no safe initial retailer link could be confirmed
           content:
             application/json:
               schema:
@@ -686,6 +714,10 @@ paths:
         reported in stock and returns provider-ranked products only when they have at
         least one explicit in-stock offer with a safe retailer or affiliate URL.
         The response is not cached.
+        In production, each similar-product call reserves one unit from each
+        shared, administrator-configured Channel3 fixed-second, fixed-minute,
+        and UTC-day quota. Exhaustion returns 429 with Retry-After;
+        missing/invalid budget setup returns 503 before contacting Channel3.
         Channel3's similar endpoint is not scoped to the app-wide curated
         collection; results are Channel3 recommendations for the selected
         storefront. The client accepts only explicit in-stock offers with safe
@@ -753,7 +785,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
-          description: Channel3 is unavailable, timed out, or returned invalid products
+          description: Channel3 or production budget configuration/storage is unavailable, timed out, or returned invalid products
           content:
             application/json:
               schema:
@@ -814,7 +846,12 @@ paths:
         rejected, including when it describes encoded bytes. Provider headers
         and body must arrive within the existing eight-second request deadline.
         This is an app limit, not a Channel3 maximum.
-        Curated browsing always requires CHANNEL3_COLLECTION_ID to contain a
+        In production, every catalog page reserves one request from the shared,
+        administrator-configured Channel3 fixed-second, fixed-minute, and
+        UTC-day quotas. Quota
+        exhaustion returns 429 with Retry-After; missing or invalid budget
+        configuration/storage returns 503 without contacting Channel3. Curated
+        browsing always requires CHANNEL3_COLLECTION_ID to contain a
         valid shared collection ID. Missing or invalid configuration returns
         503 before calling Channel3. A configured collection is always applied
         to browse requests; there is no unscoped fallback. Explicit text search
@@ -882,8 +919,9 @@ paths:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
         "503":
           description: >-
-            The shared Channel3 collection, browse configuration, or default
-            locale is missing or invalid; the provider is temporarily
+            The shared Channel3 collection, browse configuration, production
+            budget configuration/storage, or default locale is missing or invalid;
+            the provider is temporarily
             unavailable; or its response exceeds the app's limit, times out,
             contains malformed UTF-8 or JSON, or has an invalid product shape.
           content:

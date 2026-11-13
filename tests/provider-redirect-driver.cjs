@@ -50,7 +50,9 @@ async function run() {
   process.env.PAYPAL_CLIENT_SECRET = 'synthetic-secret';
   const storefront = load('src/lib/channel3-storefront.ts');
   const safety = load('src/lib/marketplace-safety.ts');
-  const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront, '@/lib/marketplace-safety': safety });
+  const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super('budget exhausted'); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront, '@/lib/marketplace-safety': safety, '@/lib/channel3-request-budget': budget });
   const assets = load('src/lib/market-assets.ts');
   const market = load('src/lib/market-data.ts', { 'server-only': {}, 'next/cache': { cacheLife() {} }, './market-assets': assets }, [
     ['https://api.coingecko.com/api/v3', `${upstream}/gecko`],
