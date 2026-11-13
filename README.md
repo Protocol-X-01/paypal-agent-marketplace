@@ -95,11 +95,12 @@ The [local market simulation](postman/simulations/coingecko-currency-regression.
 
 - CoinGecko supplies broad market metrics and historical price series.
 - Channel3 supplies product discovery and retailer offers. It does not replace Venmo or process payments; purchases remain with the retailer.
+- The marketplace API supports Channel3-assisted search for a natural-language brief. It returns retailer offers and does not place an order or process a payment.
 - Customer-saved product lists are app-managed and remain in browser or device storage. The shared curated catalog is app-wide and uses Channel3 browse filters. A calendar-based seasonal edit highlights four categories at a time, keeps all categories available, and fetches current offers and advertised commissions when selected. Curated browsing requires a valid server-only `CHANNEL3_COLLECTION_ID`; missing or malformed configuration returns 503 without an unscoped browse. Explicit text search can omit the collection, while a configured ID scopes it. A new Everyday Discoveries collection was created from the Twitch rules on 2026-11-06 with four additional retailer inclusions; integration verification is recorded separately in the local acceptance report. This does not provide cross-device customer-list sync.
 - Venmo remains the customer wallet/payment surface. This prototype does not import wallet balances or initiate crypto trades.
 - The legacy agent chat, wallet, and checkout routes are retired. The PayPal webhook verifies deliveries and acknowledges them without crediting balances or issuing payouts. Payment flows should remain disabled until they have authenticated ownership, durable order mapping, and idempotent event processing.
 - Zapier MCP onboarding has run in read-only mode with Google Calendar and GitHub; calendar writes, AI payments, subscriptions, and other agent actions remain deferred.
-- The public Render demo is live at `https://paypal-markets-companion.onrender.com`. Its latest verified website deployment is `b40086e` (7 November 2026); GitHub `main` is at `ca3bc03`, a gallery-only commit marked `[skip render]`. On 9 November, read-only checks confirmed `/api/health` returns 200 and customer sign-in remains unavailable. See [hosted-state and release evidence](docs/DEPLOYMENT-CANDIDATE-20261106.md). Elastic has a guarded server telemetry scaffold, but live export remains unconfigured and unverified. The separate restricted Kernel agent account is not integrated.
+- The public Render demo is at `https://paypal-markets-companion.onrender.com`. Check the deployed revision and customer sign-in status before relying on a feature. See [hosted-state and release evidence](docs/DEPLOYMENT-CANDIDATE-20261106.md). Elastic has a guarded server telemetry scaffold, but live export remains unconfigured and unverified. The separate restricted Kernel agent account is not integrated.
 
 ## Render and PayPal webhooks
 
@@ -113,3 +114,7 @@ npx tsc --noEmit
 ```
 
 The Bryntum Scheduler trial bundle is kept outside the app's compile and lint inputs until its license and intended integration are settled. AG Grid Enterprise and AG Charts are installed; set `NEXT_PUBLIC_AG_GRID_LICENSE` for the Business workspace at build time. Because it is a `NEXT_PUBLIC_` value, Next.js includes it in client-side JavaScript: it is visible to browser users and is not a server secret. Handle its distribution according to the AG Grid license terms.
+
+## License
+
+Project-authored code and documentation are licensed under the MIT License. See [LICENSE](LICENSE). Third-party screenshots, imagery, trademarks, and other assets remain subject to their respective owners' rights. This independent concept does not imply affiliation with PayPal, Venmo, or any retailer.

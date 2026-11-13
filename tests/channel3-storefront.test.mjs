@@ -15,7 +15,8 @@ function load(source, aliases = {}) {
 async function source(path) { return readFile(new URL(path, import.meta.url), "utf8"); }
 
 const storefront = load(await source("../src/lib/channel3-storefront.ts"));
-const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront });
+const safety = load(await source("../src/lib/marketplace-safety.ts"));
+const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront, "@/lib/marketplace-safety": safety });
 const cors = load(await source("../src/lib/mobile-web-cors.ts"), { "server-only": {} });
 const catalog = load(await source("../src/lib/channel3-catalog.ts"));
 const priceRange = load(await source("../src/lib/marketplace-price-range.ts"));
@@ -43,6 +44,56 @@ global.fetch = async (url, options) => {
 process.env.CHANNEL3_API_KEY = "simulation-only";
 process.env.CHANNEL3_BASE_URL = "https://api.example.invalid";
 process.env.CHANNEL3_COLLECTION_ID = "collection-fixture";
+
+test("US PayPal retailer markers require an exact verified retailer host", () => {
+  assert.equal(storefront.isPayPalListedAtRetailer("www.bestbuy.com", "US"), true);
+  assert.equal(storefront.isPayPalListedAtRetailer("shop.walmart.com", "US"), true);
+  assert.equal(storefront.isPayPalListedAtRetailer("target.com", "US"), true);
+  assert.equal(storefront.isPayPalListedAtRetailer("cvs.com", "US"), false);
+  assert.equal(storefront.isPayPalListedAtRetailer("notbestbuy.com", "US"), false);
+  assert.equal(storefront.isPayPalListedAtRetailer("bestbuy.com", "GB"), false);
+});
+
+test("explicit retailer filters use the same website IDs as the curated catalog", () => {
+  for (const [id, phrase] of [["target", "from Target"], ["cvs", "at CVS"], ["walmart", "via Walmart"], ["bestbuy", "from Best Buy"]]) {
+    assert.equal(provider.requestedChannel3Retailer(`headphones ${phrase}`)?.websiteId, catalog.findChannel3CuratedRetailer(id)?.websiteId);
+  }
+});
+
+test("legacy extra search fields are ignored and never forwarded to Channel3", async () => {
+  calls = [];
+  const response = await post({ query: "headphones", mode: "agentic", storefront: "US", unknownOption: "local-only-fixture" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).searchMode, "agentic");
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.stringify(calls[0].body).includes("local-only-fixture"), false);
+});
+
+test("legacy search requests keep their original response shape", async () => {
+  calls = [];
+  const response = await post({ query: "headphones", storefront: "US" });
+  assert.equal(response.status, 200);
+  assert.equal("searchMode" in await response.json(), false);
+  assert.equal(calls[0].body.config.mode, "default");
+});
+
+test("search and catalog never return offer links that mismatch their listed retailer", async () => {
+  const originalPayload = providerPayload;
+  providerPayload = { products: [{ id: "safe-link-fixture", title: "Headphones", offers: [
+    { domain: "WWW.BESTBUY.COM.", url: "https://www.bestbuy.com/item", availability: "InStock", price: { price: 12, currency: "USD" } },
+    { domain: "bestbuy.com", url: "https://buy.trychannel3.com/item", availability: "InStock", price: { price: 12, currency: "USD" } },
+    { domain: "bestbuy.com", url: "https://other.example/item", availability: "InStock", price: { price: 12, currency: "USD" } },
+  ] }] };
+  try {
+    for (const request of [() => post({ query: "headphones", storefront: "US" }), () => get("section=audio&storefront=US")]) {
+      const response = await request();
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json()).products[0].offers.map(item => item.url), ["https://www.bestbuy.com/item", "https://buy.trychannel3.com/item"]);
+    }
+  } finally {
+    providerPayload = originalPayload;
+  }
+});
 
 function post(body) {
   return search.POST(new NextRequest("http://localhost:3000/api/marketplace/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
@@ -74,6 +125,165 @@ test("explicit storefronts map to the correct provider config in search and brow
       assert.equal(calls.length, 1);
       assert.deepEqual({ ...calls[0].body.config, mode: undefined }, { country, currency, language: "en", collection_id: "collection-fixture", mode: undefined });
     }
+  }
+});
+
+test("agentic search forwards the full brief, applies budget bounds, and binds continuations to mode", async () => {
+  const originalPayload = providerPayload;
+  const brief = "Please help me find comfortable over-ear headphones for travel under $150";
+  providerPayload = { products: [{ id: "agentic-example", title: "Travel headphones" }], next_page_token: "agentic-page-2" };
+  calls = [];
+  try {
+    const response = await post({ query: brief, mode: "agentic", storefront: "US" });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.searchMode, "agentic");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.query, brief, "agentic mode receives the complete shopper brief");
+    assert.equal(calls[0].body.config.mode, "agentic");
+    assert.deepEqual(calls[0].body.filters.price, { max_price: 150 });
+    assert.ok(body.nextPageToken);
+
+    const callsBeforeMismatch = calls.length;
+    const mismatchedContinuation = await post({ query: brief, mode: "default", storefront: "US", pageToken: body.nextPageToken });
+    assert.equal(mismatchedContinuation.status, 400);
+    assert.match((await mismatchedContinuation.json()).error, /restart this search/i);
+    assert.equal(calls.length, callsBeforeMismatch, "a mode-mismatched token never reaches Channel3");
+  } finally {
+    providerPayload = originalPayload;
+  }
+});
+
+test("explicit supported retailer requests constrain Channel3 and returned offers", async () => {
+  const originalPayload = providerPayload;
+  const offer = (domain) => ({ domain, url: `https://${domain}/headphones`, price: { price: 79, currency: "USD" }, availability: "InStock" });
+  providerPayload = { products: [
+    { id: "bestbuy-item", title: "Wireless headphones", offers: [offer("www.bestbuy.com"), offer("walmart.com")] },
+    { id: "walmart-only", title: "Another pair", offers: [offer("walmart.com")] },
+  ], next_page_token: "bestbuy-page-2" };
+  calls = [];
+  try {
+    const response = await post({ query: "Please order headphones from Best Buy under $100", mode: "agentic", storefront: "US" });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.searchMode, "agentic");
+    assert.deepEqual(calls[0].body.filters, { price: { max_price: 100 }, website_ids: ["p1PB"] });
+    assert.deepEqual(body.products.map(({ id }) => id), ["bestbuy-item"]);
+    assert.deepEqual(body.products[0].offers.map(({ domain }) => domain), ["www.bestbuy.com"]);
+    assert.equal(typeof body.nextPageToken, "string", "the user receives an opaque continuation token");
+    providerPayload = { products: [{ id: "bestbuy-page-two", title: "Another Best Buy result", offers: [offer("bestbuy.com"), offer("walmart.com")] }], next_page_token: null };
+    const nextPage = await post({ query: "Please order headphones from Best Buy under $100", mode: "agentic", storefront: "US", pageToken: body.nextPageToken });
+    assert.equal(nextPage.status, 200);
+    assert.equal(calls[1].body.page_token, "bestbuy-page-2", "the application-wrapped cursor reaches Channel3 only in its original search context");
+    assert.deepEqual(calls[1].body.filters, { price: { max_price: 100 }, website_ids: ["p1PB"] }, "the exact retailer and budget filters persist to later pages");
+    assert.deepEqual((await nextPage.json()).products.map(({ id }) => id), ["bestbuy-page-two"]);
+
+    for (const [phrase, id, domain] of [
+      ["from Target", "target", "target.com"],
+      ["at CVS", "cvs", "cvs.com"],
+      ["via Walmart", "walmart", "walmart.com"],
+    ]) {
+      assert.deepEqual(provider.requestedChannel3Retailer(`headphones ${phrase}`), {
+        id,
+        title: id === "target" ? "Target" : id === "cvs" ? "CVS" : "Walmart",
+        websiteId: id === "target" ? "QnTm" : id === "cvs" ? "oeWt" : "BsaX",
+        domain,
+        storefront: "US",
+      });
+    }
+    assert.equal(provider.requestedChannel3Retailer("Best Buy headphones"), null, "a retailer name without an explicit store phrase is not treated as a constraint");
+  } finally {
+    providerPayload = originalPayload;
+  }
+});
+
+test("recognized US retailer requests fail closed on the GB storefront", async () => {
+  calls = [];
+  const response = await post({ query: "Please find headphones from Best Buy", mode: "agentic", storefront: "GB" });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Best Buy offers are only available in the US storefront/i);
+  assert.equal(calls.length, 0, "unsupported storefronts never reach Channel3");
+});
+
+test("search removes known foreign retailer hosts for explicit storefronts", async () => {
+  const originalPayload = providerPayload;
+  const offer = (domain, currency) => ({ domain, url: `https://${domain}/item`, price: { price: 12, currency }, availability: "InStock" });
+  providerPayload = { products: [
+    { id: "mixed", title: "Mixed offers", offers: [
+      offer("target.com", "USD"), offer("store.target.com", "USD"), offer("cvs.com", "USD"), offer("walmart.com", "USD"), offer("bestbuy.com", "USD"), offer("store.example.us", "USD"), offer("staples.ca", "USD"), offer("bestbuy.co.uk", "USD"), offer("retailer.eu", "USD"),
+    ] },
+    { id: "canada-only", title: "Canada only", offers: [offer("retailer.ca", "USD")] },
+  ] };
+  try {
+    const usResponse = await post({ query: "calculator", storefront: "US" });
+    assert.equal(usResponse.status, 200);
+    const usProducts = (await usResponse.json()).products;
+    assert.deepEqual(usProducts.map(({ id }) => id), ["mixed", "canada-only"]);
+    assert.deepEqual(usProducts[0].offers.map(({ domain }) => domain), ["target.com", "store.target.com", "cvs.com", "walmart.com", "bestbuy.com", "store.example.us", "retailer.eu"]);
+    assert.deepEqual(usProducts[1].offers, []);
+
+    providerPayload = { products: [{ id: "mixed", title: "Mixed offers", offers: [
+      offer("amazon.co.uk", "GBP"), offer("retailer.ca", "GBP"), offer("store.example.us", "GBP"), offer("target.com", "GBP"), offer("cvs.com", "GBP"), offer("walmart.com", "GBP"), offer("bestbuy.com", "GBP"), offer("brand.com", "GBP"), offer("brand.eu", "GBP"),
+    ] }] };
+    const gbResponse = await post({ query: "calculator", storefront: "GB" });
+    assert.equal(gbResponse.status, 200);
+    assert.deepEqual((await gbResponse.json()).products[0].offers.map(({ domain }) => domain), ["amazon.co.uk", "brand.com", "brand.eu"]);
+
+    calls = [];
+    const wrongRegionRetailer = await get("retailer=target&storefront=GB");
+    assert.equal(wrongRegionRetailer.status, 400);
+    assert.match((await wrongRegionRetailer.json()).error, /not available in the GB storefront/i);
+    assert.equal(calls.length, 0);
+
+    calls = [];
+    const usRetailer = await get("retailer=target&storefront=US");
+    assert.equal(usRetailer.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.config.country, "US");
+  } finally {
+    providerPayload = originalPayload;
+  }
+});
+
+test("US search ranks in-stock USD offers from recognized local retailers first", async () => {
+  const originalPayload = providerPayload;
+  const offer = (domain, currency, availability = "InStock") => ({
+    domain,
+    url: `https://${domain}/item`,
+    price: { price: 12, currency },
+    availability,
+  });
+  providerPayload = { products: [{ id: "ranked", title: "Ranked offers", offers: [
+    offer("generic.example", "USD"),
+    offer("target.com", "USD", "OutOfStock"),
+    offer("walmart.com", "USD"),
+    offer("store.example.us", "USD"),
+    offer("retailer.co.uk", "USD"),
+    offer("bestbuy.com", "GBP"),
+  ] }] };
+  try {
+    const response = await post({ query: "backpack", storefront: "US" });
+    assert.equal(response.status, 200);
+    const products = await response.json();
+    assert.deepEqual(products.products[0].offers.map(({ domain }) => domain), [
+      "walmart.com",
+      "store.example.us",
+      "generic.example",
+      "bestbuy.com",
+      "target.com",
+    ]);
+
+    providerPayload = { products: [{ id: "ranked-gb", title: "UK ranked offers", offers: [
+      offer("generic.example", "GBP"),
+      offer("amazon.co.uk", "GBP"),
+      offer("retailer.us", "GBP"),
+    ] }] };
+    const gbResponse = await post({ query: "backpack", storefront: "GB" });
+    assert.equal(gbResponse.status, 200);
+    const gbProducts = await gbResponse.json();
+    assert.deepEqual(gbProducts.products[0].offers.map(({ domain }) => domain), ["amazon.co.uk", "generic.example"]);
+  } finally {
+    providerPayload = originalPayload;
   }
 });
 

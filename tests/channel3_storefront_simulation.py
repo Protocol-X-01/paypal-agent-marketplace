@@ -27,7 +27,7 @@ import market_currency_simulation as isolation
 
 SOURCES = (
     'package.json', 'package-lock.json', 'next.config.ts', 'next-env.d.ts', 'tsconfig.json',
-    'src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/channel3-catalog.ts',
+    'src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/marketplace-safety.ts', 'src/lib/channel3-catalog.ts',
     'src/lib/channel3-rate-limit.ts', 'src/lib/mobile-web-cors.ts', 'src/lib/request-limits.ts',
     'src/app/api/marketplace/search/route.ts', 'src/app/api/marketplace/catalog/route.ts',
 )

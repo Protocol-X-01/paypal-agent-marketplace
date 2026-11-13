@@ -1,0 +1,44 @@
+$kind: http-request
+description: Uses the shopper's full brief with Channel3 agentic search after an explicit action. A recognized budget remains a structured price filter. A named supported US retailer is an exact offer filter. This discovers offers only; it never creates an order or payment, and checkout remains with the retailer. Continuation tokens must keep the same mode, query, storefront, limit and effective price range. The app bounds the provider request to 20 seconds; this is not a provider-level latency guarantee.
+url: "{{baseUrl}}/api/marketplace/search"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "Please help me find comfortable over-ear headphones from Best Buy for travel under $150",
+      "mode": "agentic",
+      "limit": 6,
+      "storefront": "US"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("returns Channel3-assisted US discovery without checkout", function () {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        const body = pm.response.json();
+        pm.expect(body.provider).to.eql("Channel3");
+        pm.expect(body.searchMode).to.eql("agentic");
+        pm.expect(body.query).to.eql("Please help me find comfortable over-ear headphones from Best Buy for travel under $150");
+        pm.expect(body.storefront).to.eql("US");
+        pm.expect(body.currency).to.eql("USD");
+        pm.expect(body.priceRange).to.deep.equal({ maxPrice: 150 });
+        pm.expect(body.products).to.be.an("array");
+        pm.expect(body.products[0].offers.length).to.be.above(0);
+        for (const product of body.products) {
+          for (const offer of product.offers ?? []) {
+            pm.expect(offer.domain).to.match(/(^|\.)bestbuy\.com$/i);
+            pm.expect(offer.url).to.match(/^https:\/\/(?:(?:www\.)?bestbuy\.com|buy\.trychannel3\.com)(?:[\/?#]|$)/i);
+          }
+        }
+        pm.expect(body.nextPageToken === null || (typeof body.nextPageToken === "string" && body.nextPageToken.length <= 6144)).to.eql(true);
+      });
+settings: {}
+order: 3000

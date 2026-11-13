@@ -15,7 +15,8 @@ function load(source, aliases = {}) {
 async function source(path) { return readFile(new URL(path, import.meta.url), "utf8"); }
 
 const storefront = load(await source("../src/lib/channel3-storefront.ts"));
-const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront });
+const safety = load(await source("../src/lib/marketplace-safety.ts"));
+const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront, "@/lib/marketplace-safety": safety });
 const cors = load(await source("../src/lib/mobile-web-cors.ts"), { "server-only": {} });
 const catalog = load(await source("../src/lib/channel3-catalog.ts"));
 let rateAllowed = true;
@@ -23,7 +24,7 @@ const aliases = {
   "@/lib/channel3": provider,
   "@/lib/channel3-storefront": storefront,
   "@/lib/marketplace-price-range": load(await source("../src/lib/marketplace-price-range.ts")),
-  "@/lib/channel3-catalog": { ...catalog, findChannel3CuratedRetailer: id => id === "cvs" ? { id, title: "CVS", websiteId: "cvs.com" } : undefined },
+  "@/lib/channel3-catalog": { ...catalog, findChannel3CuratedRetailer: id => id === "cvs" ? { id, title: "CVS", websiteId: "cvs.com", storefronts: ["US"] } : undefined },
   "@/lib/mobile-web-cors": cors,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => rateAllowed },
   "@/lib/request-limits": { acquireClientSlot: () => () => {} },
@@ -71,10 +72,10 @@ test.after(() => {
 });
 
 test("catalog expands to24 real products and wraps exact-context provider pagination", async()=>{
- locale("GB","GBP","en");calls=[];providerPayload={products:Array.from({length:24},(_,i)=>({id:`p${i}`,title:`Product ${i}`})),next_page_token:"provider-next"};
- const response=await get("section=audio&retailer=cvs&storefront=GB");assert.equal(response.status,200);const body=await response.json();assert.equal(body.products.length,24);assert.equal(body.limit,24);assert.equal(body.retailer,"cvs");assert.notEqual(body.nextPageToken,"provider-next");assert.equal(calls[0].body.limit,24);assert.deepEqual(calls[0].body.filters.website_ids,["cvs.com"]);
- calls=[];providerPayload={products:[],next_page_token:null};const second=await get(`section=audio&retailer=cvs&storefront=GB&pageToken=${encodeURIComponent(body.nextPageToken)}`);assert.equal(second.status,200);assert.equal(calls[0].body.page_token,"provider-next");assert.equal((await second.json()).nextPageToken,null);
- for(const query of ["section=travel&retailer=cvs&storefront=GB","section=audio&retailer=cvs&storefront=US","section=audio&storefront=GB","section=audio&retailer=cvs&storefront=GB&limit=12"]){calls=[];const rejected=await get(`${query}&pageToken=${encodeURIComponent(body.nextPageToken)}`);assert.equal(rejected.status,400);assert.equal(rejected.headers.get("cache-control"),"no-store");assert.equal(calls.length,0)}
+ locale("US","USD","en");calls=[];providerPayload={products:Array.from({length:24},(_,i)=>({id:`p${i}`,title:`Product ${i}`})),next_page_token:"provider-next"};
+ const response=await get("section=audio&retailer=cvs&storefront=US");assert.equal(response.status,200);const body=await response.json();assert.equal(body.products.length,24);assert.equal(body.limit,24);assert.equal(body.retailer,"cvs");assert.notEqual(body.nextPageToken,"provider-next");assert.equal(calls[0].body.limit,24);assert.deepEqual(calls[0].body.filters.website_ids,["cvs.com"]);
+ calls=[];providerPayload={products:[],next_page_token:null};const second=await get(`section=audio&retailer=cvs&storefront=US&pageToken=${encodeURIComponent(body.nextPageToken)}`);assert.equal(second.status,200);assert.equal(calls[0].body.page_token,"provider-next");assert.equal((await second.json()).nextPageToken,null);
+ for(const query of ["section=travel&retailer=cvs&storefront=US","section=audio&retailer=cvs&storefront=GB","section=audio&storefront=US","section=audio&retailer=cvs&storefront=US&limit=12"]){calls=[];const rejected=await get(`${query}&pageToken=${encodeURIComponent(body.nextPageToken)}`);assert.equal(rejected.status,400);assert.equal(rejected.headers.get("cache-control"),"no-store");assert.equal(calls.length,0)}
 });
 test("retailer-only browsing and malformed query rejection never invent provider filters",async()=>{
  providerPayload={products:[]};calls=[];const response=await get("retailer=cvs&storefront=US&limit=12");assert.equal(response.status,200);assert.equal((await response.json()).section,null);assert.equal(calls[0].body.filters.category_ids,undefined);
@@ -84,7 +85,7 @@ test("catalog cursor expiry, tampering and provider oversized tokens fail closed
  const binding="catalog-test";const token=provider.encodeCatalogPageToken("next",binding,1000);assert.equal(provider.decodeCatalogPageToken(token,binding,1001),"next");assert.equal(provider.decodeCatalogPageToken(token,binding,901000),null);assert.equal(provider.decodeCatalogPageToken(token+"x",binding,1001),null);assert.throws(()=>provider.encodeCatalogPageToken("x".repeat(4097),binding));
 });
 test("commission remains offer-specific decimal fraction; malformed or missing is unknown",async()=>{
- const values=[0,0.05,0.5,1,null,-1,1.01,"5%",undefined];providerPayload={products:[{id:"p",title:"Product",offers:values.map(value=>({domain:"example.test",max_commission_rate:value}))}]};const response=await get("section=audio");assert.equal(response.status,200);const offers=(await response.json()).products[0].offers;assert.deepEqual(offers.map(o=>o.max_commission_rate),[0,0.05,0.5,1,null,null,null,null,undefined]);
+ const values=[0,0.05,0.5,1,null,-1,1.01,"5%",undefined];providerPayload={products:[{id:"p",title:"Product",offers:values.map(value=>({domain:"example.test",url:"https://example.test/item",max_commission_rate:value}))}]};const response=await get("section=audio");assert.equal(response.status,200);const offers=(await response.json()).products[0].offers;assert.deepEqual(offers.map(o=>o.max_commission_rate),[0,0.05,0.5,1,null,null,null,null,undefined]);
 });
 test("search accepts24 and rejects25",async()=>{providerPayload={products:[]};assert.equal((await post({query:"headphones",limit:24})).status,200);assert.equal(calls.at(-1).body.limit,24);assert.equal((await post({query:"headphones",limit:25})).status,400)});
 

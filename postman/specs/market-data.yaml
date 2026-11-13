@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PayPal Agent Marketplace Market Data API
-  version: 0.5.0
+  version: 0.6.1
   description: >-
     Public crypto market metrics and chart data for the mobile marketplace
     experience. Provider credentials remain on the server. These endpoints do
@@ -394,38 +394,58 @@ paths:
         An explicit GB or US storefront selects GBP or USD respectively.
         Omitting it retains the configured Channel3 locale; the response reports
         the country and currency actually requested from Channel3. Each offer's
-        own currency remains authoritative. Explicit priceRange values and
+        own currency remains authoritative. Offers on recognized country-coded
+        retailer domains and explicitly mapped curated-retailer domains are
+        removed when their market conflicts with the selected storefront;
+        generic domains remain unclassified because Channel3 does not provide
+        retailer shipping-region metadata. Explicit priceRange values and
         common budget phrases in query (for example, "under 150") are applied
         as structured price filters in that currency. A query made up only of
         a recognized budget phrase is allowed: the provider receives the
         generic term "products" with the structured filter. Currency symbols or
-        codes in a budget phrase must match the selected storefront. Channel3's
-        response is limited by
-        this application to 2097152 decoded bytes (2 MiB); a declared
+        codes in a budget phrase must match the selected storefront. The
+        explicit phrases "from", "at", or "via" followed by Target, CVS,
+        Walmart, or Best Buy in a search query apply an exact Channel3 retailer
+        filter for that US merchant. Only matching retailer offers are returned;
+        these retailer constraints are unavailable in the GB storefront and
+        return 400. The query is unchanged in the response. The
+        optional mode defaults to "default". "agentic" sends the complete
+        natural-language brief to Channel3's agentic search planner while also
+        applying any recognized budget as a structured price filter. Agentic
+        search can take several seconds. It discovers products only; the app
+        does not create an order or payment, and checkout remains with the
+        selected retailer. Offers are included only when the initial HTTPS URL
+        matches the listed retailer or Channel3 affiliate host. Continuation
+        tokens are bound to the requested mode.
+        Channel3's response is limited by this application to 2097152 decoded
+        bytes (2 MiB); a declared
         Content-Length above that limit is also rejected, including when it
-        describes encoded bytes. Provider headers and body must arrive within
-        the existing eight-second request deadline. This is an app limit, not a
-        claim about Channel3's maximum response size.
+        describes encoded bytes. The application allows 12 seconds for default
+        Channel3 search and 20 seconds for agentic search, including provider
+        response headers and body; other Channel3 endpoints retain an
+        eight-second provider deadline. These are application time limits, not
+        a provider latency guarantee or a claim about Channel3's maximum
+        response size.
         When CHANNEL3_COLLECTION_ID is configured, searches remain scoped to
         that collection without an unscoped fallback. A continuation token is
         application-wrapped, expires after 15 minutes, and is bound to the
-        exact search query, effective price range, collection, locale, and page
-        size. A changed selection requires a new search without a token. Each continuation is
-        a separate rate-limited request. Provider ranking and catalog contents
+        exact search query, requested mode, effective price range, collection,
+        locale, and page size. A changed selection requires a new search without
+        a token. Each continuation is a separate rate-limited request. Provider ranking and catalog contents
         can change between pages, so exhausting a bounded search does not prove
         that a product is absent from the collection.
         All responses, including validation errors and preflights, carry
         Cache-Control: no-store.
       requestBody:
         required: true
-        description: JSON request body, limited to 8192 UTF-8 bytes (8 KiB); the body must finish reading within 3 seconds.
+        description: JSON request body, limited to 8192 UTF-8 bytes (8 KiB); the body must finish reading within 3 seconds. Unrecognized top-level fields are ignored and never forwarded to Channel3.
         x-max-body-bytes: 8192
         x-body-read-timeout-ms: 3000
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: false
+              additionalProperties: true
               required: [query]
               properties:
                 query:
@@ -434,11 +454,23 @@ paths:
                   maxLength: 120
                   description: >-
                     Product search text or a supported price-only phrase.
-                    Common budget phrases such as "under 150" are removed from
-                    the provider query and applied as a structured price filter
-                    in the resolved storefront currency. If no product text
-                    remains, the provider query uses the generic term "products"
-                    with the structured filter.
+                    Common budget phrases such as "under 150" are applied as a
+                    structured price filter in the resolved storefront currency.
+                    Quick search removes recognized budget text from the
+                    provider query; agentic mode preserves the full brief.
+                    An explicit "from", "at", or "via" retailer phrase for
+                    Target, CVS, Walmart, or Best Buy applies an exact US offer
+                    filter; the GB storefront returns 400 for these merchants.
+                    A quick-search query containing only a budget phrase uses
+                    the generic provider query "products" with the filter.
+                mode:
+                  type: string
+                  enum: [default, agentic]
+                  default: default
+                  description: >-
+                    Use agentic for an explicit natural-language shopping brief.
+                    Agentic mode may take several seconds and returns discovery
+                    results only; it does not place orders.
                 limit:
                   type: integer
                   minimum: 1
@@ -452,7 +484,7 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 6144
-                  description: Application-wrapped continuation from a search with identical query, storefront, limit, and effective price range.
+                  description: Application-wrapped continuation from a search with identical query, storefront, mode, limit, and effective price range.
       responses:
         "200":
           description: Live Channel3 search results
@@ -461,7 +493,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceSearchResponse"
         "400":
-          description: Request JSON, query, storefront, or storefront-currency price range is invalid
+          description: Request JSON, query, mode, storefront, or price range is invalid, or a recognized US retailer was requested in the GB storefront
           content:
             application/json:
               schema:
@@ -500,9 +532,9 @@ paths:
           description: >-
             Channel3 search or its default locale is not configured correctly,
             the provider is temporarily unavailable, its response exceeds the
-            app's limit, times out, contains malformed UTF-8 or JSON, or has an
-            invalid product shape, or the request-body reading capacity is
-            temporarily full. The capacity
+            app's limit, contains malformed UTF-8 or JSON, or has an invalid
+            product shape, or the request-body reading capacity is temporarily
+            full. The capacity
             response includes Retry-After; provider failures may omit it.
           headers:
             Retry-After:
@@ -518,9 +550,224 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "504":
+          description: The Channel3 search exceeded the app's provider deadline; no results are returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
     options:
       operationId: preflightMarketplaceSearch
       summary: Check whether the mobile web client may search
+      responses:
+        "204":
+          description: Preflight approved for an exact allowlisted origin
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+        "403":
+          description: Origin, method, or requested header is not allowed
+  /api/marketplace/products/{productId}:
+    get:
+      operationId: getCurrentMarketplaceProduct
+      summary: Recheck current offers for one product
+      description: >-
+        Retrieves full current Channel3 product details by a stable product ID
+        returned by a previous search or catalog browse. Use this at display and
+        retailer-handoff time instead of reusing a stored offer URL. The
+        Channel3 API key remains server-side. Explicit GB or US storefronts
+        select GBP or USD. A product with no offer in that storefront returns
+        404 with code PRODUCT_UNAVAILABLE; clients must not treat that response
+        as a missing route or fall back to an older URL. Results are no-store and
+        share the marketplace rate limit. Only offers with an HTTPS link to the
+        listed retailer or Channel3 affiliate host are returned. If offers exist
+        but none have a safe initial link, the response is 503, not a claim that
+        the item is unavailable. This is a fresh Channel3 report, not
+        a guarantee of retailer-side inventory; the retailer confirms final
+        price and availability.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
+        - name: storefront
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/MarketplaceStorefront"
+      responses:
+        "200":
+          description: Fresh product details and current Channel3 offers
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceProductRefreshResponse"
+        "400":
+          description: Product ID or storefront is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "403":
+          description: Origin and Host headers are both present but identify different hosts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "404":
+          description: Product has no current Channel3 result or storefront offer; code is PRODUCT_UNAVAILABLE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceProductUnavailableResponse"
+        "429":
+          description: Shared marketplace request limit reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "503":
+          description: Channel3 is not configured, unavailable, timed out, returned an invalid product, or no safe initial retailer link could be confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+    options:
+      operationId: preflightMarketplaceProduct
+      summary: Check whether the mobile web client may retrieve a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
+      responses:
+        "204":
+          description: Preflight approved for an exact allowlisted origin
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+        "403":
+          description: Origin, method, or requested header is not allowed
+  /api/marketplace/products/{productId}/similar:
+    get:
+      operationId: findSimilarMarketplaceProducts
+      summary: Find in-stock alternatives for one marketplace product
+      description: >-
+        Requests Channel3's product-ID-based similar recommendations for the
+        exact GB or US storefront. The server filters Channel3 to new offers
+        reported in stock and returns provider-ranked products only when they have at
+        least one explicit in-stock offer with a safe retailer or affiliate URL.
+        The response is not cached.
+        Channel3's similar endpoint is not scoped to the app-wide curated
+        collection; results are Channel3 recommendations for the selected
+        storefront. The client accepts only explicit in-stock offers with safe
+        retailer URLs. Each chosen alternative is refreshed by its exact
+        product ID and retailer immediately before handoff. This is not a
+        guarantee of retailer-side inventory. A 404 means Channel3 has no
+        similar result for the source product or no result passes the in-stock
+        link check; clients may fall back to the title-based curated search.
+        Requests share the marketplace rate limit. Offers on recognized
+        country-coded retailer domains and explicitly mapped curated-retailer
+        domains are removed when their market conflicts with the selected
+        storefront; generic domains remain unclassified because Channel3 does
+        not provide shipping-region metadata.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
+        - name: storefront
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/MarketplaceStorefront"
+      responses:
+        "200":
+          description: Provider-ranked similar products for the selected storefront
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceSimilarResponse"
+        "400":
+          description: Product ID or storefront is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "403":
+          description: Origin and Host headers are both present but identify different hosts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "404":
+          description: No provider result passes the explicit in-stock safe-link filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "429":
+          description: Shared marketplace request limit reached
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: string
+                pattern: "^[0-9]+$"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+        "503":
+          description: Channel3 is unavailable, timed out, or returned invalid products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceErrorResponse"
+    options:
+      operationId: preflightSimilarMarketplaceProducts
+      summary: Check mobile web access to similar products
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{1,128}$"
       responses:
         "204":
           description: Preflight approved for an exact allowlisted origin
@@ -547,13 +794,21 @@ paths:
         tokens wrapped by the application, never invented numeric pages. Tokens
         expire after 15 minutes and bind the exact filters, locale, and limit.
         Changing any selection requires starting again without pageToken.
-        Duplicate or unknown query fields are rejected.
+        Duplicate or unknown query fields are rejected. Offers are included only
+        when the initial HTTPS URL matches the listed retailer or Channel3
+        affiliate host.
         The section maps to a verified Channel3 category slug; callers cannot
         supply arbitrary filters. Results are not saved to customer collections.
         Retailer offer details can change, and this endpoint does not create a
         checkout or payment. Requests share the marketplace rate limit. Explicit
         GB and US storefronts select GBP and USD respectively. If omitted, the
         configured Channel3 locale is retained and reported in the response.
+        Offers on recognized country-coded retailer domains and explicitly
+        mapped curated-retailer domains are removed when their market conflicts
+        with the selected storefront; generic domains remain unclassified
+        because Channel3 does not provide shipping-region metadata. A curated
+        retailer must support the effective storefront. Unsupported retailer
+        and storefront combinations return 400 before calling Channel3.
         Channel3's response is limited by this application to 2097152 decoded
         bytes (2 MiB); a declared Content-Length above that limit is also
         rejected, including when it describes encoded bytes. Provider headers
@@ -585,7 +840,7 @@ paths:
           in: query
           required: false
           schema: { type: string }
-          description: An ID from the shared curated retailer allowlist. May be combined with section.
+          description: An ID from the shared curated retailer allowlist, supported in the effective storefront. May be combined with section.
         - name: limit
           in: query
           required: false
@@ -603,7 +858,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceCatalogResponse"
         "400":
-          description: The section is missing or unsupported, or the storefront is malformed, duplicated, or unsupported
+          description: The section is missing or unsupported, the storefront is malformed, duplicated, or unsupported, or the retailer is unavailable in the effective storefront
           content:
             application/json:
               schema:
@@ -994,6 +1249,10 @@ components:
           description: Effective requested currency; each offer's own currency remains authoritative.
         query:
           type: string
+        searchMode:
+          type: string
+          enum: [default, agentic]
+          description: Present when the request explicitly supplies mode; identifies the effective Channel3 mode used for this page and its continuations. Omitted for legacy requests without mode.
         priceRange:
           anyOf:
             - $ref: "#/components/schemas/MarketplacePriceRange"
@@ -1035,6 +1294,48 @@ components:
           maxLength: 6144
         title:
           type: string
+        retrievedAt:
+          type: string
+          format: date-time
+        products:
+          type: array
+          maxItems: 24
+          items:
+            $ref: "#/components/schemas/MarketplaceProduct"
+    MarketplaceProductRefreshResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, storefront, currency, retrievedAt, product]
+      properties:
+        provider:
+          type: string
+          const: Channel3
+        storefront:
+          $ref: "#/components/schemas/MarketplaceStorefront"
+        currency:
+          type: string
+          enum: [GBP, USD]
+        retrievedAt:
+          type: string
+          format: date-time
+        product:
+          $ref: "#/components/schemas/MarketplaceProduct"
+    MarketplaceSimilarResponse:
+      type: object
+      additionalProperties: false
+      required: [provider, productId, storefront, currency, retrievedAt, products]
+      properties:
+        provider:
+          type: string
+          const: Channel3
+        productId:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{1,128}$"
+        storefront:
+          $ref: "#/components/schemas/MarketplaceStorefront"
+        currency:
+          type: string
+          enum: [GBP, USD]
         retrievedAt:
           type: string
           format: date-time
@@ -1096,6 +1397,16 @@ components:
                   compare_at_price:
                     type: [number, "null"]
                     minimum: 0
+    MarketplaceProductUnavailableResponse:
+      type: object
+      additionalProperties: false
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          const: PRODUCT_UNAVAILABLE
     MarketplaceErrorResponse:
       type: object
       additionalProperties: false

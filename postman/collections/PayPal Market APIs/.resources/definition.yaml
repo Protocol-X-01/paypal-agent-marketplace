@@ -1,4 +1,5 @@
 $kind: collection
 description: Public crypto market metrics and chart data for the mobile marketplace experience. Provider credentials remain on the server. These endpoints do not expose wallet balances or execute transactions.
 variables:
-  baseUrl: /
+  - key: baseUrl
+    value: '/'
