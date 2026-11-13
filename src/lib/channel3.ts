@@ -3,6 +3,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { channel3StorefrontDomainPriority, isChannel3DomainForStorefront, storefrontCurrency, type Storefront } from "@/lib/channel3-storefront";
 import { safeMarketplaceOfferUrl } from "@/lib/marketplace-safety";
 import type { MarketplacePriceRange } from "@/lib/marketplace-price-range";
+import { reserveChannel3ProviderRequest } from "@/lib/channel3-request-budget";
+export { Channel3BudgetExceededError } from "@/lib/channel3-request-budget";
 
 const DEFAULT_BASE = "https://api.trychannel3.com";
 // App-owned response ceiling, not a Channel3 provider limit. Fetch exposes
@@ -223,6 +225,7 @@ async function call(path: string, body: Record<string, unknown>, options: { time
   if (baseUrl.protocol !== "https:") throw new Error("Channel3 base URL must use HTTPS");
   const endpoint = new URL(path.replace(/^\/+/, ""), `${baseUrl.toString().replace(/\/+$/, "")}/`);
 
+  await reserveChannel3ProviderRequest();
   const deadline = AbortSignal.timeout(options.timeoutMs ?? CHANNEL3_REQUEST_TIMEOUT_MS);
   let res: Response;
   try {
@@ -325,6 +328,7 @@ export async function retrieveProduct(productId: string, locale: Channel3Locale)
 
   const endpoint = new URL(`v1/products/${encodeURIComponent(productId)}`, `${baseUrl.toString().replace(/\/+$/, "")}/`);
   endpoint.search = new URLSearchParams(locale).toString();
+  await reserveChannel3ProviderRequest();
   const deadline = AbortSignal.timeout(CHANNEL3_REQUEST_TIMEOUT_MS);
   const response = await fetch(endpoint, {
     method: "GET",
