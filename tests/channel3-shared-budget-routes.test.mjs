@@ -17,6 +17,7 @@ async function source(path) { return readFile(new URL(path, import.meta.url), "u
 
 const events = [];
 let denyBudget = false;
+let deniedRetryAfterSeconds = 17;
 class Channel3BudgetExceededError extends Error {
   constructor(retryAfterSeconds) { super("budget exhausted"); this.retryAfterSeconds = retryAfterSeconds; }
 }
@@ -24,7 +25,7 @@ const budget = {
   Channel3BudgetExceededError,
   reserveChannel3ProviderRequest: async () => {
     events.push("reserve");
-    if (denyBudget) throw new Channel3BudgetExceededError(17);
+    if (denyBudget) throw new Channel3BudgetExceededError(deniedRetryAfterSeconds);
   },
 };
 const storefront = load(await source("../src/lib/channel3-storefront.ts"));
@@ -85,7 +86,7 @@ test("search and exact-product requests reserve immediately before provider fetc
   assert.deepEqual(events, ["reserve", "fetch"]);
 });
 
-test("failed reservation prevents every Channel3 fetch and maps to retryable 429", async () => {
+test("fixed-second, minute, and day denials prevent fetch and preserve Retry-After", async () => {
   denyBudget = true;
   const requests = [
     () => searchRoute.POST(new NextRequest("http://localhost:3000/api/marketplace/search", {
@@ -96,12 +97,15 @@ test("failed reservation prevents every Channel3 fetch and maps to retryable 429
     () => similarRoute.GET(new NextRequest("http://localhost:3000/api/marketplace/products/product-1/similar?storefront=US"), { params: Promise.resolve({ productId: "product-1" }) }),
   ];
 
-  for (const request of requests) {
-    events.length = 0;
-    const response = await request();
-    assert.equal(response.status, 429);
-    assert.equal(response.headers.get("retry-after"), "17");
-    assert.equal(response.headers.get("cache-control"), "no-store");
-    assert.deepEqual(events, ["reserve"]);
+  for (const retryAfterSeconds of [1, 37, 86_400]) {
+    deniedRetryAfterSeconds = retryAfterSeconds;
+    for (const request of requests) {
+      events.length = 0;
+      const response = await request();
+      assert.equal(response.status, 429);
+      assert.equal(response.headers.get("retry-after"), String(retryAfterSeconds));
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.deepEqual(events, ["reserve"]);
+    }
   }
 });
