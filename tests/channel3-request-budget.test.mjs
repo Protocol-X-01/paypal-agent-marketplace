@@ -4,7 +4,7 @@ import { load } from "./customer-auth-fixtures.mjs";
 
 const { reserveChannel3ProviderRequest, Channel3BudgetExceededError, Channel3BudgetUnavailableError } = load("src/lib/channel3-request-budget.ts");
 
-test("production budget requires a valid dedicated database URL before provider calls", async () => {
+test("production budget rejects missing or malformed database URLs", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousUrl = process.env.CHANNEL3_BUDGET_DATABASE_URL;
   process.env.NODE_ENV = "production";

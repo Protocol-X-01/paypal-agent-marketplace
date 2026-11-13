@@ -32,6 +32,7 @@ const { POST } = loadTypeScript(source, {
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => allowProviderRequest },
   "@/lib/request-limits": { acquireClientSlot: () => () => {} },
   "@/lib/channel3": {
+    Channel3BudgetExceededError: class Channel3BudgetExceededError extends Error {},
     Channel3TimeoutError: class Channel3TimeoutError extends Error {},
     getChannel3Locale: (storefront) => ({ country: storefront ?? "GB", currency: storefront === "US" ? "USD" : "GBP", language: "en" }),
     getChannel3CollectionId: () => undefined,

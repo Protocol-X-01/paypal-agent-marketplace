@@ -138,7 +138,11 @@ test("similar recommendations keep only distinct in-stock safe offers for the st
   upstreamStatus = 200;
   upstreamBody = { products: [
     { id: "product-1", title: "Source", offers: [offer()] },
-    { id: "alternative-1", title: "Alternative", offers: [offer(), offer("store.example", "OutOfStock"), offer("store.example", "InStock", "new", "https://other.example/item")] },
+    { id: "alternative-1", title: "Alternative", offers: [
+      offer("store.example", "InStock", "new", "https://store.example/available-item"),
+      offer("store.example", "OutOfStock", "new", "https://store.example/sold-out-item"),
+      offer("store.example", "InStock", "new", "https://other.example/item"),
+    ] },
     { id: "alternative-1", title: "Duplicate", offers: [offer()] },
     { id: "alternative-2", title: "Used", offers: [offer("store.example", "InStock", "used")] },
     { id: "alternative-3", title: "Foreign", offers: [offer("shop.co.uk")] },
@@ -147,7 +151,9 @@ test("similar recommendations keep only distinct in-stock safe offers for the st
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.deepEqual(body.products.map((product) => product.id), ["alternative-1"]);
-  assert.deepEqual(body.products[0].offers.map((item) => item.url), ["https://store.example/item"]);
+  assert.deepEqual(body.products[0].offers.map((item) => ({ url: item.url, availability: item.availability })), [
+    { url: "https://store.example/available-item", availability: "InStock" },
+  ]);
   assert.equal(calls[0].endpoint.pathname, "/v1/similar");
   assert.deepEqual(JSON.parse(calls[0].options.body).filters, { conditions: ["new"], availability: ["InStock"] });
 });

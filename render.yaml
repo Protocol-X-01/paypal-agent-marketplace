@@ -36,7 +36,7 @@ services:
         value: "false"
       - key: CHANNEL3_API_KEY
         sync: false
-      # Production Channel3 calls fail closed until the dedicated role and budget are configured.
+      # Production Channel3 calls fail closed until a reviewed budget connection and limits are configured.
       - key: CHANNEL3_BUDGET_DATABASE_URL
         sync: false
       - key: PAYPAL_CLIENT_ID
