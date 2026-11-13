@@ -11,8 +11,14 @@ export type ReportInsightRequest = {
   market: "All" | "US" | "UK" | "Other";
 };
 
+export type ProductDiscoveryInsightRequest = {
+  query: string;
+  storefront: "US" | "GB";
+  products: Array<{ title: string; brand?: string }>;
+};
+
 export type Insight = { headline: string; summary: string; observations: string[]; caution: string };
-export type InsightKind = "market" | "fictional-report";
+export type InsightKind = "market" | "fictional-report" | "product-discovery";
 
 export type MarketInsightSource = MarketInsightRequest & {
   provider: "CoinGecko";
@@ -49,8 +55,15 @@ export type ReportInsightSource = ReportInsightRequest & {
   completion: number | null;
 };
 
+export type ProductDiscoveryInsightSource = {
+  provider: "Displayed Channel3 result labels";
+  storefront: "US" | "GB";
+  productCount: number;
+};
+
 type InsightEnvelope = { generatedAt: string; model: string; insight: Insight; disclaimer: string };
 export type MarketInsightResponse = InsightEnvelope & { kind: "market"; source: MarketInsightSource };
 export type ReportInsightResponse = InsightEnvelope & { kind: "fictional-report"; source: ReportInsightSource };
-export type InsightResponse = MarketInsightResponse | ReportInsightResponse;
+export type ProductDiscoveryInsightResponse = InsightEnvelope & { kind: "product-discovery"; source: ProductDiscoveryInsightSource };
+export type InsightResponse = MarketInsightResponse | ReportInsightResponse | ProductDiscoveryInsightResponse;
 export type InsightErrorResponse = { error: { code: string; message: string } };

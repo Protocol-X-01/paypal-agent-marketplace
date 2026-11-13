@@ -56,7 +56,7 @@ test("rejects obvious local, address-literal, credentialed, and nonstandard dest
 test("handoff requires the exact product and retailer in the refreshed response", () => {
   const items = [
     { id: "other", offers: [{ domain: "shop.example", url: "https://shop.example/wrong" }] },
-    { id: "p1", offers: [{ domain: "shop.example", url: "https://www.shop.example/current" }] },
+    { id: "p1", offers: [{ domain: "shop.example", url: "https://www.shop.example/current", availability: "InStock" }] },
   ];
   assert.deepEqual(matchCurrentOffer(items, "p1", "shop.example"), { product: items[1], url: "https://www.shop.example/current" });
   assert.deepEqual(matchCurrentOffer(items, "missing", "shop.example"), { product: null, url: null });
@@ -66,7 +66,7 @@ test("handoff requires the exact product and retailer in the refreshed response"
 
 test("handoff never treats an overlong or different complete ID as an exact match", () => {
   const prefix = "a".repeat(300);
-  const longProduct = { id: `${prefix}A`, offers: [{ domain: "shop.example", url: "https://shop.example/other" }] };
+  const longProduct = { id: `${prefix}A`, offers: [{ domain: "shop.example", url: "https://shop.example/other", availability: "InStock" }] };
   const otherLongProduct = { ...longProduct, id: `${prefix}B` };
   const completeProduct = { ...longProduct, id: prefix };
   assert.deepEqual(matchCurrentOffer([longProduct], prefix, "shop.example"), { product: null, url: null });
@@ -77,17 +77,30 @@ test("handoff never treats an overlong or different complete ID as an exact matc
 
 test("a matching label cannot redirect to another or unsafe host", () => {
   for (const url of ["https://other.example/product", "https://127.0.0.1/product", "https://shop.example:8443/product"]) {
-    const product = { id: "p1", offers: [{ domain: "shop.example", url }] };
+    const product = { id: "p1", offers: [{ domain: "shop.example", url, availability: "InStock" }] };
     assert.deepEqual(matchCurrentOffer([product], "p1", "shop.example"), { product, url: null });
   }
 });
 
 test("multiple offers sharing a host require a fresh explicit choice", () => {
   const product = { id: "p1", offers: [
-    { domain: "buy.example", url: "https://buy.example/one" },
-    { domain: "buy.example", url: "https://buy.example/two" },
+    { domain: "buy.example", url: "https://buy.example/one", availability: "InStock" },
+    { domain: "buy.example", url: "https://buy.example/two", availability: "InStock" },
   ] };
   assert.deepEqual(matchCurrentOffer([product], "p1", "buy.example"), { product, url: null });
+});
+
+test("an unpinned handoff selects only a safe reported-in-stock offer for the exact product", () => {
+  const product = { id: "p1", offers: [
+    { domain: "old.example", url: "https://old.example/item", availability: "OutOfStock" },
+    { domain: "store.example", url: "https://other.example/item", availability: "InStock" },
+    { domain: "store.example", url: "https://store.example/current", availability: "InStock" },
+  ] };
+  assert.deepEqual(matchCurrentOffer([product], "p1", undefined, undefined, true), { product, url: "https://store.example/current" });
+  assert.deepEqual(matchCurrentOffer([product], "other", undefined, undefined, true), { product: null, url: null });
+  assert.deepEqual(matchCurrentOffer([product], "p1"), { product, url: null });
+  const unavailable = { id: "p2", offers: product.offers.slice(0, 2) };
+  assert.deepEqual(matchCurrentOffer([unavailable], "p2", undefined, undefined, true), { product: unavailable, url: null });
 });
 
 test("verified links expire after five minutes and cannot survive a clock rollback", () => {

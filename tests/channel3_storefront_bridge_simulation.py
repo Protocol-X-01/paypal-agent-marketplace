@@ -27,12 +27,17 @@ SIMULATION_FILES = (
 SOURCE_FILES = (
     "src/lib/channel3.ts",
     "src/lib/channel3-storefront.ts",
+    "src/lib/marketplace-safety.ts",
     "src/lib/channel3-catalog.ts",
+    "src/lib/marketplace-price-range.ts",
     "src/lib/channel3-rate-limit.ts",
     "src/lib/mobile-web-cors.ts",
     "src/lib/request-limits.ts",
     "src/app/api/marketplace/search/route.ts",
     "src/app/api/marketplace/catalog/route.ts",
+    "postman/mocks/channel3-storefront-regression/default.js",
+    "postman/collections/PayPal Market APIs/api/Search live marketplace products and offers.request.yaml",
+    "postman/collections/PayPal Market APIs/api/Help me find a product with Channel3 agentic search.request.yaml",
 )
 
 # Transpile the checked-in TypeScript in memory and invoke the actual route
@@ -58,13 +63,17 @@ function load(code, aliases = {}) {
   return module.exports;
 }
 const storefront = load(source('src/lib/channel3-storefront.ts'));
+const safety = load(source('src/lib/marketplace-safety.ts'));
 let providerSource = source('src/lib/channel3.ts');
 const guard = 'if (baseUrl.protocol !== "https:") throw new Error("Channel3 base URL must use HTTPS");';
-if (providerSource.split(guard).length !== 2) throw new Error('Review the changed transport guard');
-providerSource = providerSource.replace(guard,
+if (providerSource.split(guard).length < 2) throw new Error('Review the changed transport guard');
+providerSource = providerSource.replaceAll(guard,
   'if (baseUrl.protocol !== "http:" || baseUrl.hostname !== "127.0.0.1") throw new Error("Simulation requires loopback");');
-const provider = load(providerSource, { 'server-only': {}, '@/lib/channel3-storefront': storefront });
+const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super('budget exhausted'); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const provider = load(providerSource, { 'server-only': {}, '@/lib/channel3-storefront': storefront, '@/lib/marketplace-safety': safety, '@/lib/channel3-request-budget': budget });
 const catalog = load(source('src/lib/channel3-catalog.ts'));
+const priceRange = load(source('src/lib/marketplace-price-range.ts'));
 const requestLimits = load(source('src/lib/request-limits.ts'), { 'server-only': {} });
 const limiter = load(source('src/lib/channel3-rate-limit.ts'), { './request-limits': requestLimits });
 const cors = load(source('src/lib/mobile-web-cors.ts'), { 'server-only': {} });
@@ -72,6 +81,7 @@ const aliases = {
   '@/lib/channel3': provider,
   '@/lib/channel3-storefront': storefront,
   '@/lib/channel3-catalog': catalog,
+  '@/lib/marketplace-price-range': priceRange,
   '@/lib/channel3-rate-limit': limiter,
   '@/lib/request-limits': requestLimits,
   '@/lib/mobile-web-cors': cors,
@@ -83,6 +93,9 @@ const { NextRequest } = nativeRequire('next/server');
   process.env.CHANNEL3_COLLECTION_ID = 'fixture-collection';
   for (const [country, currency] of [['GB', 'GBP'], ['US', 'USD']]) {
     for (const operation of ['search', 'catalog']) {
+      // The saved Postman request below covers GB search. Keep this run within
+      // the same eight-request budget used by the real marketplace routes.
+      if (country === 'GB' && operation === 'search') continue;
       const request = operation === 'search'
         ? new NextRequest('http://localhost:3000/api/marketplace/search', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -135,18 +148,20 @@ const { NextRequest } = nativeRequire('next/server');
   });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${app.address().port}`;
-  const command = spawn('postman', [
-    'collection', 'run', root + '/postman/collections/PayPal Market APIs',
-    '-i', 'Search live marketplace products and offers', '--env-var', `baseUrl=${baseUrl}`,
-    '--env-var', 'mockLocaleFixture=enabled', '--no-report-events',
-  ], { stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS} --max-old-space-size=256` } });
-  const exitCode = await new Promise((resolve, reject) => {
-    command.once('error', reject);
-    command.once('exit', resolve);
-  });
+  for (const item of ['Search live marketplace products and offers', 'Help me find a product with Channel3 agentic search']) {
+    const command = spawn('postman', [
+      'collection', 'run', root + '/postman/collections/PayPal Market APIs',
+      '-i', item, '--env-var', `baseUrl=${baseUrl}`,
+      '--env-var', 'mockLocaleFixture=enabled', '--no-report-events',
+    ], { stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS} --max-old-space-size=256` } });
+    const exitCode = await new Promise((resolve, reject) => {
+      command.once('error', reject);
+      command.once('exit', resolve);
+    });
+    console.log(`${exitCode === 0 ? 'PASS' : 'FAIL'} Postman ${item} request against route bridge`);
+    if (exitCode !== 0) process.exitCode = 1;
+  }
   await new Promise((resolve) => app.close(resolve));
-  console.log(`${exitCode === 0 ? 'PASS' : 'FAIL'} Postman search collection request against route bridge`);
-  if (exitCode !== 0) process.exitCode = 1;
 })().catch(() => { console.error('FAIL route bridge'); process.exitCode = 1; });
 """
 
@@ -222,6 +237,7 @@ def main():
             )
             print(run.stdout, end="", flush=True)
             if run.returncode:
+                print(run.stderr, end="", file=sys.stderr, flush=True)
                 print("FAIL route bridge", flush=True)
                 return 1
             events = [event for event in isolation.events(mocklog) if event.get("event") == "request"]

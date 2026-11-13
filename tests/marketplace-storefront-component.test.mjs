@@ -117,6 +117,7 @@ async function createMarketplace(initialStorage = {}, options = {}) {
   const Component = (await load("../src/app/components/marketplace.tsx", {
     react: hooks,
     "react/jsx-runtime": jsx,
+    "../../../packages/ai-insights/ui/InsightPanel": { __esModule: true, default: "InsightPanel" },
     "@/lib/channel3-storefront": storefront,
     "@/lib/channel3-catalog": catalogMetadata,
     "@/lib/marketplace-price-range": priceRange,
@@ -153,7 +154,23 @@ async function createMarketplace(initialStorage = {}, options = {}) {
     assert.ok(form, "Expected search form");
     return form.props.onSubmit({ preventDefault() {} });
   }
+  function assistSearch(query) {
+    byId(render(), "marketplace-query").props.onChange({ target: { value: query } });
+    return button(render(), "Help me find").props.onClick();
+  }
   function reply(index, body, status = 200) {
+    const url = new URL(calls[index].url, "http://localhost:3000");
+    const exactProduct = url.pathname.match(/^\/api\/marketplace\/products\/([^/]+)$/);
+    if (exactProduct && status !== 404) {
+      const productId = decodeURIComponent(exactProduct[1]);
+      body = {
+        provider: "Channel3",
+        storefront: url.searchParams.get("storefront"),
+        currency: url.searchParams.get("storefront") === "GB" ? "GBP" : "USD",
+        retrievedAt: body.retrievedAt,
+        product: body.product ?? body.products?.find((item) => item.id === productId) ?? body.products?.[0],
+      };
+    }
     if (calls[index].url === "/api/marketplace/search" && body.query === undefined) {
       body = { ...body, query: JSON.parse(calls[index].options.body).query };
     }
@@ -174,7 +191,7 @@ async function createMarketplace(initialStorage = {}, options = {}) {
   function dispatchStorage(key) {
     for (const listener of [...(listeners.get("storage") ?? [])]) listener({ key });
   }
-  return { render, search, setStorefront, setPrivateReady: (ready) => { privateReady = ready; render(); }, reply, calls, values, listeners, dispatchStorage, close };
+  return { render, search, assistSearch, setStorefront, setPrivateReady: (ready) => { privateReady = ready; render(); }, reply, calls, values, listeners, dispatchStorage, close };
 }
 
 test("first-run shopping uses US while saved UK and display-currency preferences remain intact", async () => {
@@ -195,6 +212,61 @@ test("first-run shopping uses US while saved UK and display-currency preferences
       assert.match(text(app.render()), /Selected storefront headphones/);
     } finally { app.close(); }
   }
+});
+
+test("Help me find uses Channel3 agentic search and keeps that mode for later pages", async () => {
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: JSON.stringify("US") });
+  const brief = "Please help me find comfortable over-ear headphones for travel under $150";
+  try {
+    const pending = app.assistSearch(brief);
+    assert.deepEqual(JSON.parse(app.calls[0].options.body), { query: brief, limit: 24, storefront: "US", mode: "agentic" });
+    app.reply(0, response("US", [product("USD", "Travel headphones")], { searchMode: "agentic", nextPageToken: "agentic-next" }));
+    await pending;
+
+    let tree = app.render();
+    assert.match(text(tree), /CHANNEL3 ASSISTED FIND/);
+    assert.match(text(tree), /finish checkout with the retailer/i);
+    button(tree, "Load more search results").props.onClick();
+    assert.equal(JSON.parse(app.calls[1].options.body).mode, "agentic");
+    const secondPageItem = product("USD", "More travel headphones");
+    secondPageItem.id = "second-travel-headphones";
+    app.reply(1, response("US", [secondPageItem], { searchMode: "agentic", nextPageToken: null }));
+    await tick();
+    tree = app.render();
+    assert.match(text(tree), /More travel headphones/);
+    assert.match(text(tree), /CHANNEL3 ASSISTED FIND/);
+  } finally { app.close(); }
+});
+
+test("Help me find explains when Channel3 exceeds the provider deadline", async () => {
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: JSON.stringify("US") });
+  try {
+    const pending = app.assistSearch("Please help me find comfortable travel headphones");
+    app.reply(0, { error: "Product search took too long. Please try again." }, 504);
+    await pending;
+    assert.match(text(app.render()), /Product search took too long\. Please try again\./);
+  } finally { app.close(); }
+});
+
+test("US offer cards mark verified retailer PayPal policy without implying item eligibility", async () => {
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: JSON.stringify("US") });
+  try {
+    const pending = app.search("headphones");
+    const listed = product("USD", "Best Buy headphones");
+    listed.id = "bestbuy-headphones";
+    listed.offers[0].domain = "bestbuy.com";
+    const unverified = product("USD", "CVS headphones");
+    unverified.id = "cvs-headphones";
+    unverified.offers[0].domain = "cvs.com";
+    app.reply(0, response("US", [listed, unverified]));
+    await pending;
+
+    const tree = app.render();
+    const policyBadges = nodes(tree).filter((node) => node.props?.["aria-label"] === "PayPal is listed by this US retailer; exact seller, item, and order eligibility may vary.");
+    assert.equal(policyBadges.length, 1, "only the retailer with verified public PayPal policy gets a marker");
+    assert.match(text(tree), /PayPal\* listed by a US retailer; exact seller, item, and order eligibility may vary\./);
+    assert.match(text(tree), /PayPal\* reflects a published US retailer policy, not item-level eligibility/);
+  } finally { app.close(); }
 });
 
 test("browse and search swap their result views in place", async () => {
@@ -230,10 +302,140 @@ test("browse and search swap their result views in place", async () => {
   } finally { app.close(); }
 });
 
-test("expired retailer links refresh the exact offer in place without a placeholder tab", async (t) => {
-  let now = Date.now();
-  t.mock.method(Date, "now", () => now);
-  const app = await createMarketplace({}, { openWindow: () => assert.fail("The app must not open a placeholder tab") });
+test("an unavailable listing redirects a deliberate click only after a similar offer is freshly checked", async () => {
+  const originalDocument = globalThis.document;
+  let redirectedUrl = null;
+  const handoff = {
+    closed: false,
+    opener: null,
+    document: { title: "" },
+    location: { replace: (url) => { redirectedUrl = url; } },
+    close() { this.closed = true; },
+  };
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: null }, { openWindow: () => handoff });
+  globalThis.window.requestAnimationFrame = (callback) => { callback(0); return 1; };
+  globalThis.document = {
+    getElementById: () => ({ scrollIntoView() {}, querySelector: () => ({ focus() {} }) }),
+  };
+  try {
+    const pendingSearch = app.search("headphones");
+    app.reply(0, response("US", [product("USD", "Exact headphones")]));
+    await pendingSearch;
+
+    assert.match(text(app.render()), /Unavailable\? Find alternatives/);
+
+    const productButton = nodes(app.render()).find((node) => node.type === "button" && node.props["aria-label"] === "Check and open Exact headphones at shop.example");
+    assert.ok(productButton, "The product action checks its current offer before handoff");
+    productButton.props.onClick();
+    assert.match(app.calls[1].url, /^\/api\/marketplace\/products\/example-product\?storefront=US$/);
+
+    const soldOut = product("USD", "Exact headphones");
+    soldOut.offers[0].availability = "OutOfStock";
+    app.reply(1, { provider: "Channel3", storefront: "US", currency: "USD", retrievedAt: "2026-11-10T06:00:00Z", product: soldOut });
+    await tick();
+    assert.match(app.calls[2].url, /^\/api\/marketplace\/products\/example-product\/similar\?storefront=US$/);
+    app.reply(2, {
+      provider: "Channel3",
+      productId: "example-product",
+      storefront: "US",
+      currency: "USD",
+      retrievedAt: "2026-11-10T06:01:00Z",
+      products: [{ ...product("USD", "Comparable headphones"), id: "alternative-1" }],
+    });
+    await tick();
+    assert.match(app.calls[3].url, /^\/api\/marketplace\/products\/alternative-1\?storefront=US$/);
+    const currentAlternative = { ...product("USD", "Comparable headphones"), id: "alternative-1" };
+    currentAlternative.offers[0].url = "https://shop.example/comparable-current";
+    app.reply(3, { retrievedAt: "2026-11-10T06:02:00Z", product: currentAlternative });
+    await tick();
+
+    const updated = text(app.render());
+    assert.match(updated, /Sorry, this item isn’t currently reported in stock\. We opened Comparable headphones/);
+    assert.match(updated, /Comparable headphones/);
+    assert.match(updated, /Alternatives are reported in stock by Channel3/);
+    assert.match(updated, /We opened Comparable headphones at shop\.example/);
+    assert.equal(redirectedUrl, currentAlternative.offers[0].url, "The clicked handoff redirects only after the exact similar-item listing is refreshed");
+    assert.equal(handoff.closed, false, "A valid replacement keeps the user-opened handoff tab");
+  } finally {
+    app.close();
+    if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument;
+  }
+});
+
+test("a confirmed missing listing moves directly to alternatives without searching for the original", async () => {
+  const originalDocument = globalThis.document;
+  let redirectedUrl = null;
+  const handoff = { closed: false, opener: null, document: { title: "" }, location: { replace: (url) => { redirectedUrl = url; } }, close() { this.closed = true; } };
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: null }, { openWindow: () => handoff });
+  globalThis.window.requestAnimationFrame = (callback) => { callback(0); return 1; };
+  globalThis.document = { getElementById: () => ({ scrollIntoView() {}, querySelector: () => ({ focus() {} }) }) };
+  try {
+    const pendingSearch = app.search("headphones");
+    app.reply(0, response("US", [product("USD", "Exact headphones")]));
+    await pendingSearch;
+    const productButton = nodes(app.render()).find((node) => node.type === "button" && node.props["aria-label"] === "Check and open Exact headphones at shop.example");
+    assert.ok(productButton);
+    productButton.props.onClick();
+    app.reply(1, { error: "No current listing.", code: "PRODUCT_UNAVAILABLE" }, 404);
+    await tick();
+    assert.match(app.calls[2].url, /^\/api\/marketplace\/products\/example-product\/similar\?storefront=US$/);
+    app.reply(2, {
+      provider: "Channel3", productId: "example-product", storefront: "US", currency: "USD", retrievedAt: "2026-11-10T06:01:00Z",
+      products: [{ ...product("USD", "Comparable headphones"), id: "alternative-1" }],
+    });
+    await tick();
+    assert.match(app.calls[3].url, /^\/api\/marketplace\/products\/alternative-1\?storefront=US$/);
+    const freshAlternative = { ...product("USD", "Comparable headphones"), id: "alternative-1" };
+    freshAlternative.offers[0].url = "https://shop.example/comparable-current";
+    app.reply(3, { retrievedAt: "2026-11-10T06:02:00Z", product: freshAlternative });
+    await tick();
+    assert.equal(app.calls.length, 4, "The confirmed missing product must not be searched again");
+    assert.equal(redirectedUrl, freshAlternative.offers[0].url);
+    assert.match(text(app.render()), /Comparable headphones/);
+  } finally {
+    app.close();
+    if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument;
+  }
+});
+
+test("an unavailable listing keeps the handoff in Shop when similar stock cannot be refreshed", async () => {
+  const originalDocument = globalThis.document;
+  let redirectedUrl = null;
+  const handoff = { closed: false, opener: null, document: { title: "" }, location: { replace: (url) => { redirectedUrl = url; } }, close() { this.closed = true; } };
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: null }, { openWindow: () => handoff });
+  globalThis.window.requestAnimationFrame = (callback) => { callback(0); return 1; };
+  globalThis.document = { getElementById: () => ({ scrollIntoView() {}, querySelector: () => ({ focus() {} }) }) };
+  try {
+    const pendingSearch = app.search("headphones");
+    app.reply(0, response("US", [product("USD", "Exact headphones")]));
+    await pendingSearch;
+    nodes(app.render()).find((node) => node.type === "button" && node.props["aria-label"] === "Check and open Exact headphones at shop.example").props.onClick();
+    const soldOut = product("USD", "Exact headphones");
+    soldOut.offers[0].availability = "OutOfStock";
+    app.reply(1, { provider: "Channel3", storefront: "US", currency: "USD", retrievedAt: "2026-11-10T06:00:00Z", product: soldOut });
+    await tick();
+    app.reply(2, {
+      provider: "Channel3", productId: "example-product", storefront: "US", currency: "USD", retrievedAt: "2026-11-10T06:01:00Z",
+      products: [{ ...product("USD", "Comparable headphones"), id: "alternative-1" }],
+    });
+    await tick();
+    const soldOutAlternative = { ...product("USD", "Comparable headphones"), id: "alternative-1" };
+    soldOutAlternative.offers[0].availability = "OutOfStock";
+    app.reply(3, { retrievedAt: "2026-11-10T06:02:00Z", product: soldOutAlternative });
+    await tick();
+
+    assert.equal(redirectedUrl, null, "A recommendation’s earlier in-stock report is not enough to open it");
+    assert.equal(handoff.closed, true);
+    assert.match(text(app.render()), /couldn’t freshly confirm a similar replacement/i);
+  } finally {
+    app.close();
+    if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument;
+  }
+});
+
+test("retailer buttons verify the exact product before opening the handoff tab", async () => {
+  const handoff = { closed: false, opener: {}, document: { title: "" }, location: { destination: null, replace(url) { this.destination = url; } }, close() { this.closed = true; } };
+  const app = await createMarketplace({}, { openWindow: () => handoff });
   try {
     const initial = product("GBP", "Exact headphones");
     const other = { ...product("GBP", "Another headphone"), id: "other" };
@@ -242,24 +444,12 @@ test("expired retailer links refresh the exact offer in place without a placehol
     await pending;
 
     const tree = app.render();
-    const link = nodes(tree).find((node) => node.type === "a" && node.props["aria-label"] === "Open Exact headphones at shop.example");
-    assert.ok(link, "The product name is a retailer link");
-    now += safety.VERIFIED_OFFER_LIFETIME_MS;
-    let prevented = false;
-    link.props.onClick({ type: "click", preventDefault: () => { prevented = true; } });
-    assert.equal(prevented, true, "The stale snapshot URL is not opened directly");
-    assert.equal(app.calls.length, 2, "Tapping the name starts an exact-product refresh");
-    assert.deepEqual(JSON.parse(app.calls[1].options.body), { query: "Exact headphones", limit: 24, storefront: "GB" });
-    const updatingCard = nodes(app.render()).find((node) => node.type === "article" && text(node).includes("Exact headphones"));
-    assert.match(text(updatingCard), /£120\.00GBP/);
-    assert.match(text(updatingCard), /Last shown · updating/);
-    const updatingLinks = nodes(updatingCard).filter((node) => node.type === "a" && node.props["aria-describedby"]);
-    assert.ok(updatingLinks.length > 0);
-    for (const updatingLink of updatingLinks) {
-      assert.equal(updatingLink.props.href, undefined, "An updating price cannot retain an active retailer URL");
-      assert.equal(updatingLink.props["aria-disabled"], true);
-    }
-
+    const link = nodes(tree).find((node) => node.type === "button" && node.props["aria-label"] === "Check and open Exact headphones at shop.example");
+    assert.ok(link, "The product name starts a verified retailer handoff");
+    link.props.onClick();
+    assert.equal(app.calls.length, 2, "Tapping the name requests an exact-product refresh");
+    assert.match(app.calls[1].url, /^\/api\/marketplace\/products\/example-product\?storefront=GB$/);
+    assert.equal(handoff.location.destination, null, "The stale offer is not opened before refresh completes");
     const current = product("GBP", "Exact headphones");
     current.offers[0].price.price = 135;
     current.offers[0].url = "https://buy.trychannel3.com/offer?offer=current";
@@ -267,15 +457,33 @@ test("expired retailer links refresh the exact offer in place without a placehol
     await tick();
     const updated = app.render();
     assert.match(text(updated), /Another headphone/);
-    assert.equal(byId(updated, "marketplace-query").props.value, "headphones");
     assert.match(text(updated), /Offers rechecked/);
-    const updatedCard = nodes(updated).find((node) => node.type === "article" && text(node).includes("Exact headphones"));
-    assert.match(text(updatedCard), /£135\.00GBP/);
-    assert.doesNotMatch(text(updatedCard), /Last shown · updating/);
-    const currentLink = nodes(updated).find((node) => node.type === "a" && node.props.href === current.offers[0].url);
-    assert.ok(currentLink);
-    currentLink.props.onClick({ type: "click", preventDefault: () => assert.fail("A rechecked link opens directly") });
+    assert.equal(handoff.location.destination, current.offers[0].url);
     assert.equal(app.calls.length, 2);
+  } finally { app.close(); }
+});
+
+test("a retailer-specific handoff redirects to the same item at a freshly reported alternate store", async () => {
+  const handoff = { closed: false, opener: {}, document: { title: "" }, location: { destination: null, replace(url) { this.destination = url; } }, close() { this.closed = true; } };
+  const app = await createMarketplace({ [storefront.STOREFRONT_STORAGE_KEY]: null }, { openWindow: () => handoff });
+  try {
+    const initial = product("USD", "Exact headphones");
+    const alternate = { ...initial.offers[0], domain: "other.example", url: "https://other.example/exact-headphones", price: { price: 125, currency: "USD" } };
+    initial.offers = [...initial.offers, alternate];
+    const pending = app.search("headphones");
+    app.reply(0, response("US", [initial]));
+    await pending;
+
+    const retailerButton = nodes(app.render()).find((node) => node.type === "button" && node.props["aria-label"] === "Check and visit shop.example for Exact headphones");
+    assert.ok(retailerButton, text(app.render()));
+    retailerButton.props.onClick();
+    const current = { ...initial, offers: initial.offers.map((offer) => offer.domain === "shop.example" ? { ...offer, availability: "OutOfStock" } : offer) };
+    app.reply(1, { retrievedAt: "2026-11-10T06:00:00Z", product: current });
+    await tick();
+
+    assert.equal(app.calls.length, 2, "the current exact-product response already supplies a fresh same-item alternative");
+    assert.equal(handoff.location.destination, alternate.url);
+    assert.match(text(app.render()), /Sorry, shop\.example no longer reports this item in stock\. We opened the same item at other\.example/);
   } finally { app.close(); }
 });
 
@@ -501,7 +709,7 @@ test("a page claiming a different storefront cannot replace existing search resu
 test("switching storefront aborts an older catalog request and rejects late results", async () => {
   const app = await createMarketplace({}, { mode: "browse" });
   try {
-    button(nodes(app.render()).find((node) => node.props?.["aria-label"] === "Shared catalog categories"), "Audio").props.onClick();
+    button(nodes(app.render()).find((node) => node.props?.["aria-label"] === "All shared catalog categories"), "Audio").props.onClick();
     assert.match(app.calls[0].url, /storefront=GB&limit=24&section=audio/);
     assert.equal(app.calls[0].signal.aborted, false);
     app.setStorefront("US");
@@ -509,7 +717,7 @@ test("switching storefront aborts an older catalog request and rejects late resu
     app.reply(0, response("GB", [product("GBP", "Late UK headphones")], { section: "audio", title: "Audio" }));
     await tick();
     assert.doesNotMatch(text(app.render()), /Late UK headphones/);
-    button(nodes(app.render()).find((node) => node.props?.["aria-label"] === "Shared catalog categories"), "Audio").props.onClick();
+    button(nodes(app.render()).find((node) => node.props?.["aria-label"] === "All shared catalog categories"), "Audio").props.onClick();
     assert.match(app.calls[1].url, /storefront=US&limit=24&section=audio/);
     app.reply(1, response("US", [product("USD", "US headphones")], { section: "audio", title: "Audio" }));
     await tick();
@@ -529,9 +737,9 @@ test("saved offers retain their original storefront and refresh in the selected 
     assert.match(text(tree), /Saved offer snapshot · United States/);
     assert.match(text(tree), /\$120\.00/);
     assert.match(text(tree), /Saved price · not checked now/);
-    assert.match(text(tree), /Previously in stock/);
+    assert.match(text(tree), /Previously reported in stock/);
     button(tree, "Find current offers on Channel3").props.onClick();
-    assert.equal(JSON.parse(app.calls[0].options.body).storefront, "GB");
+    assert.match(app.calls[0].url, /\/api\/marketplace\/products\/example-product\?storefront=GB$/);
     app.reply(0, response("GB", [product("GBP", "Saved headphones")]));
     await tick();
     tree = app.render();
@@ -542,21 +750,19 @@ test("saved offers retain their original storefront and refresh in the selected 
   } finally { app.close(); }
 });
 
-test("saved offer recheck follows a continuation and confirms only the exact product", async () => {
+test("saved offer recheck uses the exact-product endpoint and confirms a matching product", async () => {
   const lists = { version: 1, collections: [{ id: "saved", name: "Travel list", createdAt: "", items: [{ product: product("GBP", "Saved headphones"), savedAt: "", retrievedAt: "2026-11-06T00:00:00Z", storefront: "GB" }] }] };
   const app = await createMarketplace({ ["paypal-markets-shopping-lists-v1"]: JSON.stringify(lists) });
   try {
     button(app.render(), "Travel list").props.onClick();
     button(app.render(), "Find current offers on Channel3").props.onClick();
-    app.reply(0, response("GB", [{ ...product("GBP", "Similar headphones"), id: "other" }], { nextPageToken: "page-two" }));
+    app.reply(0, response("GB", [product("GBP", "Saved headphones")]));
     await tick();
-    assert.equal(app.calls.length, 2);
-    assert.deepEqual(JSON.parse(app.calls[1].options.body), { query: "Saved headphones", limit: 24, storefront: "GB", pageToken: "page-two" });
-    app.reply(1, response("GB", [product("GBP", "Saved headphones")], { nextPageToken: null }));
-    await tick();
+    assert.equal(app.calls.length, 1);
+    assert.match(app.calls[0].url, /\/api\/marketplace\/products\/example-product\?storefront=GB$/);
     const tree = app.render();
     assert.match(text(tree), /Offers rechecked/);
-    assert.ok(nodes(tree).some((node) => node.type === "a" && node.props.href === "https://shop.example/item"));
+    assert.ok(nodes(tree).some((node) => node.type === "button" && node.props["aria-label"]?.includes("Check and visit") && node.props["aria-label"]?.includes("Saved headphones")));
   } finally { app.close(); }
 });
 
@@ -571,7 +777,7 @@ test("overlong provider IDs are not shown or mistaken for a complete ID during r
     app.reply(0, response("GB", [{ ...product("GBP", "Wrong product"), id: `${id}A` }], { nextPageToken: null }));
     await tick();
     let tree = app.render();
-    assert.match(text(tree), /couldn’t confirm this exact item/i);
+    assert.match(text(tree), /Current product details did not match this item and storefront/i);
     assert.doesNotMatch(text(tree), /Offers rechecked/);
     assert.equal(nodes(tree).some((node) => node.type === "a" && node.props.href === "https://shop.example/item"), false);
 
@@ -650,7 +856,7 @@ test("legacy boundary-length items stay intact while a fresh reviewed match is s
     await tick();
     const tree = remount.render();
     assert.match(text(tree), /Offers rechecked/);
-    assert.ok(nodes(tree).some((node) => node.type === "a" && node.props.href === "https://shop.example/item"));
+    assert.ok(nodes(tree).some((node) => node.type === "button" && node.props["aria-label"]?.includes("Check and visit") && node.props["aria-label"]?.includes("Fresh matching bag")));
     assert.deepEqual(JSON.parse(remount.values.get(key)).collections[0].items[0], oldItem);
   } finally { remount.close(); }
 });
@@ -732,33 +938,29 @@ test("unrepresentable saved rows stay intact and pause collection writes", async
   }
 });
 
-test("a bounded saved-offer search reports an inconclusive miss after three pages", async () => {
+test("saved offer recheck rejects a different product returned by the exact-product endpoint", async () => {
   const lists = { version: 1, collections: [{ id: "saved", name: "Travel list", createdAt: "", items: [{ product: product("GBP", "Saved headphones"), savedAt: "", retrievedAt: "2026-11-06T00:00:00Z", storefront: "GB" }] }] };
   const app = await createMarketplace({ ["paypal-markets-shopping-lists-v1"]: JSON.stringify(lists) });
   try {
     button(app.render(), "Travel list").props.onClick();
     button(app.render(), "Find current offers on Channel3").props.onClick();
-    for (let i = 0; i < 3; i++) {
-      app.reply(i, response("GB", [{ ...product("GBP", "Similar headphones"), id: `other-${i}` }], { nextPageToken: `next-${i}` }));
-      await tick();
-    }
-    assert.equal(app.calls.length, 3);
-    assert.match(text(app.render()), /couldn’t confirm this exact item in the checked results/i);
+    app.reply(0, response("GB", [{ ...product("GBP", "Similar headphones"), id: "different-product" }]));
+    await tick();
+    assert.equal(app.calls.length, 1);
+    assert.match(text(app.render()), /Current product details did not match this item and storefront/i);
     assert.equal(nodes(app.render()).some((node) => node.type === "a" && node.props.href === "https://shop.example/item"), false);
   } finally { app.close(); }
 });
 
-test("switching storefront during a saved-offer continuation discards its late result", async () => {
+test("switching storefront during a saved-offer exact check discards its late result", async () => {
   const lists = { version: 1, collections: [{ id: "saved", name: "Travel list", createdAt: "", items: [{ product: product("GBP", "Saved headphones"), savedAt: "", retrievedAt: "2026-11-06T00:00:00Z", storefront: "GB" }] }] };
   const app = await createMarketplace({ ["paypal-markets-shopping-lists-v1"]: JSON.stringify(lists) });
   try {
     button(app.render(), "Travel list").props.onClick();
     button(app.render(), "Find current offers on Channel3").props.onClick();
-    app.reply(0, response("GB", [{ ...product("GBP", "Similar headphones"), id: "other" }], { nextPageToken: "page-two" }));
-    await tick();
     app.setStorefront("US");
-    assert.equal(app.calls[1].signal.aborted, true);
-    app.reply(1, response("GB", [product("GBP", "Saved headphones")], { nextPageToken: null }));
+    assert.equal(app.calls[0].signal.aborted, true);
+    app.reply(0, response("GB", [product("GBP", "Saved headphones")]));
     await tick();
     const tree = app.render();
     assert.doesNotMatch(text(tree), /Offers rechecked/);
@@ -766,25 +968,32 @@ test("switching storefront during a saved-offer continuation discards its late r
   } finally { app.close(); }
 });
 
-test("a continuation for a different query cannot verify a saved offer", async () => {
+test("an exact-product response with the wrong currency cannot verify a saved offer", async () => {
   const lists = { version: 1, collections: [{ id: "saved", name: "Travel list", createdAt: "", items: [{ product: product("GBP", "Saved headphones"), savedAt: "", retrievedAt: "2026-11-06T00:00:00Z", storefront: "GB" }] }] };
   const app = await createMarketplace({ ["paypal-markets-shopping-lists-v1"]: JSON.stringify(lists) });
   try {
     button(app.render(), "Travel list").props.onClick();
     button(app.render(), "Find current offers on Channel3").props.onClick();
-    app.reply(0, response("GB", [{ ...product("GBP", "Similar headphones"), id: "other" }], { nextPageToken: "page-two" }));
-    await tick();
-    app.reply(1, response("GB", [product("GBP", "Saved headphones")], { query: "different search", nextPageToken: null }));
+    app.calls[0].resolve({ response: { ok: true, status: 200 }, body: {
+      provider: "Channel3", storefront: "GB", currency: "GBP", retrievedAt: "2026-11-06T00:00:00Z",
+      product: product("USD", "Saved headphones"),
+    } });
     await tick();
     const tree = app.render();
-    assert.match(text(tree), /did not match this search or storefront/i);
+    assert.match(text(tree), /No offers match these filters/i);
+    assert.doesNotMatch(text(tree), /Offers rechecked/);
     assert.equal(nodes(tree).some((node) => node.type === "a" && node.props.href === "https://shop.example/item"), false);
   } finally { app.close(); }
 });
 
 test("every fresh image, name, and retailer choice opens directly with its affiliate disclosure", async () => {
   for (const mode of ["browse", "search"]) {
-    const app = await createMarketplace({}, { mode, openWindow: () => assert.fail("Fresh offers use native links") });
+    const handoffs = [];
+    const app = await createMarketplace({}, { mode, openWindow: () => {
+      const handoff = { closed: false, opener: {}, document: { title: "" }, location: { destination: null, replace(url) { this.destination = url; } }, close() { this.closed = true; } };
+      handoffs.push(handoff);
+      return handoff;
+    } });
     try {
       const first = product("GBP", "Fictional headphones");
       first.images = [{ url: "https://cdn.trychannel3.com/headphones.jpg", is_main_image: true }];
@@ -804,22 +1013,23 @@ test("every fresh image, name, and retailer choice opens directly with its affil
       const tree = app.render();
       const card = nodes(tree).find((node) => node.type === "article" && text(node).includes("Fictional headphones"));
       assert.ok(card);
-      const disclosure = byId(tree, mode === "browse" ? "catalog-commission-legend" : "offers-commission-legend");
+      const disclosure = byId(tree, "marketplace-commission-legend");
       assert.ok(disclosure, "Retailer links describe the shared visible commission legend");
-      assert.match(text(disclosure), /we may earn if you buy through these links/);
-      const links = nodes(card).filter((node) => node.type === "a" && node.props.href);
+      assert.match(text(disclosure), /We may earn a commission on qualifying purchases\. Not cashback\./);
+      const links = nodes(card).filter((node) => node.type === "button" && node.props["aria-describedby"] === disclosure.props.id);
       assert.equal(links.length, 5, "The image, name, primary retailer link, and both comparison offers are available");
-      assert.deepEqual(new Set(links.map((link) => link.props.href)), expectedUrls);
       for (const link of links) {
         assert.equal(link.props["aria-describedby"], disclosure.props.id);
-        assert.equal(link.props.target, "_blank");
-        assert.equal(link.props.rel, "noopener noreferrer");
-        assert.equal(link.props.referrerPolicy, "no-referrer");
-        link.props.onClick({ type: "click", preventDefault: () => assert.fail("A fresh link opens directly") });
-        link.props.onAuxClick({ type: "auxclick", button: 1, preventDefault: () => assert.fail("A fresh link supports middle click") });
+        link.props.onClick();
+        const requestIndex = app.calls.length - 1;
+        assert.match(app.calls[requestIndex].url, /^\/api\/marketplace\/products\//);
+        const handoff = handoffs.at(-1);
+        app.reply(requestIndex, response("GB", [first]));
+        await tick();
+        assert.ok(expectedUrls.has(handoff.location.destination), `Unexpected verified destination for ${link.props["aria-label"]}: ${handoff.location.destination}`);
       }
-      assert.equal(app.calls.length, 1, "No title search is needed to open a fresh offer");
-      assert.match(text(card), /Up to 5%\*/);
+      assert.equal(new Set(handoffs.map((handoff) => handoff.location.destination)).size, 2, "Each current retailer can be opened after verification");
+      assert.match(text(card), /★ 5%/);
     } finally { app.close(); }
   }
 });
@@ -856,11 +1066,10 @@ test("the US retailer shortcut persists JSON and restores across mounts and stor
   const app = await createMarketplace({ "paypal-markets-display-currency-v1": JSON.stringify("EUR") }, { mode: "browse" });
   let saved;
   try {
-    button(app.render(), "Target").props.onClick();
-    assert.match(app.calls[0].url, /storefront=GB/);
-    button(app.render(), "Choose United States storefront").props.onClick();
+    button(app.render(), "Browse US retailers").props.onClick();
     assert.equal(byId(app.render(), "shopping-storefront").props.value, "US");
-    assert.equal(app.calls[0].signal.aborted, true, "Changing storefront must cancel the old catalog request");
+    button(app.render(), "Target").props.onClick();
+    assert.match(app.calls[0].url, /storefront=US/);
     saved = app.values.get(key);
     assert.equal(saved, JSON.stringify("US"), "The shortcut must use the same encoded preference as the selector");
     assert.equal(app.values.get("paypal-markets-display-currency-v1"), JSON.stringify("EUR"));
@@ -886,13 +1095,11 @@ test("the US retailer shortcut persists JSON and restores across mounts and stor
 test("the US retailer shortcut reports a blocked preference while keeping the current visit", async () => {
   const app = await createMarketplace({}, { mode: "browse" });
   try {
-    button(app.render(), "Target").props.onClick();
     globalThis.localStorage.setItem = () => { throw new Error("fictional storage failure"); };
-    button(app.render(), "Choose United States storefront").props.onClick();
+    button(app.render(), "Browse US retailers").props.onClick();
     const tree = app.render();
     assert.equal(byId(tree, "shopping-storefront").props.value, "US");
     assert.match(text(tree), /storefront changed for this visit, but the browser could not save it/i);
-    assert.equal(app.calls[0].signal.aborted, true);
   } finally { app.close(); }
 });
 
@@ -997,10 +1204,10 @@ test("the selected country also requires the paired response currency", async ()
 
 test('retailer catalog appends unique products without changing region and shows offer-specific commission',async()=>{
  const app=await createMarketplace({}, {mode:"browse"});try{
- button(app.render(),'Target').props.onClick();const first=product('GBP','First retailer product');first.offers[0].max_commission_rate=0.05;
- assert.match(app.calls[0].url,/storefront=GB/);assert.match(app.calls[0].url,/retailer=target/);assert.doesNotMatch(app.calls[0].url,/section=/);
- app.reply(0,response('GB',[first],{section:null,retailer:'target',limit:24,nextPageToken:'opaque1',title:'Target'}));await tick();assert.match(text(app.render()),/Up to 5%\*/);
- button(app.render(),'Load more products').props.onClick();assert.match(app.calls[1].url,/pageToken=opaque1/);const second={...product('GBP','Second retailer product'),id:'second'};app.reply(1,response('GB',[first,second],{section:null,retailer:'target',limit:24,nextPageToken:null,title:'Target'}));await tick();const tree=app.render();assert.match(text(tree),/First retailer product/);assert.match(text(tree),/Second retailer product/);assert.equal(nodes(tree).filter(n=>n.type==='article').length,2);
+ button(app.render(),'Browse US retailers').props.onClick();button(app.render(),'Target').props.onClick();const first=product('USD','First retailer product');first.offers[0].max_commission_rate=0.05;
+ assert.match(app.calls[0].url,/storefront=US/);assert.match(app.calls[0].url,/retailer=target/);assert.doesNotMatch(app.calls[0].url,/section=/);
+ app.reply(0,response('US',[first],{section:null,retailer:'target',limit:24,nextPageToken:'opaque1',title:'Target'}));await tick();assert.match(text(app.render()),/★ 5%/);
+ button(app.render(),'Load more products').props.onClick();assert.match(app.calls[1].url,/pageToken=opaque1/);const second={...product('USD','Second retailer product'),id:'second'};app.reply(1,response('US',[first,second],{section:null,retailer:'target',limit:24,nextPageToken:null,title:'Target'}));await tick();const tree=app.render();assert.match(text(tree),/First retailer product/);assert.match(text(tree),/Second retailer product/);assert.equal(nodes(tree).filter(n=>n.type==='article').length,2);
  }finally{app.close();}
 });
 
@@ -1008,13 +1215,14 @@ test("curated pagination preserves each product's own retrieval time when saving
   const app = await createMarketplace({}, { mode: "browse" });
   try {
     const firstAt = "2026-11-06T12:00:00Z", secondAt = "2026-11-06T12:10:00Z";
-    const first = { ...product("GBP", "First curated item"), id: "curated-first" };
-    const second = { ...product("GBP", "Second curated item"), id: "curated-second" };
+    const first = { ...product("USD", "First curated item"), id: "curated-first" };
+    const second = { ...product("USD", "Second curated item"), id: "curated-second" };
+    button(app.render(), "Browse US retailers").props.onClick();
     button(app.render(), "Target").props.onClick();
-    app.reply(0, response("GB", [first], { section: null, retailer: "target", limit: 24, nextPageToken: "catalog-next", title: "Target", retrievedAt: firstAt }));
+    app.reply(0, response("US", [first], { section: null, retailer: "target", limit: 24, nextPageToken: "catalog-next", title: "Target", retrievedAt: firstAt }));
     await tick();
     button(app.render(), "Load more products").props.onClick();
-    app.reply(1, response("GB", [{ ...first, title: "Duplicate curated item" }, second], { section: null, retailer: "target", limit: 24, nextPageToken: null, title: "Target", retrievedAt: secondAt }));
+    app.reply(1, response("US", [{ ...first, title: "Duplicate curated item" }, second], { section: null, retailer: "target", limit: 24, nextPageToken: null, title: "Target", retrievedAt: secondAt }));
     await tick();
     const tree = app.render();
     assert.match(text(tree), /Latest page retrieved/);
@@ -1041,26 +1249,28 @@ test("curated catalog announces concise storefront progress outside product card
     assert.equal(byId(tree, "curated-catalog-status").props["aria-live"], "polite");
     assert.equal(text(byId(tree, "curated-catalog-status")), "", "the persistent live region starts empty");
 
+    button(tree, "Browse US retailers").props.onClick();
+    tree = app.render();
     button(tree, "Target").props.onClick();
     tree = app.render();
-    assert.equal(text(byId(tree, "curated-catalog-status")), "Loading Target products for United Kingdom · GBP…");
-    assert.ok(nodes(tree).some((node) => node.props?.["aria-hidden"] === "true" && text(node).includes("Loading Target products for United Kingdom · GBP…")), "the visible loader remains available while the live region announces it");
+    assert.equal(text(byId(tree, "curated-catalog-status")), "Loading Target products for United States · USD…");
+    assert.ok(nodes(tree).some((node) => node.props?.["aria-hidden"] === "true" && text(node).includes("Loading Target products for United States · USD…")), "the visible loader remains available while the live region announces it");
 
-    const first = { ...product("GBP", "First accessible catalog item"), id: "catalog-access-first" };
-    app.reply(0, response("GB", [first], { section: null, retailer: "target", limit: 24, nextPageToken: "catalog-access-next", title: "Target" }));
+    const first = { ...product("USD", "First accessible catalog item"), id: "catalog-access-first" };
+    app.reply(0, response("US", [first], { section: null, retailer: "target", limit: 24, nextPageToken: "catalog-access-next", title: "Target" }));
     await tick();
     tree = app.render();
-    assert.equal(text(byId(tree, "curated-catalog-status")), "1 product loaded for Target · United Kingdom · GBP. More pages are available.");
+    assert.equal(text(byId(tree, "curated-catalog-status")), "1 product loaded for Target · United States · USD. More pages are available.");
 
     button(tree, "Load more products").props.onClick();
     tree = app.render();
-    assert.equal(text(byId(tree, "curated-catalog-status")), "Loading more Target products for United Kingdom · GBP. 1 product currently loaded.");
+    assert.equal(text(byId(tree, "curated-catalog-status")), "Loading more Target products for United States · USD. 1 product currently loaded.");
 
-    const second = { ...product("GBP", "Second accessible catalog item"), id: "catalog-access-second" };
-    app.reply(1, response("GB", [second], { section: null, retailer: "target", limit: 24, nextPageToken: null, title: "Target" }));
+    const second = { ...product("USD", "Second accessible catalog item"), id: "catalog-access-second" };
+    app.reply(1, response("US", [second], { section: null, retailer: "target", limit: 24, nextPageToken: null, title: "Target" }));
     await tick();
     tree = app.render();
-    assert.equal(text(byId(tree, "curated-catalog-status")), "2 products loaded for Target · United Kingdom · GBP. No more pages are available.");
+    assert.equal(text(byId(tree, "curated-catalog-status")), "2 products loaded for Target · United States · USD. No more pages are available.");
     assert.equal(nodes(tree).filter((node) => node.props?.id === "curated-catalog-status").length, 1, "the same single status remains mounted after pagination");
     const curatedResults = nodes(tree).reverse().find((node) => node.type === "div" && text(node).includes("SHARED CATALOG · TARGET") && text(node).includes(first.title));
     assert.ok(curatedResults, "Expected the rendered curated results container");
@@ -1071,6 +1281,7 @@ test("curated catalog announces concise storefront progress outside product card
     }
 
     app.setStorefront("US");
+    button(app.render(), "Browse all categories and retailers").props.onClick();
     button(app.render(), "Target").props.onClick();
     tree = app.render();
     assert.equal(text(byId(tree, "curated-catalog-status")), "Loading Target products for United States · USD…");
@@ -1268,16 +1479,16 @@ test("commission rates use one shared legend and all actual offer prices remain 
     assert.ok(offers, "Every retailer offer is in an ordinary visible section");
     for (const amount of ["$120.00", "$135.00", "$140.00", "$145.00"]) assert.ok(text(offers).includes(amount));
     const unlinkedOffer = nodes(offers).find((node) => node.type === "li" && text(node).includes("$140.00"));
-    assert.match(text(unlinkedOffer), /No retailer link/);
+    assert.match(text(unlinkedOffer), /no link/);
     assert.equal(nodes(unlinkedOffer).some((node) => node.type === "a" || node.type === "button"), false);
-    const compactRates = new Set(nodes(card).filter((node) => node.type === "span" && node.props["aria-hidden"] === "true").map(text));
-    for (const label of ["Up to 5%*", "Up to 0%*", "Unavailable*", "Up to 1.25%*"]) assert.ok(compactRates.has(label), label);
-    assert.ok(nodes(card).some((node) => node.props.title === "Affiliate commission rate unavailable."));
-    assert.ok(nodes(card).some((node) => String(node.props.title ?? "").includes("Up to 5% maximum advertised affiliate commission")));
-    const legends = nodes(section).filter((node) => node.props.id === "offers-commission-legend");
+    const compactRates = new Set(nodes(card).filter((node) => node.type === "span" && node.props.role === "img").map(text));
+    for (const label of ["★ 5%", "★ 0%", "★ —", "★ 1.25%"]) assert.ok(compactRates.has(label), label);
+    assert.ok(nodes(card).some((node) => node.props["aria-label"] === "Advertised affiliate commission rate unavailable."));
+    assert.ok(nodes(card).some((node) => String(node.props["aria-label"] ?? "").includes("Maximum advertised affiliate commission 5%")));
+    const legends = nodes(tree).filter((node) => node.props.id === "marketplace-commission-legend");
     assert.equal(legends.length, 1);
-    assert.match(text(legends[0]), /not customer cashback/);
-    assert.match(text(legends[0]), /Rates and actual earnings vary/);
-    assert.match(text(legends[0]), /we may earn if you buy/);
+    assert.match(text(legends[0]), /may change/);
+    assert.match(text(legends[0]), /Not cashback/);
+    assert.match(text(legends[0]), /We may earn a commission/);
   } finally { app.close(); }
 });

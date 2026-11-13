@@ -1,0 +1,12 @@
+$kind: collection
+description: >-
+  Local-only, guard-focused checks for /api/ai/shop-discover. The sole saved
+  request uses synthetic data, a foreign Origin, and an intentionally invalid
+  empty product list. With the local demo enabled it must be rejected as 403
+  before body processing; with the production/hosted demo disabled it returns
+  503. With current route validation, if the origin guard regresses the
+  invalid body returns 400 before provider generation. No valid same-origin
+  request is saved because it can incur an OpenAI API charge. The default
+  server is intentionally closed loopback.
+variables:
+  baseUrl: http://127.0.0.1:9

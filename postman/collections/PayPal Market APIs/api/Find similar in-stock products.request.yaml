@@ -1,0 +1,15 @@
+$kind: http-request
+description: Finds product-ID-based alternatives in the selected storefront. Only provider-reported in-stock offers with safe URLs are returned; recognized foreign country-coded retailer domains are filtered, while generic domains remain unclassified. Refresh a chosen product before retailer handoff.
+url: '{{baseUrl}}/api/marketplace/products/:productId/similar?storefront=US'
+method: GET
+headers:
+  - key: Accept
+    value: application/json
+queryParams:
+  - key: storefront
+    value: US
+pathVariables:
+  - key: productId
+    value: 'SET_FROM_CHANNEL3_SEARCH'
+settings: {}
+order: 6000

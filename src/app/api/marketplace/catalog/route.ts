@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { browseCatalog, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3Locale, getRequiredChannel3CollectionId } from '@/lib/channel3';
+import { Channel3BudgetExceededError, browseCatalog, decodeCatalogPageToken, encodeCatalogPageToken, getChannel3Locale, getRequiredChannel3CollectionId } from '@/lib/channel3';
 import { findChannel3CuratedSection, findChannel3CuratedRetailer } from '@/lib/channel3-catalog';
 import { isStorefront } from '@/lib/channel3-storefront';
 import { takeChannel3RateLimit } from '@/lib/channel3-rate-limit';
@@ -35,6 +35,16 @@ export async function GET(request: NextRequest) {
   const cursor = params.get('pageToken');
   if (cursor !== null && (!cursor || cursor.length > 6144)) return json(request, { error: 'Restart this catalog selection to load more products.' }, { status: 400 });
 
+  let locale: ReturnType<typeof getChannel3Locale>;
+  try {
+    locale = getChannel3Locale(isStorefront(storefront) ? storefront : undefined);
+  } catch {
+    return json(request, { error: 'The curated catalog is temporarily unavailable. Please try again later.' }, { status: 503 });
+  }
+  if (retailer && !retailer.storefronts.some((country) => country === locale.country)) {
+    return json(request, { error: `This retailer is not available in the ${locale.country} storefront.` }, { status: 400 });
+  }
+
   if (!takeChannel3RateLimit(request)) {
     return json(
       request,
@@ -44,7 +54,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const locale = getChannel3Locale(isStorefront(storefront) ? storefront : undefined);
     const binding = JSON.stringify({ section: section?.id ?? null, categoryId: section?.categoryId ?? null, retailer: retailer?.id ?? null, websiteId: retailer?.websiteId ?? null, collectionId: getRequiredChannel3CollectionId(), locale, limit });
     const providerToken = cursor === null ? undefined : decodeCatalogPageToken(cursor, binding);
     if (providerToken === null) return json(request, { error: 'Restart this catalog selection to load more products.' }, { status: 400 });
@@ -66,7 +75,13 @@ export async function GET(request: NextRequest) {
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof Channel3BudgetExceededError) {
+      return json(request, { error: 'The shared product-search budget is temporarily exhausted. Please try again later.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(error.retryAfterSeconds), 'Cache-Control': 'no-store' },
+      });
+    }
     return json(
       request,
       { error: 'The curated catalog is temporarily unavailable. Please try again later.' },

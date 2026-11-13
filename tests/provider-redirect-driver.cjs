@@ -45,10 +45,14 @@ async function run() {
   ]);
   process.env.CHANNEL3_BASE_URL = `${upstream}/c3`;
   process.env.CHANNEL3_API_KEY = 'synthetic-c3-key';
+  process.env.CHANNEL3_COLLECTION_ID = 'fixture-collection';
   process.env.COINGECKO_DEMO_API_KEY = 'synthetic-gecko-key';
   process.env.PAYPAL_CLIENT_SECRET = 'synthetic-secret';
   const storefront = load('src/lib/channel3-storefront.ts');
-  const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront });
+  const safety = load('src/lib/marketplace-safety.ts');
+  const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super('budget exhausted'); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront, '@/lib/marketplace-safety': safety, '@/lib/channel3-request-budget': budget });
   const assets = load('src/lib/market-assets.ts');
   const market = load('src/lib/market-data.ts', { 'server-only': {}, 'next/cache': { cacheLife() {} }, './market-assets': assets }, [
     ['https://api.coingecko.com/api/v3', `${upstream}/gecko`],
@@ -91,7 +95,7 @@ async function run() {
   }
 }
 
-run().catch(() => {
-  console.error('FAIL isolated provider redirect regression');
+run().catch((error) => {
+  console.error('FAIL isolated provider redirect regression:', error);
   process.exitCode = 1;
 });

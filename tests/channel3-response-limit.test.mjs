@@ -16,13 +16,18 @@ function load(source, aliases = {}) {
 async function source(path) { return readFile(new URL(path, import.meta.url), "utf8"); }
 
 const storefront = load(await source("../src/lib/channel3-storefront.ts"));
-const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront });
+const safety = load(await source("../src/lib/marketplace-safety.ts"));
+const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super("budget exhausted"); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront, "@/lib/marketplace-safety": safety, "@/lib/channel3-request-budget": budget });
 const cors = load(await source("../src/lib/mobile-web-cors.ts"), { "server-only": {} });
 const catalog = load(await source("../src/lib/channel3-catalog.ts"));
+const priceRange = load(await source("../src/lib/marketplace-price-range.ts"));
 const aliases = {
   "@/lib/channel3": provider,
   "@/lib/channel3-storefront": storefront,
   "@/lib/channel3-catalog": catalog,
+  "@/lib/marketplace-price-range": priceRange,
   "@/lib/mobile-web-cors": cors,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => true },
   "@/lib/request-limits": { acquireClientSlot: () => () => {} },
@@ -49,10 +54,10 @@ globalThis.fetch = async (url, init) => {
 };
 test.after(() => { globalThis.fetch = originalFetch; AbortSignal.timeout = originalTimeout; });
 
-function post(storefront = "GB") {
+function post(storefront = "GB", mode) {
   return search.POST(new NextRequest("http://localhost:3000/api/marketplace/search", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: "headphones", limit: 8, storefront }),
+    body: JSON.stringify({ query: "headphones", limit: 8, storefront, ...(mode ? { mode } : {}) }),
   }));
 }
 function get(storefront = "US") {
@@ -69,6 +74,12 @@ async function unavailable(request) {
   assert.deepEqual(Object.keys(body), ["error"]);
   assert.match(body.error, /temporarily unavailable/i);
   assert.doesNotMatch(JSON.stringify(body), /synthetic-private-marker/);
+}
+async function timedOut(request) {
+  const response = await request();
+  assert.equal(response.status, 504);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { error: "Product search took too long. Please try again." });
 }
 
 test("GB and US search and browse retain full product fields and existing provider options", async () => {
@@ -101,6 +112,37 @@ test("GB and US search and browse retain full product fields and existing provid
       assert.equal(calls[0].payload.config.currency, currency);
       assert.equal(calls[0].payload.config.language, "en");
     }
+  }
+});
+
+test("Channel3 search gets a bounded longer deadline, with more time for agentic search", async () => {
+  const deadlines = [];
+  AbortSignal.timeout = (milliseconds) => {
+    deadlines.push(milliseconds);
+    return new AbortController().signal;
+  };
+  makeResponse = () => bodyResponse(JSON.stringify({ products: [] }));
+  try {
+    assert.equal((await post("GB")).status, 200);
+    assert.equal((await post("US", "agentic")).status, 200);
+    assert.deepEqual(deadlines, [12_000, 20_000]);
+    assert.equal(calls.at(-1).payload.config.mode, "agentic");
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+  }
+});
+
+test("a provider request deadline returns a safe gateway-timeout response", async () => {
+  AbortSignal.timeout = () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException("Synthetic timeout", "TimeoutError"));
+    return controller.signal;
+  };
+  makeResponse = () => { throw new Error("synthetic transport abort"); };
+  try {
+    await timedOut(() => post("US", "agentic"));
+  } finally {
+    AbortSignal.timeout = originalTimeout;
   }
 });
 
@@ -172,7 +214,7 @@ test("the same request deadline rejects and cancels a stalled body", async () =>
   let cancelled = false;
   let timer;
   AbortSignal.timeout = (milliseconds) => {
-    assert.equal(milliseconds, 8_000);
+    assert.equal(milliseconds, 12_000);
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 20);
     return controller.signal;
@@ -182,7 +224,7 @@ test("the same request deadline rejects and cancels a stalled body", async () =>
     cancel() { cancelled = true; },
   }));
   try {
-    await unavailable(post);
+    await timedOut(post);
     assert.equal(cancelled, true);
   } finally {
     clearTimeout(timer);

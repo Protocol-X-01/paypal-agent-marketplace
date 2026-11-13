@@ -1,0 +1,82 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { Channel3BudgetExceededError, findSimilarProducts, getChannel3Locale } from "@/lib/channel3";
+import { isStorefront } from "@/lib/channel3-storefront";
+import { takeChannel3RateLimit } from "@/lib/channel3-rate-limit";
+import { safeMarketplaceOfferUrl } from "@/lib/marketplace-safety";
+import { handleMobileWebPreflight, isAllowedApplicationOrigin, withMobileWebCors } from "@/lib/mobile-web-cors";
+
+const PRODUCT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+function json(request: NextRequest, body: unknown, init?: ResponseInit): NextResponse {
+  const response = NextResponse.json(body, init);
+  response.headers.set("Cache-Control", "no-store");
+  return withMobileWebCors(request, response);
+}
+
+export async function GET(request: NextRequest, context: { params: Promise<{ productId: string }> }) {
+  if (!isAllowedApplicationOrigin(request)) {
+    return json(request, { error: "Request origin is not allowed." }, { status: 403 });
+  }
+
+  const params = request.nextUrl.searchParams;
+  if (request.nextUrl.search.length > 256 || [...params.keys()].some(key => key !== "storefront" || params.getAll(key).length !== 1)) {
+    return json(request, { error: "Choose one supported storefront." }, { status: 400 });
+  }
+  const storefront = params.get("storefront");
+  if (!isStorefront(storefront)) {
+    return json(request, { error: "Choose the GB or US storefront." }, { status: 400 });
+  }
+
+  const { productId } = await context.params;
+  if (!PRODUCT_ID_PATTERN.test(productId)) {
+    return json(request, { error: "Choose a valid product from the marketplace." }, { status: 400 });
+  }
+
+  if (!takeChannel3RateLimit(request)) {
+    return json(request, { error: "Product checks are temporarily limited. Please wait a minute and try again." }, {
+      status: 429,
+      headers: { "Retry-After": "60", "Cache-Control": "no-store" },
+    });
+  }
+
+  try {
+    const locale = getChannel3Locale(storefront);
+    const result = await findSimilarProducts(productId, locale);
+    if (!result) {
+      return json(request, { error: "No similar products are currently available for this item." }, { status: 404 });
+    }
+
+    const seen = new Set<string>([productId]);
+    const products = result.products.flatMap(product => {
+      if (!PRODUCT_ID_PATTERN.test(product.id) || seen.has(product.id)) return [];
+      seen.add(product.id);
+      const offers = product.offers.filter(offer => offer.availability === "InStock" && offer.condition !== "used" && safeMarketplaceOfferUrl(offer.url, offer.domain));
+      return offers.length ? [{ ...product, offers }] : [];
+    }).slice(0, 24);
+    if (!products.length) {
+      return json(request, { error: "No similar products are currently reported in stock." }, { status: 404 });
+    }
+
+    return json(request, {
+      provider: "Channel3",
+      productId,
+      storefront: locale.country,
+      currency: locale.currency,
+      retrievedAt: new Date().toISOString(),
+      products,
+    });
+  } catch (error) {
+    if (error instanceof Channel3BudgetExceededError) {
+      return json(request, { error: "The shared product-search budget is temporarily exhausted. Please try again later." }, {
+        status: 429,
+        headers: { "Retry-After": String(error.retryAfterSeconds), "Cache-Control": "no-store" },
+      });
+    }
+    return json(request, { error: "Similar products could not be refreshed. Please try again shortly." }, { status: 503 });
+  }
+}
+
+export function OPTIONS(request: NextRequest) {
+  return handleMobileWebPreflight(request, ["GET"]);
+}

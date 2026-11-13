@@ -19,7 +19,7 @@ MOCK = Path('postman/mocks/provider-redirect-regression')
 SIM = Path('postman/simulations/provider-redirect-regression.sim.yaml')
 COLLECTION = Path('postman/simulations/provider-redirect-checks')
 DRIVER = Path('tests/provider-redirect-driver.cjs')
-SOURCES = tuple(map(Path, ('src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/market-data.ts', 'src/lib/market-assets.ts', 'src/lib/paypal.ts')))
+SOURCES = tuple(map(Path, ('src/lib/channel3.ts', 'src/lib/channel3-storefront.ts', 'src/lib/marketplace-safety.ts', 'src/lib/market-data.ts', 'src/lib/market-assets.ts', 'src/lib/paypal.ts')))
 
 
 def digest(path):

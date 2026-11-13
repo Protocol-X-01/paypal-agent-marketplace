@@ -1,0 +1,44 @@
+$kind: http-request
+name: Reject a foreign-origin Shop Discover
+description: >-
+  Guard-only request with a synthetic search phrase and an intentionally
+  invalid empty products array. When the local demo is enabled, the foreign
+  Origin must be rejected as 403 before the body or provider is processed.
+  In production or any disabled environment, configuration is checked first
+  and the route returns 503. With current route validation, an origin-guard
+  regression reaches a 400 input rejection before any provider call. This request never
+  exercises a successful AI generation; valid same-origin calls can incur an
+  OpenAI API charge. The default baseUrl is intentionally closed loopback.
+url: '{{baseUrl}}/api/ai/shop-discover'
+method: POST
+headers:
+  - key: Origin
+    value: https://foreign.example.test
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "wireless headphones",
+      "storefront": "US",
+      "products": []
+    }
+settings:
+  followRedirects: false
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Foreign-origin request is rejected or the route is disabled", function () {
+        pm.expect([403, 503]).to.include(pm.response.code);
+        pm.expect(pm.response.headers.get("Cache-Control")).to.eql("no-store");
+        const body = pm.response.json();
+        pm.expect(["origin_not_allowed", "insights_unavailable"]).to.include(body.error.code);
+      });
+      pm.test("The guard-only request did not return generated commentary", function () {
+        pm.expect(pm.response.code).to.not.eql(200);
+      });
+order: 1000

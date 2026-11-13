@@ -9,6 +9,7 @@ import ts from "typescript";
 const nodeRequire = createRequire(import.meta.url);
 const source = await readFile(new URL("../src/app/api/marketplace/search/route.ts", import.meta.url), "utf8");
 const corsSource = await readFile(new URL("../src/lib/mobile-web-cors.ts", import.meta.url), "utf8");
+const priceRangeSource = await readFile(new URL("../src/lib/marketplace-price-range.ts", import.meta.url), "utf8");
 
 function loadTypeScript(text, aliases = {}) {
   const compiled = ts.transpileModule(text, {
@@ -21,16 +22,20 @@ function loadTypeScript(text, aliases = {}) {
 }
 
 const cors = loadTypeScript(corsSource, { "server-only": {} });
+const priceRange = loadTypeScript(priceRangeSource);
 let allowProviderRequest = true;
 let searchCalls = [];
 let searchImpl = async () => ({ products: [] });
 const { POST } = loadTypeScript(source, {
   "@/lib/mobile-web-cors": cors,
+  "@/lib/marketplace-price-range": priceRange,
   "@/lib/channel3-rate-limit": { takeChannel3RateLimit: () => allowProviderRequest },
   "@/lib/request-limits": { acquireClientSlot: () => () => {} },
   "@/lib/channel3": {
+    Channel3TimeoutError: class Channel3TimeoutError extends Error {},
     getChannel3Locale: (storefront) => ({ country: storefront ?? "GB", currency: storefront === "US" ? "USD" : "GBP", language: "en" }),
     getChannel3CollectionId: () => undefined,
+    requestedChannel3Retailer: () => null,
     search: (options) => {
       searchCalls.push(options);
       return searchImpl(options);

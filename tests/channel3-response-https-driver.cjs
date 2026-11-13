@@ -33,12 +33,17 @@ function load(relative, aliases = {}) {
 }
 
 const storefront = load('src/lib/channel3-storefront.ts');
-const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront });
+const priceRange = load('src/lib/marketplace-price-range.ts');
+const safety = load('src/lib/marketplace-safety.ts');
+const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super('budget exhausted'); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const channel3 = load('src/lib/channel3.ts', { 'server-only': {}, '@/lib/channel3-storefront': storefront, '@/lib/marketplace-safety': safety, '@/lib/channel3-request-budget': budget });
 const cors = load('src/lib/mobile-web-cors.ts', { 'server-only': {} });
 const catalog = load('src/lib/channel3-catalog.ts');
 const aliases = {
   '@/lib/channel3': channel3,
   '@/lib/channel3-storefront': storefront,
+  '@/lib/marketplace-price-range': priceRange,
   '@/lib/channel3-catalog': catalog,
   '@/lib/mobile-web-cors': cors,
   '@/lib/channel3-rate-limit': { takeChannel3RateLimit: () => true },
@@ -135,9 +140,10 @@ async function run() {
     const started = Date.now();
     const stalled = await post('US');
     const elapsed = Date.now() - started;
-    assert.equal(stalled.status, 503);
-    assert.ok(elapsed >= 7_000 && elapsed < 15_000, `unexpected deadline: ${elapsed} ms`);
-    console.log(`PASS HTTPS stalled body returned 503 after the real eight-second deadline (${elapsed} ms)`);
+    assert.equal(stalled.status, 504);
+    assert.deepEqual(await stalled.json(), { error: 'Product search took too long. Please try again.' });
+    assert.ok(elapsed >= 11_000 && elapsed < 16_000, `unexpected deadline: ${elapsed} ms`);
+    console.log(`PASS HTTPS stalled search returned a safe 504 after the real twelve-second deadline (${elapsed} ms)`);
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(declaredClosed, 2, 'both declared-oversize streams should be cancelled');
     assert.equal(redirectHits, 0, 'redirect target must not receive credentials');

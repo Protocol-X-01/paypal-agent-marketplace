@@ -21,9 +21,11 @@ export function safeMarketplaceUrl(value: unknown): string | null {
 /** An offer may link to its listed retailer or Channel3's affiliate host. */
 export function safeMarketplaceOfferUrl(value: unknown, retailerDomain: string): string | null {
   const url = safeMarketplaceUrl(value);
-  if (!url) return null;
+  if (!url || typeof retailerDomain !== "string" || !/^[a-z0-9.-]{1,253}$/i.test(retailerDomain)) return null;
+  const domain = retailerDomain.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  if (!safeMarketplaceUrl(`https://${domain}`)) return null;
   const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
-  return hostname.replace(/^www\./, "") === retailerDomain || hostname === "buy.trychannel3.com" ? url : null;
+  return hostname.replace(/^www\./, "") === domain || hostname === "buy.trychannel3.com" ? url : null;
 }
 
 /** Restrict the initial image URL to Channel3's image host. */
@@ -120,7 +122,7 @@ export function primaryMarketplaceImage(value: unknown): string | null {
   return images.find((image) => image.is_main_image)?.url ?? images[0]?.url ?? null;
 }
 
-type OfferCandidate = { domain: string; url: string | null };
+type OfferCandidate = { domain: string; url: string | null; availability?: "InStock" | "OutOfStock" };
 type ProductCandidate = { id: string; offers: readonly OfferCandidate[] };
 export const VERIFIED_OFFER_LIFETIME_MS = 5 * 60 * 1000;
 // This is the existing application storage boundary, not a Channel3 limit.
@@ -136,16 +138,18 @@ export function isFreshVerifiedOffer(verifiedAt: number, now: number): boolean {
 }
 
 /** Recheck the exact product and merchant before accepting its direct or Channel3 affiliate URL. */
-export function matchCurrentOffer<T extends ProductCandidate>(products: readonly T[], productId: string, retailerDomain?: string, preferredUrl?: string): { product: T | null; url: string | null } {
+export function matchCurrentOffer<T extends ProductCandidate>(products: readonly T[], productId: string, retailerDomain?: string, preferredUrl?: string, allowAnyInStock = false): { product: T | null; url: string | null } {
   if (!isUsableProductId(productId)) return { product: null, url: null };
   const product = products.find((candidate) => isUsableProductId(candidate.id) && candidate.id === productId) ?? null;
-  if (!product || !retailerDomain) return { product, url: null };
+  if (!product || (!retailerDomain && !allowAnyInStock)) return { product, url: null };
   const matches = product.offers.flatMap((candidate) => {
-    const url = candidate.domain === retailerDomain ? safeMarketplaceOfferUrl(candidate.url, retailerDomain) : null;
+    const domainMatches = retailerDomain ? candidate.domain === retailerDomain : true;
+    const url = domainMatches && candidate.availability === "InStock" ? safeMarketplaceOfferUrl(candidate.url, candidate.domain) : null;
     return url ? [url] : [];
   });
   const preferred = safeMarketplaceUrl(preferredUrl);
   if (preferred && matches.includes(preferred)) return { product, url: preferred };
   const uniqueUrls = [...new Set(matches)];
+  if (allowAnyInStock && !retailerDomain) return { product, url: uniqueUrls[0] ?? null };
   return { product, url: uniqueUrls.length === 1 ? uniqueUrls[0] : null };
 }
