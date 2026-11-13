@@ -7,6 +7,7 @@ const source = readFileSync(new URL("../packages/ai-insights/ui/InsightPanel.tsx
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
 const selection = { coinId: "bitcoin", currency: "GBP", days: 7 };
 const reportSelection = { days: 7, account: "Business", market: "UK" };
+const shopSelection = { query: "wireless headphones", storefront: "US", products: [{ title: "Studio headphones", brand: "North Audio" }] };
 const commentary = { headline: "An observed change", summary: "This explanation describes only the selected reference.", observations: ["An observation."], caution: "No future result is established." };
 const envelope = { generatedAt: "2026-11-06T13:00:00Z", model: "example-model", insight: commentary, disclaimer: "Example AI explanation." };
 function market(chosen = selection) {
@@ -14,6 +15,9 @@ function market(chosen = selection) {
 }
 function report() {
   return { ...envelope, kind: "fictional-report", source: { ...reportSelection, provider: "Fictional local fixture", fixtureTimestamp: "2026-11-06T00:00:00Z", currentStart: "2026-10-30T00:00:00Z", currentEnd: "2026-11-06T00:00:00Z", priorStart: "2026-10-23T00:00:00Z", priorEnd: "2026-10-30T00:00:00Z", cohortCount: 2, priorActive: 10, currentActive: 12, retained: 8, currentAttempted: 20, currentCompleted: 18, priorCompleted: 14, retention: .8, completion: .9 } };
+}
+function shop(chosen = shopSelection) {
+  return { ...envelope, kind: "product-discovery", disclaimer: "The Channel3 cards and retailer pages show current prices and availability.", source: { provider: "Displayed Channel3 result labels", storefront: chosen.storefront, productCount: chosen.products.length } };
 }
 
 // Small hook harness: React replaces a keyed child and cleans up its own effects.
@@ -66,6 +70,11 @@ function mount(initialProps) {
   function render(nextProps = props, { deferCleanup = false } = {}) {
     props = nextProps;
     const child = Component(props);
+    if (child === null) {
+      if (instance) cleanup(instance);
+      instance = null;
+      return null;
+    }
     if (!instance || instance.key !== child.key || instance.type !== child.type) {
       if (instance) {
         const owner = instance;
@@ -103,16 +112,16 @@ const button = (tree) => find(tree, (node) => node.type === "button");
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
 
 test("leaving and returning to a pending selection creates a usable view and ignores late results", async () => {
-  const screen = mount({ kind: "market", selection });
+  const screen = mount({ kind: "market", selection, enabled: true });
   try {
     button(screen.render()).props.onClick();
     assert.equal(button(screen.render()).props.disabled, true);
     const requestA = screen.requests[0];
     assert.equal(screen.timers.size, 1);
-    screen.render({ kind: "market", selection: { ...selection, coinId: "ethereum" } });
+    screen.render({ kind: "market", selection: { ...selection, coinId: "ethereum" }, enabled: true });
     assert.equal(requestA.signal.aborted, true);
     assert.equal(screen.timers.size, 0);
-    let tree = screen.render({ kind: "market", selection });
+    let tree = screen.render({ kind: "market", selection, enabled: true });
     assert.equal(button(tree).props.disabled, false);
     assert.equal(button(tree).props["aria-busy"], false);
     button(tree).props.onClick();
@@ -131,15 +140,14 @@ test("leaving and returning to a pending selection creates a usable view and ign
   } finally { screen.unmount(); }
 });
 
-test("disabling a fictional preview cancels work and re-enabling never restores a pending or old success", async () => {
+test("hiding a fictional preview removes its action and re-enabling never restores pending or old success", async () => {
   const on = { kind: "fictional-report", selection: reportSelection, enabled: true };
   const screen = mount(on);
   try {
     button(screen.render()).props.onClick();
     let tree = screen.render({ ...on, enabled: false });
     assert.equal(screen.requests[0].signal.aborted, true);
-    assert.equal(button(tree).props.disabled, true);
-    button(tree).props.onClick();
+    assert.equal(tree, null);
     assert.equal(screen.requests.length, 1);
     tree = screen.render(on);
     assert.equal(button(tree).props.disabled, false);
@@ -147,7 +155,7 @@ test("disabling a fictional preview cancels work and re-enabling never restores 
     screen.requests[1].resolve(report());
     await settle();
     assert.match(textOf(screen.render()), /An observed change/);
-    screen.render({ ...on, enabled: false });
+    assert.equal(screen.render({ ...on, enabled: false }), null);
     tree = screen.render(on);
     assert.doesNotMatch(textOf(tree), /An observed change/);
     assert.match(textOf(button(tree)), /Summarize fictional report/);
@@ -159,13 +167,13 @@ test("disabling a fictional preview cancels work and re-enabling never restores 
 });
 
 test("old-view cleanup cannot cancel a new view request, and rapid activation starts one request", async () => {
-  const screen = mount({ kind: "market", selection });
+  const screen = mount({ kind: "market", selection, enabled: true });
   try {
     const oldButton = button(screen.render());
     oldButton.props.onClick(); oldButton.props.onClick();
     assert.equal(screen.requests.length, 1);
     const nextSelection = { ...selection, currency: "USD" };
-    const tree = screen.render({ kind: "market", selection: nextSelection }, { deferCleanup: true });
+    const tree = screen.render({ kind: "market", selection: nextSelection, enabled: true }, { deferCleanup: true });
     button(tree).props.onClick();
     assert.equal(screen.requests.length, 2);
     screen.flushCleanups();
@@ -182,7 +190,7 @@ test("old-view cleanup cannot cancel a new view request, and rapid activation st
 });
 
 test("unmount cancels outstanding work and timeout reports an accessible retryable error", async () => {
-  const screen = mount({ kind: "market", selection });
+  const screen = mount({ kind: "market", selection, enabled: true });
   button(screen.render()).props.onClick();
   const first = screen.requests[0];
   screen.unmount();
@@ -191,7 +199,7 @@ test("unmount cancels outstanding work and timeout reports an accessible retryab
   first.resolve(market()); await settle();
   assert.equal(screen.lateWrites, 0);
 
-  const timed = mount({ kind: "market", selection });
+  const timed = mount({ kind: "market", selection, enabled: true });
   try {
     button(timed.render()).props.onClick();
     timed.fireTimers();
@@ -207,7 +215,7 @@ test("unmount cancels outstanding work and timeout reports an accessible retryab
 });
 
 test("deterministic source context identifies the independent OHLC snapshot and exclusive report periods", async () => {
-  const screen = mount({ kind: "market", selection });
+  const screen = mount({ kind: "market", selection, enabled: true });
   try {
     let tree = screen.render();
     assert.match(textOf(tree), /AI explanation · OpenAI/);
@@ -219,30 +227,53 @@ test("deterministic source context identifies the independent OHLC snapshot and 
     assert.match(textOf(tree), /bitcoin · 7 days · GBP/);
     assert.match(textOf(tree), /42 4-hour candles · candle-close prices/);
     assert.match(textOf(tree), /Observed close times/);
-    tree = screen.render({ kind: "fictional-report", selection: reportSelection });
+    tree = screen.render({ kind: "fictional-report", selection: reportSelection, enabled: true });
     button(tree).props.onClick(); screen.requests[1].resolve(report()); await settle();
     const text = textOf(screen.render());
     assert.match(text, /Current fictional period · end exclusive/);
     assert.match(text, /Prior fictional period · end exclusive/);
-    assert.match(text, /30 Oct 2026, 00:00 UTC – 6 Nov 2026, 00:00 UTC/);
-    assert.match(text, /23 Oct 2026, 00:00 UTC – 30 Oct 2026, 00:00 UTC/);
+    assert.match(text, /Oct 30, 2026, 12:00 AM UTC – Nov 6, 2026, 12:00 AM UTC/);
+    assert.match(text, /Oct 23, 2026, 12:00 AM UTC – Oct 30, 2026, 12:00 AM UTC/);
     assert.match(text, /7 days · Business · UK/);
   } finally { screen.unmount(); }
 });
 
 
-test("server-unavailable market view disables generation and cancels prior work", async () => {
+test("server-unavailable market view hides generation and cancels prior work", async () => {
   const screen = mount({ kind: "market", selection, enabled: true });
   try {
     button(screen.render()).props.onClick();
     const request = screen.requests[0];
     const tree = screen.render({ kind: "market", selection, enabled: false });
     assert.equal(request.signal.aborted, true);
-    assert.equal(button(tree).props.disabled, true);
-    assert.match(textOf(tree), /AI assistance is unavailable for this view/);
-    button(tree).props.onClick();
+    assert.equal(tree, null);
     assert.equal(screen.requests.length, 1);
     request.resolve(market()); await settle();
-    assert.doesNotMatch(textOf(screen.render()), /An observed change/);
+    assert.equal(screen.render({ kind: "market", selection, enabled: false }), null);
+  } finally { screen.unmount(); }
+});
+
+test("Shop commentary discloses the opt-in data scope and waits for a user action", async () => {
+  const screen = mount({ kind: "product-discovery", selection: shopSelection, enabled: true });
+  try {
+    let tree = screen.render();
+    assert.match(textOf(tree), /On request/);
+    assert.match(textOf(tree), /OpenAI receives your search phrase, storefront, and up to five result names and brands/);
+    assert.match(textOf(tree), /Don’t include personal or payment details/);
+    assert.match(textOf(button(tree)), /Comment on these results/);
+    assert.equal(screen.requests.length, 0);
+    button(tree).props.onClick();
+    assert.equal(screen.requests.length, 1);
+    assert.equal(screen.requests[0].kind, "product-discovery");
+    assert.deepEqual(screen.requests[0].selection, shopSelection);
+    screen.requests[0].resolve(shop()); await settle();
+    tree = screen.render();
+    assert.match(textOf(tree), /Selected storefrontUS/);
+    assert.match(textOf(tree), /1 · names and optional brands/);
+    assert.match(textOf(tree), /Channel3 cards and retailer pages/);
+    const updated = { ...shopSelection, products: [{ title: "Different product" }] };
+    screen.render({ kind: "product-discovery", selection: updated, enabled: true });
+    assert.equal(screen.requests[0].signal.aborted, false);
+    assert.doesNotMatch(textOf(screen.render()), /A clear search/);
   } finally { screen.unmount(); }
 });

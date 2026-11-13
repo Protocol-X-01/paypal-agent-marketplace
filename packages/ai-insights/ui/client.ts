@@ -1,6 +1,6 @@
-import type { InsightKind, InsightResponse, MarketInsightRequest, ReportInsightRequest } from "../contracts";
+import type { InsightKind, InsightResponse, MarketInsightRequest, ProductDiscoveryInsightRequest, ReportInsightRequest } from "../contracts";
 
-export type InsightSelection = MarketInsightRequest | ReportInsightRequest;
+export type InsightSelection = MarketInsightRequest | ReportInsightRequest | ProductDiscoveryInsightRequest;
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown, maximum: number) => typeof value === "string" && value.trim().length > 0 && value.length <= maximum;
@@ -13,12 +13,18 @@ export function isSelectedInsight(value: unknown, kind: InsightKind, selection: 
   const insight = value.insight;
   if (!text(insight.headline, 300) || !text(insight.summary, 4000) || !text(insight.caution, 2000) || !Array.isArray(insight.observations) || insight.observations.length < 1 || insight.observations.length > 5 || !insight.observations.every((item) => text(item, 1500))) return false;
   const source = value.source;
-  if (!Object.entries(selection).every(([key, selected]) => source[key] === selected)) return false;
+  if (kind !== "product-discovery" && !Object.entries(selection).every(([key, selected]) => source[key] === selected)) return false;
   if (kind === "market") {
-    const expectedInterval = selection.days === 1 ? 30 : selection.days === 7 || selection.days === 30 ? 240 : 5760;
+    if (!("coinId" in selection)) return false;
+    const marketSelection = selection;
+    const expectedInterval = marketSelection.days === 1 ? 30 : marketSelection.days === 7 || marketSelection.days === 30 ? 240 : 5760;
     return source.provider === "CoinGecko" && source.priceBasis === "candle_close" && source.rangeBasis === "candle_high_low" && source.timestampKind === "close" && source.candleIntervalMinutes === expectedInterval && date(source.retrievedAt) && Number.isInteger(source.sampleCount) && Number(source.sampleCount) >= 2 && timestamp(source.firstTimestamp) && timestamp(source.lastTimestamp) && Number(source.lastTimestamp) > Number(source.firstTimestamp) && [source.firstPrice, source.lastPrice, source.low, source.high].every(number) && Number(source.low) <= Math.min(Number(source.firstPrice), Number(source.lastPrice)) && Number(source.high) >= Math.max(Number(source.firstPrice), Number(source.lastPrice)) && (source.changePercent === null || (typeof source.changePercent === "number" && Number.isFinite(source.changePercent)));
   }
-  return source.provider === "Fictional local fixture" && [source.fixtureTimestamp, source.currentStart, source.currentEnd, source.priorStart, source.priorEnd].every(date) && [source.cohortCount, source.priorActive, source.currentActive, source.retained, source.currentAttempted, source.currentCompleted, source.priorCompleted].every((item) => number(item) && Number.isInteger(item)) && [source.retention, source.completion].every((item) => item === null || (number(item) && Number(item) <= 1));
+  if (kind === "fictional-report") {
+    if (!("account" in selection)) return false;
+    return source.provider === "Fictional local fixture" && [source.fixtureTimestamp, source.currentStart, source.currentEnd, source.priorStart, source.priorEnd].every(date) && [source.cohortCount, source.priorActive, source.currentActive, source.retained, source.currentAttempted, source.currentCompleted, source.priorCompleted].every((item) => number(item) && Number.isInteger(item)) && [source.retention, source.completion].every((item) => item === null || (number(item) && Number(item) <= 1));
+  }
+  return kind === "product-discovery" && "products" in selection && Object.keys(source).sort().join(",") === "productCount,provider,storefront" && source.provider === "Displayed Channel3 result labels" && source.storefront === selection.storefront && Number.isInteger(source.productCount) && source.productCount === selection.products.length && Number(source.productCount) >= 1 && Number(source.productCount) <= 5;
 }
 
 async function readBounded(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -61,7 +67,8 @@ async function readBounded(response: Response, signal: AbortSignal): Promise<unk
 }
 
 export async function requestInsight(kind: InsightKind, selection: InsightSelection, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<InsightResponse> {
-  const response = await fetcher(kind === "market" ? "/api/ai/market-insight" : "/api/ai/report-insight", {
+  const endpoint = kind === "market" ? "/api/ai/market-insight" : kind === "fictional-report" ? "/api/ai/report-insight" : "/api/ai/shop-discover";
+  const response = await fetcher(endpoint, {
     method: "POST", credentials: "same-origin", mode: "same-origin", redirect: "error", cache: "no-store",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection), signal,
   });

@@ -16,6 +16,7 @@ export type Offer = {
 export type Product = {
   id: string;
   title: string;
+  brand: string | null;
   description: string | null;
   // Existing saved images remain inert JSON until validated for display.
   images: unknown;
@@ -42,6 +43,12 @@ function isUsableCollectionId(value: unknown): value is string {
 
 export function parseProduct(value: unknown, expectedCurrency?: string, preserveSavedImages = false): Product | null {
   if (!record(value) || !isUsableProductId(value.id) || typeof value.title !== "string" || !value.title) return null;
+  const suppliedBrand = typeof value.brand === "string" ? value.brand : Array.isArray(value.brands)
+    ? value.brands.slice(0, 12).find((item) => record(item) && typeof item.name === "string" && item.name.trim())?.name
+    : null;
+  const brand = typeof suppliedBrand === "string"
+    ? suppliedBrand.trim().replace(/[\p{Cc}\p{Cs}]+/gu, " ").replace(/\s+/g, " ").slice(0, 80) || null
+    : null;
   const offers: Offer[] = Array.isArray(value.offers) ? value.offers.slice(0, 30).flatMap((offer) => {
     if (!record(offer) || !record(offer.price)) return [];
     const candidateUrl = safeMarketplaceUrl(offer.url);
@@ -60,7 +67,7 @@ export function parseProduct(value: unknown, expectedCurrency?: string, preserve
   const images = preserveSavedImages && Object.prototype.hasOwnProperty.call(value, "images")
     ? value.images
     : marketplaceImages(value.images);
-  return { id: value.id, title: value.title.slice(0, 300), description: typeof value.description === "string" ? value.description.slice(0, 1000) : null, images, offers };
+  return { id: value.id, title: value.title.slice(0, 300), brand, description: typeof value.description === "string" ? value.description.slice(0, 1000) : null, images, offers };
 }
 
 export function snapshotProduct(product: Product): Product {

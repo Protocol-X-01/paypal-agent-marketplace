@@ -1057,7 +1057,7 @@ function MarketDashboardBody({ publicChart, onPublicChartChange }: CustomerWorks
           ? <BusinessMonitoring draftRef={businessDraftRef} onDraftChange={setBusinessDraftPending} />
           : currencyReady ? <PersonalAccountingLite currency={currency} portfolioTotal={portfolio.total} portfolioAvailable={portfolio.total !== null && !portfolioInputMessage} /> : <div className="list-loading" role="status">Loading your display currency…</div>
           : tab === "settings" ? <DataSettings currency={currency} currencyReady={currencyReady} onCurrencyChange={changeCurrency} /> : tab === "shop" ? (
-          <Marketplace />
+          <Marketplace aiInsightsAvailable={aiInsightsAvailable} />
         ) : tab === "portfolio" ? (
           <PortfolioPanel coins={coins} amounts={previewAmounts} drafts={amountDrafts} editable={preferencesLoaded && storageWritable} inputMessage={portfolioInputMessage} updateAmount={updateAmount} commitAmount={commitAmount} portfolio={portfolio} loading={marketLoading} currency={currency} />
         ) : (

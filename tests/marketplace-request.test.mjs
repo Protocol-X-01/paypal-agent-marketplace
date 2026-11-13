@@ -40,6 +40,26 @@ test("returns an HTTP error status even when its body is not JSON", async () => 
   assert.equal(body, null);
 });
 
+test("preserves only the explicit product-unavailable marker from a small JSON 404", async () => {
+  globalThis.fetch = async () => Response.json({ error: "No current listing.", code: "PRODUCT_UNAVAILABLE", ignored: "private detail" }, { status: 404 });
+  const { response, body } = await fetchMarketplaceJson("/api/marketplace/products/example?storefront=US", {}, new AbortController().signal, 100);
+  assert.equal(response.status, 404);
+  assert.deepEqual(body, { code: "PRODUCT_UNAVAILABLE" });
+});
+
+test("keeps legacy HTML and oversized JSON 404 bodies out of the result", async () => {
+  const responses = [
+    () => new Response("<html>Not found</html>", { status: 404, headers: { "Content-Type": "text/html" } }),
+    () => new Response(JSON.stringify({ error: "x".repeat(5000), code: "PRODUCT_UNAVAILABLE" }), { status: 404, headers: { "Content-Type": "application/json" } }),
+  ];
+  for (const makeResponse of responses) {
+    globalThis.fetch = async () => makeResponse();
+    const { response, body } = await fetchMarketplaceJson("/api/marketplace/products/example?storefront=US", {}, new AbortController().signal, 100);
+    assert.equal(response.status, 404);
+    assert.equal(body, null);
+  }
+});
+
 test("handles unreadable successful responses without exposing response text", async () => {
   globalThis.fetch = async () => new Response("not JSON", { status: 200 });
   await assert.rejects(

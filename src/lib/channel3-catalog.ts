@@ -126,6 +126,16 @@ export const CHANNEL3_CURATED_RETAILERS = [
   }
 ] as const;
 
+// Direct retailer links are intentionally separate from Channel3 IDs and offers.
+export const DIRECT_US_SHOP_LINKS = [
+  {
+    id: "metro",
+    title: "Metro by T-Mobile",
+    href: "https://www.metrobyt-mobile.com/cell-phones",
+    storefronts: ["US"],
+  },
+] as const;
+
 export type Channel3CuratedSection = (typeof CHANNEL3_CURATED_SECTIONS)[number];
 export type Channel3CuratedRetailer = (typeof CHANNEL3_CURATED_RETAILERS)[number];
 
