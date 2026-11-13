@@ -65,9 +65,12 @@ async function createPanel() {
     "ag-grid-community": { colorSchemeDark: {}, colorSchemeLight: {}, themeQuartz: { withPart: () => ({ withParams: () => ({}) }) } },
     "ag-grid-enterprise": { AllEnterpriseModule: {} },
     "ag-grid-react": { AgGridProvider: () => null, AgGridReact: () => null },
+    "ag-charts-react": { AgCharts: "AgCharts" },
+    "ag-charts-community": { BarSeriesModule: {}, CategoryAxisModule: {}, LegendModule: "legend-module", NumberAxisModule: {} },
     "@/lib/business-snapshot": snapshotModule,
     "@/lib/business-channel-comparison": channelComparison,
     "@/lib/business-percentage": businessPercentage,
+    "@/lib/market-chart-theme": { marketChartThemeFor: () => ({}) },
     "./theme-preference": { useAppearance: () => ({ appearance: "dark" }) },
     "./business-snapshot-panel.module.css": { __esModule: true, default: {} },
   })).default;
@@ -92,6 +95,12 @@ function comparison(tree) {
   return nodes(tree).find((node) => node.type === "figure" && node.props["aria-labelledby"] === "business-comparison-title");
 }
 
+function agChart(tree) {
+  const chart = nodes(tree).find((node) => node.type === "AgCharts");
+  assert.ok(chart, "The imported channel comparison should render its AG Chart");
+  return chart;
+}
+
 function button(tree, label) {
   const result = nodes(tree).find((node) => node.type === "button" && text(node.props.children) === label);
   assert.ok(result, `Expected ${label} control`);
@@ -105,6 +114,7 @@ test("a self-provided snapshot compares both periods and switches measures witho
   let tree = await panel.importReport(csv([100, 100000, 2000], [120, 120000, 3000]));
   assert.deepEqual(panel.changed, [true]);
   let view = comparison(tree);
+  assert.ok(agChart(view).props.modules.includes("legend-module"), "the period legend module is registered");
   assert.match(text(view), /Previous period2026-10-23 to before 2026-10-30 · UTC100/);
   assert.match(text(view), /Current period2026-10-30 to before 2026-11-06 · UTC120/);
   assert.equal(button(view, "Transactions").props["aria-pressed"], true);
@@ -154,22 +164,68 @@ test("channel changes follow the selected measure and show when the baseline is 
     "7,current,2026-10-30,2026-11-06,in_person,GBP,2,1500,0,2026-11-06T00:00:00Z",
   ].join("\n");
   let view = comparison(await panel.importReport(report));
+  assert.deepEqual(agChart(view).props.options.data, [
+    { channel: "Online", previous: 100, current: 120 },
+    { channel: "In person", previous: 0, current: 2 },
+  ]);
   assert.match(text(view), /OnlinePrevious 100 · Current 120Change \+20\+20\.0% vs previous/);
   assert.match(text(view), /In personPrevious 0 · Current 2Change \+2Previous period is zero; percentage unavailable/);
-  let channelRows = nodes(view).filter((node) => node.type === "li");
-  const barWidths = (row) => nodes(row).filter((node) => node.type === "i").map((node) => node.props.style.width);
-  assert.deepEqual(barWidths(channelRows[0]), [`${100 / 120 * 100}%`, "100%"]);
-  assert.deepEqual(barWidths(channelRows[1]), ["0%", "100%"]);
-  assert.match(text(view), /Bars use that channel’s larger value as their scale/);
+  assert.deepEqual(agChart(view).props.options.series.map((series) => series.type), ["bar", "bar"]);
+  assert.match(text(view), /Bars start at zero and use the larger period as their scale/);
   button(view, "Gross").props.onClick();
   view = comparison(panel.render());
+  assert.deepEqual(agChart(view).props.options.data, [
+    { channel: "Online", previous: 100000, current: 120000 },
+    { channel: "In person", previous: 0, current: 1500 },
+  ]);
   assert.match(text(view), /OnlinePrevious £1,000\.00 · Current £1,200\.00Change \+£200\.00\+20\.0% vs previous/);
   button(view, "Refunds").props.onClick();
   view = comparison(panel.render());
+  assert.deepEqual(agChart(view).props.options.data, [
+    { channel: "Online", previous: 3000, current: 2000 },
+    { channel: "In person", previous: 0, current: 0 },
+  ]);
   assert.match(text(view), /OnlinePrevious £30\.00 · Current £20\.00Change −£10\.00−33\.3% vs previous/);
-  channelRows = nodes(view).filter((node) => node.type === "li");
-  assert.deepEqual(barWidths(channelRows[0]), ["100%", `${2000 / 3000 * 100}%`]);
-  assert.deepEqual(barWidths(channelRows[1]), ["0%", "0%"]);
+});
+
+test("the chart axis keeps monetary ticks consistent with reported minor units", async () => {
+  const cases = [
+    ["USD", 1, "$0.01"],
+    ["JPY", 1, "¥1"],
+    ["BHD", 1, "BHD 0.001"],
+    ["CLF", 1, "CLF 0.0001"],
+  ];
+  for (const [currency, minor, expected] of cases) {
+    const panel = await createPanel();
+    const view = comparison(await panel.importReport(csv([1, minor, 0], [2, minor * 2, 0], currency)));
+    button(view, "Gross").props.onClick();
+    const axis = agChart(comparison(panel.render())).props.options.axes.x.label.formatter;
+    assert.equal(axis({ value: minor }), expected, `${currency} must preserve its report precision`);
+    assert.equal(axis({ value: minor + Number.EPSILON }), expected, `${currency} should tolerate floating-point noise`);
+    assert.equal(axis({ value: minor + 0.5 }), "", `${currency} cannot label a fraction of a minor unit as an exact amount`);
+    assert.equal(axis({ value: -1 }), "");
+  }
+});
+
+test("the chart uses the report's pinned scale when a browser reports the wrong currency precision", async () => {
+  const panel = await createPanel();
+  const view = comparison(await panel.importReport(csv([1, 1, 0], [2, 2, 0], "CLF")));
+  button(view, "Gross").props.onClick();
+  const OriginalNumberFormat = Intl.NumberFormat;
+  try {
+    Intl.NumberFormat = function (...args) {
+      const formatter = new OriginalNumberFormat(...args);
+      if (args[1]?.currency === "CLF") {
+        const resolvedOptions = formatter.resolvedOptions.bind(formatter);
+        formatter.resolvedOptions = () => ({ ...resolvedOptions(), minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      return formatter;
+    };
+    const axis = agChart(comparison(panel.render())).props.options.axes.x.label.formatter;
+    assert.equal(axis({ value: 1 }), "CLF 0.0001");
+  } finally {
+    Intl.NumberFormat = OriginalNumberFormat;
+  }
 });
 
 test("summary cards distinguish tiny changes and ratios from zero", async () => {
