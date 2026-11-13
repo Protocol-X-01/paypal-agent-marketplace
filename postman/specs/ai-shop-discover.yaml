@@ -1,0 +1,193 @@
+openapi: 3.1.0
+info:
+  title: PayPal Markets Local AI Shop Discover
+  version: 0.1.0
+  description: >-
+    Local-development-only commentary for a Channel3 product search. The caller
+    sends its shopping phrase and up to five displayed product title/brand
+    labels; it does not send product IDs, links, prices, offers, account data,
+    or payment details. Labels are treated as untrusted text and filtered for
+    URLs and contact details. When explicitly enabled in local development,
+    this context is sent to OpenAI Responses with response storage disabled.
+    Production and hosted environments keep this route disabled and return
+    503. This endpoint does not verify, rank, recommend, buy, or pay for an
+    item. Origin and Host checks are browser protections, not authentication;
+    the server must listen on loopback and must not be exposed through a proxy.
+servers:
+  - url: http://127.0.0.1:9
+    description: Intentionally closed loopback default. Change only to a locally controlled loopback PayPal Markets server.
+paths:
+  /api/ai/shop-discover:
+    post:
+      operationId: explainDisplayedShopResults
+      summary: Add qualitative context to displayed Channel3 results
+      description: >-
+        Requires an explicitly enabled local development service, the exact
+        configured loopback Origin and Host, an OpenAI key held only by the
+        local server, and the shared local attempt budget. Local-demo
+        configuration is checked before the request origin; therefore a
+        production or otherwise disabled deployment returns 503 even for a
+        foreign Origin. With the local demo enabled, a foreign Origin returns
+        403 before the body or provider is processed. Valid requests can incur
+        an OpenAI API charge. The request contains only the search phrase and
+        up to five currently displayed title/brand labels. Commentary can be
+        inaccurate and does not verify, rank, or recommend an offer. The
+        separate Channel3 cards and retailer pages remain the sources for
+        current prices, availability, payment options, and terms. No automatic
+        provider retries occur. JSON bodies are limited to 4096 bytes; request
+        reading and provider processing have three- and fifteen-second
+        deadlines. The shared local budget permits two attempts per minute and
+        ten per day, with concurrent work rejected.
+      security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          description: Must exactly match the configured local loopback Origin when the local demo is enabled. This is not authentication.
+          schema:
+            type: string
+            format: uri
+            pattern: '^http://(?:127\.0\.0\.1|localhost):[0-9]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [query, storefront, products]
+              properties:
+                query:
+                  type: string
+                  minLength: 2
+                  maxLength: 120
+                  description: Search phrase. URLs, email addresses, and phone-like contact details are rejected; text is Unicode-normalized and whitespace-cleaned.
+                storefront:
+                  type: string
+                  enum: [US, GB]
+                products:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  description: Up to five currently displayed products, not a selection of purchased or favorited items.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [title]
+                    properties:
+                      title:
+                        type: string
+                        minLength: 1
+                        maxLength: 180
+                        description: Display label; the submitted label is cleaned and capped at 120 characters.
+                      brand:
+                        type: string
+                        maxLength: 100
+                        description: Optional display label; the submitted label is cleaned and capped at 80 characters.
+            example:
+              query: wireless headphones for travel
+              storefront: US
+              products:
+                - title: Studio Wireless Headphones
+                  brand: Acme Audio
+                - title: Comfort Over-Ear Headphones
+                  brand: Northstar Sound
+      responses:
+        '200':
+          description: Generated qualitative context and the labels' source metadata.
+          headers:
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [kind, generatedAt, model, insight, source, disclaimer]
+                properties:
+                  kind: { const: product-discovery }
+                  generatedAt: { type: string, format: date-time }
+                  model: { type: string }
+                  insight: { $ref: '#/components/schemas/Insight' }
+                  source:
+                    type: object
+                    additionalProperties: false
+                    required: [provider, storefront, productCount]
+                    properties:
+                      provider: { const: Displayed Channel3 result labels }
+                      storefront: { type: string, enum: [US, GB] }
+                      productCount: { type: integer, minimum: 1, maximum: 5 }
+                  disclaimer:
+                    type: string
+                    const: AI commentary is fallible and does not verify, rank, or recommend offers. The separate Channel3 cards and retailer pages are the sources for current prices, availability, payment options, and terms.
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429':
+          description: Shared local attempt budget or concurrency limit reached.
+          headers:
+            Retry-After: { required: true, schema: { type: string, pattern: '^[1-9][0-9]*$' } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503':
+          description: The route is disabled outside its explicitly enabled local development environment, is misconfigured, or the provider is unavailable.
+          headers:
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '504': { $ref: '#/components/responses/Error' }
+components:
+  schemas:
+    Insight:
+      type: object
+      additionalProperties: false
+      required: [headline, summary, observations, caution]
+      properties:
+        headline:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Plain text; the service rejects digits, currency symbols, URLs, contact details, markup delimiters, and control or bidirectional formatting characters.
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Plain text subject to the same output checks as headline.
+        observations:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: string
+            minLength: 1
+            maxLength: 300
+        caution:
+          type: string
+          minLength: 1
+          maxLength: 300
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    Error:
+      description: Request rejected, local budget exhausted, provider unavailable, response invalid, or deadline exceeded. Raw upstream details are not returned.
+      headers:
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

@@ -22,4 +22,3 @@
 .headerControl:focus-visible, .primary:focus-visible, .secondary:focus-visible, .choice button:focus-visible { outline: 2px solid #0070e0; outline-offset: 3px; }
 @media (max-width:700px) { .headerControl { min-height: 36px; padding: 5px 7px; gap: 5px; } .headerControl > svg { width: 16px; height: 16px; } .headerControl > span { font-size: 10px; } .headerControl small { font-size: 8px; } .card { padding: 19px 17px; } .heading { gap: 12px; } .intro { font-size: 11px; } }
 @media (max-width:640px) { .headerControl { min-width: 36px; height: 44px; justify-content: center; } .headerControl > span { display: none; } }
-@media (max-width:360px) { .headerControl { display: none; } }

@@ -9,8 +9,12 @@ const exports = {};
 new Function("exports", "require", ts.transpileModule(readFileSync(new URL("../packages/ai-insights/ui/client.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(exports, localRequire);
 const { isSelectedInsight, requestInsight } = exports;
 const selection = { coinId: "bitcoin", currency: "GBP", days: 7 };
+const shopSelection = { query: "wireless headphones", storefront: "US", products: [{ title: "Studio headphones", brand: "North Audio" }] };
 function market() {
   return { kind: "market", generatedAt: "2026-11-06T13:00:00Z", model: "example-model", insight: { headline: "Observed changes", summary: "This describes the reference history.", observations: ["Prices varied in the observed period."], caution: "History does not establish a future outcome." }, disclaimer: "Example AI explanation.", source: { ...selection, provider: "CoinGecko", retrievedAt: "2026-11-06T12:59:00Z", sampleCount: 42, firstTimestamp: 1793350800000, lastTimestamp: 1793941200000, firstPrice: 20, lastPrice: 22, low: 19, high: 23, changePercent: 10, priceBasis: "candle_close", rangeBasis: "candle_high_low", timestampKind: "close", candleIntervalMinutes: 240 } };
+}
+function shop(chosen = shopSelection) {
+  return { kind: "product-discovery", generatedAt: "2026-11-06T13:00:00Z", model: "example-model", insight: { headline: "A clear search", summary: "The shown results share a product theme.", observations: ["Product names point to a focused search.", "The separate offers contain the current details."], caution: "Check the retailer page for final terms." }, disclaimer: "AI commentary is fallible.", source: { provider: "Displayed Channel3 result labels", storefront: chosen.storefront, productCount: chosen.products.length } };
 }
 const signal = () => new AbortController().signal;
 
@@ -18,6 +22,14 @@ test("valid response is bound to the exact selected public candle context", () =
   assert.equal(isSelectedInsight(market(), "market", selection), true);
   for (const changed of [{ ...selection, currency: "USD" }, { ...selection, coinId: "ethereum" }, { ...selection, days: 30 }]) assert.equal(isSelectedInsight(market(), "market", changed), false);
   assert.equal(isSelectedInsight(market(), "fictional-report", selection), false);
+});
+
+test("Shop commentary is bound to the current visible result count and storefront", () => {
+  assert.equal(isSelectedInsight(shop(), "product-discovery", shopSelection), true);
+  assert.equal(isSelectedInsight(shop(), "product-discovery", { ...shopSelection, storefront: "GB" }), false);
+  assert.equal(isSelectedInsight(shop(), "product-discovery", { ...shopSelection, products: [] }), false);
+  assert.equal(isSelectedInsight({ ...shop(), source: { ...shop().source, products: shopSelection.products } }, "product-discovery", shopSelection), false);
+  assert.equal(isSelectedInsight(shop(), "market", shopSelection), false);
 });
 
 test("source provenance, finite values and bounded narrative are required", () => {
@@ -61,6 +73,18 @@ test("transport uses only the same-origin fixed endpoint and selected IDs", asyn
   assert.equal(observed.init.cache, "no-store");
   assert.deepEqual(JSON.parse(observed.init.body), selection);
   assert.equal(Object.keys(observed.init.headers).join(), "Content-Type");
+});
+
+test("Shop transport sends only the selected label preview to its fixed same-origin route", async () => {
+  let observed;
+  const value = await requestInsight("product-discovery", shopSelection, signal(), async (url, init) => { observed = { url, init }; return Response.json(shop()); });
+  assert.equal(value.kind, "product-discovery");
+  assert.equal(observed.url, "/api/ai/shop-discover");
+  assert.equal(observed.init.mode, "same-origin");
+  assert.equal(observed.init.redirect, "error");
+  assert.equal(observed.init.cache, "no-store");
+  assert.deepEqual(JSON.parse(observed.init.body), shopSelection);
+  assert.doesNotMatch(observed.init.body, /productId|https?:\/\/|price|commission|wallet|contact|balance/i);
 });
 
 test("a response for a different selection is not exposed as the requested view", async () => {

@@ -1,4 +1,6 @@
 const MARKETPLACE_REQUEST_TIMEOUT_MS = 15_000;
+export const MARKETPLACE_SEARCH_TIMEOUT_MS = 25_000;
+const MAX_ERROR_BODY_BYTES = 4 * 1024;
 
 export class MarketplaceRequestTimeoutError extends Error {
   constructor() {
@@ -11,6 +13,46 @@ function abortError(): Error {
   const error = new Error("The shop request was cancelled.");
   error.name = "AbortError";
   return error;
+}
+
+/** Read only the small, known product-unavailable marker from a JSON 404. */
+async function readProductUnavailable(response: Response): Promise<{ code: "PRODUCT_UNAVAILABLE" } | null> {
+  const discard = () => {
+    try { void response.body?.cancel().catch(() => undefined); } catch { /* Body is already unavailable. */ }
+  };
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  const declared = response.headers.get("content-length");
+  if (response.status !== 404 || contentType !== "application/json" || !response.body ||
+      (declared !== null && (!/^\d+$/.test(declared) || !Number.isSafeInteger(Number(declared)) || Number(declared) > MAX_ERROR_BODY_BYTES))) {
+    discard();
+    return null;
+  }
+
+  const reader = response.body.getReader();
+  const bytes = new Uint8Array(MAX_ERROR_BODY_BYTES);
+  let used = 0;
+  let finished = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { finished = true; break; }
+      if (value.byteLength > MAX_ERROR_BODY_BYTES - used) return null;
+      bytes.set(value, used);
+      used += value.byteLength;
+    }
+    const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, used)));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) &&
+      "code" in parsed && parsed.code === "PRODUCT_UNAVAILABLE" && "error" in parsed && typeof parsed.error === "string"
+      ? { code: "PRODUCT_UNAVAILABLE" }
+      : null;
+  } catch {
+    return null;
+  } finally {
+    if (!finished) {
+      try { void reader.cancel().catch(() => undefined); } catch { /* Body is already unavailable. */ }
+    }
+    try { reader.releaseLock(); } catch { /* A cancelled stream may still be settling. */ }
+  }
 }
 
 /** Bound both the response and its body without confusing a timeout with a region change. */
@@ -47,9 +89,10 @@ export async function fetchMarketplaceJson(
       if (request.signal.aborted) throw abortError();
 
       if (!response.ok) {
-        // Status codes still have useful meaning when a proxy returns HTML.
-        try { void response.body?.cancel().catch(() => undefined); } catch { /* Body is already unavailable. */ }
-        return { response, body: null };
+        // Preserve the explicit marker while leaving legacy HTML 404s usable.
+        const body = await readProductUnavailable(response);
+        if (request.signal.aborted) throw abortError();
+        return { response, body };
       }
 
       let body: unknown;
