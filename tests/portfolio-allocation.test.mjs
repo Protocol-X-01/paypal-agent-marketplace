@@ -47,10 +47,14 @@ function createComponent() {
   let selected = null;
   const element = (type, props) => ({ type, props: props ?? {} });
   const Component = load(readFileSyncSource, {
-    react: { useState: () => [selected, (value) => { selected = value; }] },
+    react: { useState: () => [selected, (value) => { selected = value; }], useMemo: (callback) => callback() },
+    "ag-charts-react": { AgCharts: "AgCharts" },
+    "ag-charts-community": { DonutSeriesModule: "donut-series" },
     "react/jsx-runtime": { jsx: element, jsxs: element, Fragment: Symbol("Fragment") },
     "@/lib/portfolio-allocation": web,
     "@/lib/market-format": { formatPortfolioMoney: (value, currency) => `${currency} ${value}` },
+    "@/lib/market-chart-theme": { marketChartThemeFor: (appearance) => appearance },
+    "./theme-preference": { useAppearance: () => ({ appearance: "dark" }) },
     "./portfolio-allocation.module.css": { __esModule: true, default: {} },
   }).default;
   return (portfolio) => Component({ portfolio, currency: "GBP", inputMessage: "", loading: false });
@@ -62,14 +66,29 @@ test("web legend and chart select the same asset without inventing an incomplete
   const portfolio = { positions: [{ id: "bitcoin", value: 75 }, { id: "ethereum", value: 25 }], total: 100, dailyChange: null };
   let tree = render(portfolio);
   const button = (label) => nodes(tree).find((node) => node.type === "button" && node.props["aria-label"]?.startsWith(label));
+  const chart = () => nodes(tree).find((node) => node.type === "AgCharts");
+  const sliceData = (id) => chart().props.options.series[0].data.find((datum) => datum.id === id);
+  const sliceStyle = (id) => chart().props.options.series[0].itemStyler({ datum: sliceData(id) });
+  assert.equal(chart().props.options.series[0].type, "donut");
   assert.equal(button("Bitcoin").props["aria-pressed"], false);
   button("Bitcoin").props.onClick();
   tree = render(portfolio);
   assert.equal(button("Bitcoin").props["aria-pressed"], true);
-  nodes(tree).find((node) => node.type === "circle" && typeof node.props.onClick === "function" && node.props.stroke === "#6774d7").props.onClick();
+  assert.equal(sliceStyle("bitcoin").strokeWidth, 3, "the chart highlights the selected Bitcoin slice");
+  assert.equal(sliceStyle("ethereum").strokeWidth, 0, "other slices remain unselected");
+  button("Ethereum").props.onClick();
   tree = render(portfolio);
   assert.equal(button("Ethereum").props["aria-pressed"], true);
+  assert.equal(sliceStyle("ethereum").strokeWidth, 3, "the chart follows the selected accessible legend item");
+  chart().props.options.series[0].listeners.seriesNodeClick({ datum: sliceData("bitcoin") });
+  tree = render(portfolio);
+  assert.equal(button("Bitcoin").props["aria-pressed"], true, "selecting a chart sector updates the accessible legend");
+  assert.equal(sliceStyle("bitcoin").strokeWidth, 3, "selecting a chart sector highlights it");
+  assert.ok(nodes(tree).some((node) => node.type === "strong" && node.props.children === "75.0%"));
+  nodes(tree).find((node) => node.type === "button" && node.props.children === "Show total").props.onClick();
+  tree = render(portfolio);
+  assert.equal(button("Bitcoin").props["aria-pressed"], false, "show total clears the selected sector");
   tree = render({ ...portfolio, positions: [...portfolio.positions, { id: "solana", value: null }], total: null });
-  assert.equal(nodes(tree).some((node) => node.type === "svg"), false);
+  assert.equal(nodes(tree).some((node) => node.type === "AgCharts"), false);
   assert.ok(nodes(tree).some((node) => node.props?.role === "status"));
 });
