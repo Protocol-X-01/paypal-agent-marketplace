@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { AgCharts } from "ag-charts-react";
+import { DonutSeriesModule, type AgChartOptions } from "ag-charts-community";
 import { allocationShareLabel, portfolioAllocation } from "@/lib/portfolio-allocation";
 import { formatPortfolioMoney as valueLabel } from "@/lib/market-format";
 import type { MarketCurrency } from "@/lib/market-currency";
 import type { TrackedCoin } from "@/lib/market-assets";
 import type { PortfolioSummary } from "@/lib/portfolio-summary";
+import { marketChartThemeFor } from "@/lib/market-chart-theme";
 import styles from "./portfolio-allocation.module.css";
+import { useAppearance } from "./theme-preference";
+
+const chartModules = [DonutSeriesModule];
+type AllocationChartDatum = { id: TrackedCoin; name: string; symbol: string; color: string; value: number; share: number };
 
 const ASSETS: Record<TrackedCoin, { name: string; symbol: string; color: string }> = {
   bitcoin: { name: "Bitcoin", symbol: "BTC", color: "#e78a16" },
@@ -25,8 +32,47 @@ export default function PortfolioAllocation({ portfolio, currency, inputMessage,
   loading: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<TrackedCoin | null>(null);
-  const slices = inputMessage ? null : portfolioAllocation(portfolio.positions, portfolio.total);
+  const { appearance } = useAppearance();
+  const slices = useMemo(() => inputMessage ? null : portfolioAllocation(portfolio.positions, portfolio.total), [inputMessage, portfolio.positions, portfolio.total]);
   const selected = slices?.find((slice) => slice.id === selectedId) ?? null;
+  const chartData = useMemo<AllocationChartDatum[]>(() => slices?.map((slice) => ({
+    id: slice.id,
+    ...ASSETS[slice.id],
+    value: slice.value,
+    share: slice.share,
+  })) ?? [], [slices]);
+  const chartOptions = useMemo<AgChartOptions<AllocationChartDatum>>(() => ({
+    theme: marketChartThemeFor(appearance),
+    background: { visible: false },
+    animation: { enabled: false },
+    legend: { enabled: false },
+    padding: { top: 0, right: 0, bottom: 0, left: 0 },
+    series: [{
+      type: "donut",
+      data: chartData,
+      angleKey: "value",
+      legendItemKey: "symbol",
+      innerRadiusRatio: 0.68,
+      outerRadiusRatio: 0.96,
+      fills: chartData.map((datum) => datum.color),
+      strokes: chartData.map((datum) => datum.color),
+      strokeWidth: 0,
+      cursor: "pointer",
+      listeners: { seriesNodeClick: ({ datum }) => setSelectedId(datum.id) },
+      itemStyler: ({ datum }) => datum.id === selectedId
+        ? { stroke: appearance === "light" ? "#10213e" : "#f7fafc", strokeWidth: 3 }
+        : { stroke: datum.color, strokeWidth: 0 },
+      tooltip: {
+        renderer: ({ datum }) => ({
+          heading: datum.name,
+          data: [
+            { label: "Allocation", value: allocationShareLabel(datum.share) },
+            { label: "Estimated value", value: valueLabel(datum.value, currency) },
+          ],
+        }),
+      },
+    }],
+  }), [appearance, chartData, currency, selectedId]);
   const missing = portfolio.positions.filter((position) => position.value === null).length;
   const unavailable = inputMessage || (!portfolio.positions.length
     ? "Add a quantity to see how your portfolio is divided."
@@ -44,10 +90,9 @@ export default function PortfolioAllocation({ portfolio, currency, inputMessage,
       </div>
       {slices ? <div className={styles.content}>
         <div className={styles.chartWrap}>
-          <svg className={styles.chart} viewBox="14 14 172 172" aria-hidden="true">
-            <circle cx="100" cy="100" r="72" fill="none" stroke="#e5eef8" strokeWidth="22" />
-            {slices.map((slice) => <circle key={slice.id} cx="100" cy="100" r="72" fill="none" pathLength="100" stroke={ASSETS[slice.id].color} strokeWidth={selected?.id === slice.id ? "26" : "22"} strokeDasharray={`${slice.share} ${100 - slice.share}`} strokeDashoffset={-slice.start} transform="rotate(-90 100 100)" className={styles.slice} />)}
-          </svg>
+          <div className={styles.chart} role="group" aria-label={`Portfolio allocation chart: ${chartData.map((datum) => `${datum.name} ${allocationShareLabel(datum.share)}`).join(", ")}`}>
+            <AgCharts className="ag-market-chart" modules={chartModules} options={chartOptions} />
+          </div>
           <div className={styles.chartCenter} aria-live="polite">
             <span>{selected ? ASSETS[selected.id].symbol : "TOTAL VALUE"}</span>
             <strong>{selected ? allocationShareLabel(selected.share) : valueLabel(portfolio.total!, currency)}</strong>
