@@ -3,8 +3,9 @@ import http from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 
-// Run only against a local development server: this briefly occupies all
-// search body readers. Every body is invalid, so Channel3 is never contacted.
+// Run only against a local development server: this briefly occupies the
+// two search body readers allowed for one client. Every body is invalid, so
+// Channel3 is never contacted.
 const endpoint = new URL("/api/marketplace/search", process.env.MARKETPLACE_TEST_BASE_URL ?? "http://127.0.0.1:3000");
 if (endpoint.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) {
   throw new Error("MARKETPLACE_TEST_BASE_URL must point to a local HTTP development server.");
@@ -32,7 +33,7 @@ function startRequest(body, closeImmediately) {
 
 test("local HTTP search returns a retryable busy response and recovers", { timeout: 10_000 }, async () => {
   assert.equal((await startRequest("{", true).response).status, 400, "the route is ready");
-  const held = Array.from({ length: 8 }, () => startRequest("{", false));
+  const held = Array.from({ length: 2 }, () => startRequest("{", false));
   try {
     let busy;
     const deadline = Date.now() + 2_000;
@@ -42,12 +43,12 @@ test("local HTTP search returns a retryable busy response and recovers", { timeo
       assert.equal(probe.status, 400);
       await delay(80);
     }
-    assert.ok(busy, "eight incomplete uploads must reach the route before its read deadline");
+    assert.ok(busy, "two incomplete uploads from one client must reach the route before its read deadline");
     assert.equal(busy.headers["retry-after"], "5");
     assert.equal(busy.headers["cache-control"], "no-store");
     assert.deepEqual(JSON.parse(busy.content), { error: "Search is temporarily busy. Please try again shortly." });
     for (const item of held) item.request.end();
-    assert.deepEqual((await Promise.all(held.map((item) => item.response))).map((item) => item.status), Array(8).fill(400));
+    assert.deepEqual((await Promise.all(held.map((item) => item.response))).map((item) => item.status), Array(2).fill(400));
     assert.equal((await startRequest("{", true).response).status, 400, "capacity was released");
   } finally {
     for (const item of held) item.request.destroy();
