@@ -5,10 +5,13 @@ import type { ColDef } from "ag-grid-community";
 import { colorSchemeDark, colorSchemeLight, themeQuartz } from "ag-grid-community";
 import { AllEnterpriseModule } from "ag-grid-enterprise";
 import { AgGridProvider, AgGridReact } from "ag-grid-react";
+import { AgCharts } from "ag-charts-react";
+import { BarSeriesModule, CategoryAxisModule, LegendModule, NumberAxisModule, type AgChartOptions } from "ag-charts-community";
 import { compareBusinessChannels, type BusinessChannelMetric } from "@/lib/business-channel-comparison";
 import { formatBusinessPercentage } from "@/lib/business-percentage";
 import {
   BUSINESS_SNAPSHOT_CHANNEL_LABELS,
+  BUSINESS_SNAPSHOT_CHANNELS,
   BUSINESS_SNAPSHOT_MAX_BYTES,
   createBusinessSnapshotReport,
   formatBusinessMinorAmount,
@@ -18,14 +21,33 @@ import {
 } from "@/lib/business-snapshot";
 import styles from "./business-snapshot-panel.module.css";
 import { useAppearance } from "./theme-preference";
+import { marketChartThemeFor } from "@/lib/market-chart-theme";
 
 const modules = [AllEnterpriseModule];
+const comparisonChartModules = [BarSeriesModule, CategoryAxisModule, LegendModule, NumberAxisModule];
 type ComparisonMetric = BusinessChannelMetric;
+type ChannelComparisonDatum = { channel: string; previous: number; current: number };
 const comparisonMetrics: Array<{ id: ComparisonMetric; label: string }> = [
   { id: "transactions", label: "Transactions" },
   { id: "gross", label: "Gross" },
   { id: "refunds", label: "Refunds" },
 ];
+
+function formatComparisonValue(value: number, metric: ComparisonMetric, currency: string): string {
+  return metric === "transactions"
+    ? new Intl.NumberFormat("en-US").format(value)
+    : formatBusinessMinorAmount(value, currency);
+}
+
+function formatMoneyAxisTick(value: number, currency: string): string {
+  if (!Number.isFinite(value) || value < 0) return "";
+  const nearest = Math.round(value);
+  // A chart can place ticks between minor units. Do not round them into a
+  // different monetary amount; tolerate only floating-point arithmetic noise.
+  if (!Number.isSafeInteger(nearest) || Math.abs(value - nearest) > Number.EPSILON * Math.max(1, Math.abs(value)) * 4) return "";
+  const formatted = formatBusinessMinorAmount(nearest, currency);
+  return formatted === "Unavailable" ? "" : formatted;
+}
 
 export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }: { perspective: "teams" | "leadership"; onSnapshotChange: (active: boolean, report?: BusinessSnapshotReport | null) => void }) {
   const { appearance } = useAppearance();
@@ -64,6 +86,15 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
   const defaultColDef = useMemo<ColDef<BusinessSnapshotRow>>(() => ({ flex: 1, sortable: false, filter: false, resizable: false }), []);
   const rows = useMemo(() => snapshot ? [...snapshot.rows].sort((a, b) => a.period.localeCompare(b.period) || a.channel.localeCompare(b.channel)) : [], [snapshot]);
   const channelComparison = useMemo(() => snapshot ? compareBusinessChannels(snapshot, comparisonMetric) : [], [snapshot, comparisonMetric]);
+  const channelChartData = useMemo<ChannelComparisonDatum[]>(() => {
+    if (!snapshot) return [];
+    const measure = (row: BusinessSnapshotRow) => comparisonMetric === "transactions" ? row.transactions : comparisonMetric === "gross" ? row.grossMinor : row.refundMinor;
+    return BUSINESS_SNAPSHOT_CHANNELS.flatMap((channel) => {
+      const previous = snapshot.rows.find((row) => row.channel === channel && row.period === "previous");
+      const current = snapshot.rows.find((row) => row.channel === channel && row.period === "current");
+      return previous && current ? [{ channel: BUSINESS_SNAPSHOT_CHANNEL_LABELS[channel], previous: measure(previous), current: measure(current) }] : [];
+    });
+  }, [snapshot, comparisonMetric]);
   const cards = snapshot ? {
     transactions: { label: "Transactions", value: new Intl.NumberFormat("en-US").format(snapshot.periods.current.transactions), detail: "Current period · not unique customers" },
     change: { label: "Activity change", value: formatBusinessPercentage(snapshot.summary.transactionChangePct, true), detail: snapshot.summary.transactionChangePct === null ? "Previous count is zero" : "Compared with previous period" },
@@ -76,6 +107,31 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
     current: comparisonMetric === "transactions" ? snapshot.periods.current.transactions : comparisonMetric === "gross" ? snapshot.periods.current.grossMinor : snapshot.periods.current.refundMinor,
   } : null;
   const comparisonMaximum = comparisonValues ? Math.max(comparisonValues.previous, comparisonValues.current) : 0;
+  const chartCurrency = snapshot?.currency ?? "USD";
+  const channelChartOptions = useMemo<AgChartOptions<ChannelComparisonDatum>>(() => ({
+    theme: marketChartThemeFor(appearance),
+    data: channelChartData,
+    background: { visible: false },
+    animation: { enabled: false },
+    minWidth: 0,
+    padding: { top: 8, right: 16, bottom: 8, left: 8 },
+    legend: { enabled: true, position: "bottom" },
+    axes: {
+      x: {
+        type: "number", position: "bottom", min: 0, nice: true,
+        label: { formatter: ({ value }) => comparisonMetric === "transactions"
+          ? new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value))
+          : formatMoneyAxisTick(Number(value), chartCurrency) },
+        gridLine: { style: [{ stroke: appearance === "light" ? "rgba(16, 44, 77, 0.12)" : "rgba(255, 255, 255, 0.12)", strokeWidth: 1 }] },
+        line: { enabled: false }, tick: { enabled: false },
+      },
+      y: { type: "category", position: "left", line: { enabled: false }, tick: { enabled: false } },
+    },
+    series: [
+      { type: "bar", direction: "horizontal", xKey: "channel", yKey: "previous", yName: "Previous period", fill: "#577796", strokeWidth: 0, tooltip: { renderer: ({ datum }) => ({ heading: datum.channel, data: [{ label: "Previous period", value: formatComparisonValue(datum.previous, comparisonMetric, chartCurrency) }] }) } },
+      { type: "bar", direction: "horizontal", xKey: "channel", yKey: "current", yName: "Current period", fill: "#0070e0", strokeWidth: 0, tooltip: { renderer: ({ datum }) => ({ heading: datum.channel, data: [{ label: "Current period", value: formatComparisonValue(datum.current, comparisonMetric, chartCurrency) }] }) } },
+    ],
+  }), [appearance, channelChartData, comparisonMetric, chartCurrency]);
 
   async function readFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -200,16 +256,15 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
           <p className={styles.comparisonNote}>{comparisonMaximum === 0 ? "Both periods are zero." : "Bars start at zero and use the larger period as their scale."}</p>
           {channelComparison.length > 0 && <section className={styles.channelComparison} aria-labelledby="business-channel-comparison-title">
             <h6 id="business-channel-comparison-title">Change by sales channel</h6>
-            <p>Compare each channel’s two periods. Bars use that channel’s larger value as their scale.</p>
+            <p>Previous and current period · {comparisonMetric === "transactions" ? "transactions" : `${comparisonMetric === "gross" ? "gross" : "refunds"} · ${snapshot.currency}`}</p>
+            <div className={styles.channelChart} role="group" aria-label={`Comparison by sales channel. ${channelChartData.map((row) => `${row.channel}: previous ${formatComparisonValue(row.previous, comparisonMetric, chartCurrency)}, current ${formatComparisonValue(row.current, comparisonMetric, chartCurrency)}`).join(". ")}`}>
+              <AgCharts className="ag-market-chart" modules={comparisonChartModules} options={channelChartOptions} />
+            </div>
             <ul aria-live="polite" aria-atomic="true">
               {channelComparison.map((row) => <li key={row.channel}>
                 <div className={styles.channelSummary}>
                   <div><strong>{row.label}</strong><span>Previous {row.previous} · Current {row.current}</span></div>
                   <div><strong>Change {row.change}</strong><span>{row.percentage}</span></div>
-                </div>
-                <div className={styles.channelBars} aria-hidden="true">
-                  <div className={styles.channelBar}><span>Previous</span><div className={styles.channelTrack}><i className={styles.comparisonPrevious} style={{ width: row.previousWidth }} /></div></div>
-                  <div className={styles.channelBar}><span>Current</span><div className={styles.channelTrack}><i className={styles.comparisonCurrent} style={{ width: row.currentWidth }} /></div></div>
                 </div>
               </li>)}
             </ul>
