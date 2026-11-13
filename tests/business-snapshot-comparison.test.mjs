@@ -115,6 +115,8 @@ test("a self-provided snapshot compares both periods and switches measures witho
   assert.deepEqual(panel.changed, [true]);
   let view = comparison(tree);
   assert.ok(agChart(view).props.modules.includes("legend-module"), "the period legend module is registered");
+  const chartGroup = nodes(view).find((node) => node.props.role === "group" && nodes(node).includes(agChart(view)));
+  assert.match(chartGroup?.props["aria-label"] ?? "", /Comparison by sales channel/);
   assert.match(text(view), /Previous period2026-10-23 to before 2026-10-30 · UTC100/);
   assert.match(text(view), /Current period2026-10-30 to before 2026-11-06 · UTC120/);
   assert.equal(button(view, "Transactions").props["aria-pressed"], true);

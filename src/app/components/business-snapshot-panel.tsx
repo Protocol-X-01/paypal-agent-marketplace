@@ -113,6 +113,7 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
     data: channelChartData,
     background: { visible: false },
     animation: { enabled: false },
+    minWidth: 0,
     padding: { top: 8, right: 16, bottom: 8, left: 8 },
     legend: { enabled: true, position: "bottom" },
     axes: {
@@ -256,7 +257,7 @@ export default function BusinessSnapshotPanel({ perspective, onSnapshotChange }:
           {channelComparison.length > 0 && <section className={styles.channelComparison} aria-labelledby="business-channel-comparison-title">
             <h6 id="business-channel-comparison-title">Change by sales channel</h6>
             <p>Previous and current period · {comparisonMetric === "transactions" ? "transactions" : `${comparisonMetric === "gross" ? "gross" : "refunds"} · ${snapshot.currency}`}</p>
-            <div className={styles.channelChart} role="img" aria-label={`AG Charts comparison by sales channel. ${channelChartData.map((row) => `${row.channel}: previous ${formatComparisonValue(row.previous, comparisonMetric, chartCurrency)}, current ${formatComparisonValue(row.current, comparisonMetric, chartCurrency)}`).join(". ")}`}>
+            <div className={styles.channelChart} role="group" aria-label={`Comparison by sales channel. ${channelChartData.map((row) => `${row.channel}: previous ${formatComparisonValue(row.previous, comparisonMetric, chartCurrency)}, current ${formatComparisonValue(row.current, comparisonMetric, chartCurrency)}`).join(". ")}`}>
               <AgCharts className="ag-market-chart" modules={comparisonChartModules} options={channelChartOptions} />
             </div>
             <ul aria-live="polite" aria-atomic="true">

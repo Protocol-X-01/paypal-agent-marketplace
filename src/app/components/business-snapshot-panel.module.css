@@ -63,7 +63,7 @@
 .channelComparison { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .channelComparison h6 { margin: 0; color: var(--foreground); font-size: 13px; line-height: 1.4; }
 .channelComparison > p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.channelChart { width: 100%; height: 184px; margin: 10px 0 4px; }
+.channelChart { width: 100%; min-width: 0; height: 300px; margin: 10px 0 4px; }
 .channelComparison ul { display: grid; gap: 0; margin: 10px 0 0; padding: 0; list-style: none; }
 .channelComparison li { padding: 10px 0; border-top: 1px solid var(--line); }
 .channelSummary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
