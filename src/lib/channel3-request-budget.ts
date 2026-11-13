@@ -43,7 +43,7 @@ function failClosed(): never {
 }
 
 /**
- * PostgreSQL SECURITY DEFINER function owns the transaction and both counter
+ * PostgreSQL SECURITY DEFINER function owns the transaction and all counter
  * locks. Runtime credentials can reserve capacity but cannot inspect or reset it.
  */
 export function createChannel3RequestBudget(config: PoolConfig) {
@@ -61,7 +61,7 @@ export function createChannel3RequestBudget(config: PoolConfig) {
     async reserve(): Promise<Channel3BudgetReservation> {
       try {
         // One function call is one PostgreSQL transaction. It locks and updates
-        // both fixed windows atomically, using DB time after acquiring locks.
+        // all three fixed windows atomically, using DB time after acquiring locks.
         const result = await pool.query<{ allowed: unknown; retry_after_seconds: unknown }>(
           `SELECT allowed, retry_after_seconds FROM ${RESERVATION_FUNCTION}()`,
         );
