@@ -16,7 +16,9 @@ async function source(path) { return readFile(new URL(path, import.meta.url), "u
 
 const storefront = load(await source("../src/lib/channel3-storefront.ts"));
 const safety = load(await source("../src/lib/marketplace-safety.ts"));
-const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront, "@/lib/marketplace-safety": safety });
+const budgetError = class Channel3BudgetExceededError extends Error { constructor(retryAfterSeconds) { super("budget exhausted"); this.retryAfterSeconds = retryAfterSeconds; } };
+const budget = { Channel3BudgetExceededError: budgetError, reserveChannel3ProviderRequest: async () => {} };
+const provider = load(await source("../src/lib/channel3.ts"), { "server-only": {}, "@/lib/channel3-storefront": storefront, "@/lib/marketplace-safety": safety, "@/lib/channel3-request-budget": budget });
 const cors = load(await source("../src/lib/mobile-web-cors.ts"), { "server-only": {} });
 const catalog = load(await source("../src/lib/channel3-catalog.ts"));
 let rateAllowed = true;
